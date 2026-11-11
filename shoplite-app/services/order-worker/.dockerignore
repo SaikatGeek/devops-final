@@ -1,0 +1,10 @@
+# Only worker/, tests/ and the requirements files are needed in the build context.
+**/__pycache__
+**/*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+*.md
+Dockerfile
+.dockerignore

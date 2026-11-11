@@ -1,6 +1,6 @@
 name: shoplite
 
-# Local development stack. web and order-worker are added as they are built.
+# Local development stack. web is added in a later step.
 # Postgres and Redis publish no host ports, and catalog-api is bound to 127.0.0.1;
 # only the web container will be reachable from outside (Q3 firewall test relies on
 # this, because Docker bypasses UFW).
@@ -23,6 +23,30 @@ services:
       REDIS_URL: redis://redis:6379/0
     ports:
       - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  order-worker:
+    build:
+      context: ./services/order-worker
+      target: runtime
+    image: shoplite/order-worker:local
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: order-worker
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-shoplite}
+      POSTGRES_USER: ${POSTGRES_USER:-shoplite}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (cp .env.example .env)}
+      REDIS_URL: redis://redis:6379/0
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+    # Time to finish in-flight orders (max 2 s each) after SIGTERM before SIGKILL.
+    stop_grace_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
