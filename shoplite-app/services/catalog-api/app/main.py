@@ -11,13 +11,14 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Literal, Protocol
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .config import Settings
 from .db import INT4_MAX, Database
-from .middleware import RequestLogMiddleware
+from .metrics import ORDER_QUEUE_DEPTH, ORDERS_CREATED, exemplar, render
+from .middleware import ObservabilityMiddleware
 from .order_queue import RedisQueue
 
 log = logging.getLogger("shoplite.api")
@@ -39,6 +40,7 @@ class Store(Protocol):
 class OrderQueue(Protocol):
     async def ping(self) -> None: ...
     async def enqueue(self, order_id: int) -> None: ...
+    async def depth(self) -> int: ...
     async def close(self) -> None: ...
 
 
@@ -89,7 +91,7 @@ def create_app(
         await asyncio.gather(db.close(), queue.close(), return_exceptions=True)
 
     app = FastAPI(title="ShopLite catalog-api", lifespan=lifespan)
-    app.add_middleware(RequestLogMiddleware)
+    app.add_middleware(ObservabilityMiddleware)
 
     @app.get("/healthz")
     async def healthz() -> dict:
@@ -109,6 +111,19 @@ def create_app(
             },
         }
         return JSONResponse(body, status_code=200 if ready else 503)
+
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics(request: Request) -> Response:
+        """Prometheus scrape endpoint. Queue depth is read from Redis at scrape time."""
+        try:
+            depth = await asyncio.wait_for(queue.depth(), timeout=READINESS_TIMEOUT_SECONDS)
+            ORDER_QUEUE_DEPTH.set(depth)
+        except Exception as exc:
+            # Unknown is better than a stale number: NaN shows as a gap in Grafana.
+            ORDER_QUEUE_DEPTH.set(float("nan"))
+            log.warning("queue depth unavailable", extra={"error": repr(exc)})
+        body, content_type = render(request.headers.get("accept"))
+        return Response(content=body, media_type=content_type)
 
     @app.get("/products", response_model=list[Product])
     async def list_products() -> list[dict]:
@@ -140,6 +155,7 @@ def create_app(
             await db.mark_order_failed(order["id"])
             raise HTTPException(status_code=503, detail="order queue unavailable") from None
 
+        ORDERS_CREATED.inc(exemplar=exemplar())
         log.info(
             "order created",
             extra={"order_id": order["id"], "product_id": order_in.product_id, "quantity": order_in.quantity},

@@ -72,6 +72,11 @@ class FakeQueue:
             raise ConnectionError("redis down")
         self.messages.append(order_id)
 
+    async def depth(self) -> int:
+        if not self.healthy:
+            raise ConnectionError("redis down")
+        return len(self.messages)
+
     async def close(self) -> None:
         self.closed = True
 

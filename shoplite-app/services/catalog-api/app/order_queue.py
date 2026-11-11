@@ -38,5 +38,9 @@ class RedisQueue:
     async def enqueue(self, order_id: int) -> None:
         await self._client.lpush(PENDING_QUEUE, build_message(order_id))
 
+    async def depth(self) -> int:
+        """Number of orders waiting; feeds the order_queue_depth gauge."""
+        return await self._client.llen(PENDING_QUEUE)
+
     async def close(self) -> None:
         await self._client.aclose()

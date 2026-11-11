@@ -11,8 +11,9 @@ from collections.abc import Callable
 
 log = logging.getLogger("shoplite.worker.http")
 
-# A handler returns (status code, content type, body).
-Handler = Callable[[], tuple[int, str, bytes]]
+# A handler gets the request headers (lower-case names) and returns
+# (status code, content type, body).
+Handler = Callable[[dict[str, str]], tuple[int, str, bytes]]
 
 _REASONS = {200: "OK", 404: "Not Found", 405: "Method Not Allowed", 503: "Service Unavailable"}
 
@@ -37,9 +38,13 @@ class HttpServer:
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             request_line = await asyncio.wait_for(reader.readline(), timeout=5)
-            # Skip headers; nothing in them matters for these endpoints.
-            while (await asyncio.wait_for(reader.readline(), timeout=5)) not in (b"\r\n", b"\n", b""):
-                pass
+            headers: dict[str, str] = {}
+            for _ in range(100):  # Accept matters for /metrics content negotiation
+                line = await asyncio.wait_for(reader.readline(), timeout=5)
+                if line in (b"\r\n", b"\n", b""):
+                    break
+                name, _, value = line.decode("latin-1").partition(":")
+                headers[name.strip().lower()] = value.strip()
 
             parts = request_line.decode("latin-1").split()
             method = parts[0] if parts else ""
@@ -48,7 +53,7 @@ class HttpServer:
             if method != "GET":
                 status, ctype, body = 405, "text/plain", b"method not allowed\n"
             elif path in self.routes:
-                status, ctype, body = self.routes[path]()
+                status, ctype, body = self.routes[path](headers)
             else:
                 status, ctype, body = 404, "text/plain", b"not found\n"
 

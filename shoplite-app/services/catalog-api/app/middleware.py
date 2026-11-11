@@ -1,7 +1,7 @@
-"""Pure ASGI middleware that logs one JSON line per HTTP request.
+"""Pure ASGI middleware: one JSON log line and the HTTP metrics for every request.
 
-The `route` field is the route template (`/products/{id}`), not the raw path, so
-logs and (later) metrics stay low-cardinality.
+The `route` label/field is the route template (`/products/{id}`), not the raw path,
+so metrics stay low-cardinality and logs group cleanly by endpoint.
 """
 
 import logging
@@ -9,9 +9,13 @@ import time
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from .metrics import HTTP_DURATION, HTTP_REQUESTS, exemplar
+
 log = logging.getLogger("shoplite.http")
 
-# Probe and scrape endpoints are hit every few seconds; keep them out of INFO logs.
+# Probe and scrape endpoints are hit every few seconds by Kubernetes and Prometheus.
+# They are kept out of INFO logs and out of the HTTP metrics, so request rate,
+# error rate and latency describe user traffic only.
 _QUIET_ROUTES = {"/healthz", "/readyz", "/metrics"}
 
 
@@ -21,7 +25,7 @@ def route_template(scope: Scope) -> str:
     return getattr(route, "path", None) or "unmatched"
 
 
-class RequestLogMiddleware:
+class ObservabilityMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
@@ -42,7 +46,14 @@ class RequestLogMiddleware:
         try:
             await self.app(scope, receive, send_wrapper)
         finally:
+            duration = time.perf_counter() - start
             route = route_template(scope)
+            method = scope["method"]
+
+            if route not in _QUIET_ROUTES:
+                HTTP_REQUESTS.labels(method=method, route=route, status=str(status)).inc()
+                HTTP_DURATION.labels(method=method, route=route).observe(duration, exemplar=exemplar())
+
             if route in _QUIET_ROUTES:
                 # A failing probe (e.g. /readyz 503 while Redis is down) is a warning, not an
                 # application error; keeps ERROR logs meaningful for alert investigation.
@@ -53,10 +64,10 @@ class RequestLogMiddleware:
                 level,
                 "request completed",
                 extra={
-                    "method": scope["method"],
+                    "method": method,
                     "route": route,
                     "path": scope["path"],
                     "status": status,
-                    "duration_ms": round((time.perf_counter() - start) * 1000, 2),
+                    "duration_ms": round(duration * 1000, 2),
                 },
             )

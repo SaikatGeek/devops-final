@@ -12,6 +12,8 @@ import random
 import time
 from typing import Any, Protocol
 
+from .metrics import ORDER_PROCESSING, ORDERS_PROCESSED, exemplar
+
 log = logging.getLogger("shoplite.worker")
 
 
@@ -60,6 +62,14 @@ class OrderProcessor:
 
     async def handle(self, raw: str) -> str:
         """Process one message; returns the outcome: completed, failed, skipped or invalid."""
+        start = time.perf_counter()
+        result = await self._handle(raw)
+        ORDERS_PROCESSED.labels(result=result).inc()
+        if result in ("completed", "failed"):
+            ORDER_PROCESSING.observe(time.perf_counter() - start, exemplar=exemplar())
+        return result
+
+    async def _handle(self, raw: str) -> str:
         order_id = parse_order_id(raw)
         if order_id is None:
             log.error("invalid queue message dropped", extra={"raw_message": raw[:200]})

@@ -14,6 +14,7 @@ from typing import Protocol
 
 from .config import Settings
 from .http_server import HttpServer
+from .metrics import render
 from .order_queue import RedisConsumer
 from .processor import OrderProcessor
 from .store import OrderStore
@@ -42,11 +43,14 @@ class Worker:
         self.concurrency = concurrency
         self.stopping = asyncio.Event()
         self._consumers: list[asyncio.Task] = []
-        self.http = (
-            HttpServer(http_port, {"/healthz": self._healthz}) if http_port is not None else None
-        )
+        routes = {"/healthz": self._healthz, "/metrics": self._metrics}
+        self.http = HttpServer(http_port, routes) if http_port is not None else None
 
-    def _healthz(self) -> tuple[int, str, bytes]:
+    def _metrics(self, headers: dict[str, str]) -> tuple[int, str, bytes]:
+        body, content_type = render(headers.get("accept"))
+        return 200, content_type, body
+
+    def _healthz(self, headers: dict[str, str]) -> tuple[int, str, bytes]:
         """Liveness: the event loop answers and no consumer loop has died."""
         alive = all(not t.done() for t in self._consumers) or self.stopping.is_set()
         body = json.dumps({"status": "ok" if alive else "consumer stopped"}).encode()
