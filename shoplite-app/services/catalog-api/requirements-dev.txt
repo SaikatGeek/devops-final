@@ -1,0 +1,3 @@
+pytest==9.2.0
+# Starlette's TestClient transport (replaces httpx, which Starlette 1.x deprecates).
+httpx2==2.16.0
