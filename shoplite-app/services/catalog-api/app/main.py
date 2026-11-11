@@ -13,13 +13,14 @@ from typing import Literal, Protocol
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from pydantic import BaseModel, Field
 
 from .config import Settings
 from .db import INT4_MAX, Database
 from .metrics import ORDER_QUEUE_DEPTH, ORDERS_CREATED, exemplar, render
 from .middleware import ObservabilityMiddleware
-from .order_queue import RedisQueue
+from .order_queue import RedisQueue, build_message, publish_span
 
 log = logging.getLogger("shoplite.api")
 
@@ -39,7 +40,7 @@ class Store(Protocol):
 
 class OrderQueue(Protocol):
     async def ping(self) -> None: ...
-    async def enqueue(self, order_id: int) -> None: ...
+    async def enqueue(self, message: str) -> None: ...
     async def depth(self) -> int: ...
     async def close(self) -> None: ...
 
@@ -149,7 +150,8 @@ def create_app(
             raise HTTPException(status_code=404, detail="product not found")
 
         try:
-            await queue.enqueue(order["id"])
+            with publish_span(order["id"]):
+                await queue.enqueue(build_message(order["id"]))
         except Exception:
             log.exception("enqueue failed", extra={"order_id": order["id"]})
             await db.mark_order_failed(order["id"])
@@ -174,4 +176,13 @@ def create_app(
         log.exception("unhandled error", extra={"path": request.url.path})
         return JSONResponse({"detail": "internal server error"}, status_code=500)
 
+    # SERVER span per request, named by route template ("GET /products/{id}"). It
+    # wraps everything above, so logs, exemplars and DB spans all share its trace_id.
+    # Probe and scrape requests get no trace; the per-request ASGI receive/send
+    # sub-spans are dropped as noise.
+    FastAPIInstrumentor.instrument_app(
+        app,
+        excluded_urls="healthz,readyz,metrics",
+        exclude_spans=["receive", "send"],
+    )
     return app

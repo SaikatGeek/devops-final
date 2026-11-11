@@ -10,8 +10,9 @@ from datetime import datetime, timezone
 
 from opentelemetry import trace
 
-# Attributes every LogRecord has; anything else was passed through `extra=` and is kept.
-_STANDARD_ATTRS = set(vars(logging.makeLogRecord({}))) | {"message", "asctime", "taskName"}
+# Attributes every LogRecord has, plus uvicorn's ANSI-coloured duplicate of the message;
+# anything else was passed through `extra=` and is kept.
+_STANDARD_ATTRS = set(vars(logging.makeLogRecord({}))) | {"message", "asctime", "taskName", "color_message"}
 
 
 def current_trace_id() -> str | None:

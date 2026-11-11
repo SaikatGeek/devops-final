@@ -4,9 +4,20 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from app.config import Settings
 from app.main import create_app
+
+# One real tracer provider for the whole test session (the global provider can be
+# set only once). Spans go to memory so tests can inspect them.
+SPANS = InMemorySpanExporter()
+_provider = TracerProvider()
+_provider.add_span_processor(SimpleSpanProcessor(SPANS))
+trace.set_tracer_provider(_provider)
 
 PRODUCTS = [
     {"id": 1, "name": "Wireless Mouse", "price": 19.99, "stock": 120},
@@ -59,7 +70,7 @@ class FakeDatabase:
 
 class FakeQueue:
     def __init__(self) -> None:
-        self.messages: list[int] = []
+        self.messages: list[str] = []  # raw JSON messages, as Redis would hold them
         self.healthy = True
         self.closed = False
 
@@ -67,10 +78,10 @@ class FakeQueue:
         if not self.healthy:
             raise ConnectionError("redis down")
 
-    async def enqueue(self, order_id: int) -> None:
+    async def enqueue(self, message: str) -> None:
         if not self.healthy:
             raise ConnectionError("redis down")
-        self.messages.append(order_id)
+        self.messages.append(message)
 
     async def depth(self) -> int:
         if not self.healthy:
@@ -89,6 +100,12 @@ def db() -> FakeDatabase:
 @pytest.fixture
 def queue() -> FakeQueue:
     return FakeQueue()
+
+
+@pytest.fixture
+def spans() -> InMemorySpanExporter:
+    SPANS.clear()
+    return SPANS
 
 
 @pytest.fixture

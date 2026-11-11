@@ -1,5 +1,9 @@
 """Processes one queue message: PENDING -> PROCESSING -> (1-2 s of work) -> COMPLETED.
 
+The message carries the API's trace context (`traceparent`). The worker continues
+that trace with a CONSUMER span, so one order is one trace:
+API request -> queue send -> worker process -> database updates.
+
 `handle` never raises: a bad message or a failed order is logged and the
 consumer loop moves on to the next message.
 """
@@ -10,11 +14,18 @@ import json
 import logging
 import random
 import time
+from datetime import datetime, timezone
 from typing import Any, Protocol
+
+from opentelemetry import propagate, trace
+from opentelemetry.trace import SpanKind, Status, StatusCode
 
 from .metrics import ORDER_PROCESSING, ORDERS_PROCESSED, exemplar
 
 log = logging.getLogger("shoplite.worker")
+tracer = trace.get_tracer("shoplite.order-worker")
+
+PENDING_QUEUE = "orders:pending"
 
 
 class Store(Protocol):
@@ -31,12 +42,26 @@ def burn_cpu(seconds: float) -> None:
         digest = hashlib.sha256(digest).digest()
 
 
-def parse_order_id(raw: str) -> int | None:
+def parse_message(raw: str) -> dict[str, Any] | None:
+    """Decoded message, or None unless it is a JSON object with a positive int order_id."""
     try:
-        order_id = json.loads(raw)["order_id"]
-    except (ValueError, KeyError, TypeError):
+        message = json.loads(raw)
+    except ValueError:
         return None
-    return order_id if isinstance(order_id, int) and order_id > 0 else None
+    if not isinstance(message, dict):
+        return None
+    order_id = message.get("order_id")
+    return message if isinstance(order_id, int) and order_id > 0 else None
+
+
+def queue_wait_ms(message: dict[str, Any]) -> float | None:
+    """How long the message sat in the queue, from the API's enqueued_at timestamp."""
+    try:
+        enqueued = datetime.fromisoformat(message["enqueued_at"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    waited = (datetime.now(timezone.utc) - enqueued).total_seconds() * 1000
+    return round(max(waited, 0.0), 1)  # clocks of API and worker pods may differ slightly
 
 
 class OrderProcessor:
@@ -55,26 +80,50 @@ class OrderProcessor:
     async def simulate_work(self) -> None:
         total = random.uniform(self.min_seconds, self.max_seconds)
         cpu = min(self.cpu_seconds, total)
-        if cpu > 0:
-            # In a thread, so the event loop keeps serving the other consumers and /healthz.
-            await asyncio.to_thread(burn_cpu, cpu)
-        await asyncio.sleep(total - cpu)
+        with tracer.start_as_current_span(
+            "simulate work", attributes={"shoplite.work_seconds": round(total, 3)}
+        ):
+            if cpu > 0:
+                # In a thread, so the event loop keeps serving the other consumers and /healthz.
+                await asyncio.to_thread(burn_cpu, cpu)
+            await asyncio.sleep(total - cpu)
 
     async def handle(self, raw: str) -> str:
         """Process one message; returns the outcome: completed, failed, skipped or invalid."""
         start = time.perf_counter()
-        result = await self._handle(raw)
-        ORDERS_PROCESSED.labels(result=result).inc()
-        if result in ("completed", "failed"):
-            ORDER_PROCESSING.observe(time.perf_counter() - start, exemplar=exemplar())
+        message = parse_message(raw)
+        # Continue the API's trace when the message carries a traceparent.
+        parent = propagate.extract(message) if message else None
+
+        with tracer.start_as_current_span(
+            f"process {PENDING_QUEUE}",
+            context=parent,
+            kind=SpanKind.CONSUMER,
+            attributes={
+                "messaging.system": "redis",
+                "messaging.destination.name": PENDING_QUEUE,
+                "messaging.operation.type": "process",
+            },
+        ) as span:
+            if message is None:
+                log.error("invalid queue message dropped", extra={"raw_message": raw[:200]})
+                span.set_status(Status(StatusCode.ERROR, "invalid message"))
+                result = "invalid"
+            else:
+                span.set_attribute("shoplite.order_id", message["order_id"])
+                wait = queue_wait_ms(message)
+                if wait is not None:
+                    span.set_attribute("shoplite.queue_wait_ms", wait)
+                result = await self._process(message["order_id"], span)
+            span.set_attribute("shoplite.result", result)
+
+            # Inside the span, so the latency exemplar points at this order's trace.
+            ORDERS_PROCESSED.labels(result=result).inc()
+            if result in ("completed", "failed"):
+                ORDER_PROCESSING.observe(time.perf_counter() - start, exemplar=exemplar())
         return result
 
-    async def _handle(self, raw: str) -> str:
-        order_id = parse_order_id(raw)
-        if order_id is None:
-            log.error("invalid queue message dropped", extra={"raw_message": raw[:200]})
-            return "invalid"
-
+    async def _process(self, order_id: int, span: trace.Span) -> str:
         start = time.perf_counter()
         try:
             order = await self.store.start_processing(order_id)
@@ -91,8 +140,10 @@ class OrderProcessor:
                 extra={"order_id": order_id, "duration_ms": round((time.perf_counter() - start) * 1000, 1)},
             )
             return "completed"
-        except Exception:
+        except Exception as exc:
             log.exception("order processing failed", extra={"order_id": order_id})
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
             try:
                 await self.store.fail(order_id)
             except Exception:

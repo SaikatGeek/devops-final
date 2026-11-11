@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 
@@ -7,7 +9,7 @@ def test_create_order_returns_201_pending_and_enqueues(client, queue):
     body = response.json()
     assert body["status"] == "PENDING"
     assert body["product_id"] == 1 and body["quantity"] == 2
-    assert queue.messages == [body["id"]]
+    assert [json.loads(m)["order_id"] for m in queue.messages] == [body["id"]]
 
 
 def test_create_order_for_unknown_product_returns_404_and_enqueues_nothing(client, queue):
