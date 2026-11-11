@@ -61,3 +61,37 @@ class Database:
             "SELECT id, name, price, stock FROM products WHERE id = $1", product_id
         )
         return dict(row) if row else None
+
+    async def create_order(self, product_id: int, quantity: int) -> dict[str, Any] | None:
+        """Insert a PENDING order; returns None when the product does not exist.
+
+        INSERT ... SELECT inserts nothing when no product matches, so the existence
+        check and the insert are one atomic statement.
+        """
+        pool = await self._get_pool()
+        row = await pool.fetchrow(
+            f"""
+            INSERT INTO orders (product_id, quantity)
+            SELECT id, $2 FROM products WHERE id = $1
+            RETURNING {_ORDER_COLUMNS}
+            """,
+            product_id,
+            quantity,
+        )
+        return dict(row) if row else None
+
+    async def get_order(self, order_id: int) -> dict[str, Any] | None:
+        if not 1 <= order_id <= INT4_MAX:
+            return None
+        pool = await self._get_pool()
+        row = await pool.fetchrow(f"SELECT {_ORDER_COLUMNS} FROM orders WHERE id = $1", order_id)
+        return dict(row) if row else None
+
+    async def mark_order_failed(self, order_id: int) -> None:
+        pool = await self._get_pool()
+        await pool.execute(
+            "UPDATE orders SET status = 'FAILED', completed_at = now() WHERE id = $1", order_id
+        )
+
+
+_ORDER_COLUMNS = "id, product_id, quantity, status, created_at, completed_at"

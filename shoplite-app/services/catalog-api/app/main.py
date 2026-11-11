@@ -8,31 +8,37 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Protocol
+from datetime import datetime
+from typing import Literal, Protocol
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .config import Settings
-from .db import Database
+from .db import INT4_MAX, Database
 from .middleware import RequestLogMiddleware
 from .order_queue import RedisQueue
 
 log = logging.getLogger("shoplite.api")
 
 READINESS_TIMEOUT_SECONDS = 2.0
+MAX_ORDER_QUANTITY = 1000
 
 
-class ProductStore(Protocol):
+class Store(Protocol):
     async def ping(self) -> None: ...
     async def list_products(self) -> list[dict]: ...
     async def get_product(self, product_id: int) -> dict | None: ...
+    async def create_order(self, product_id: int, quantity: int) -> dict | None: ...
+    async def get_order(self, order_id: int) -> dict | None: ...
+    async def mark_order_failed(self, order_id: int) -> None: ...
     async def close(self) -> None: ...
 
 
 class OrderQueue(Protocol):
     async def ping(self) -> None: ...
+    async def enqueue(self, order_id: int) -> None: ...
     async def close(self) -> None: ...
 
 
@@ -41,6 +47,20 @@ class Product(BaseModel):
     name: str
     price: float
     stock: int
+
+
+class OrderIn(BaseModel):
+    product_id: int = Field(ge=1, le=INT4_MAX)
+    quantity: int = Field(ge=1, le=MAX_ORDER_QUANTITY)
+
+
+class Order(BaseModel):
+    id: int
+    product_id: int
+    quantity: int
+    status: Literal["PENDING", "PROCESSING", "COMPLETED", "FAILED"]
+    created_at: datetime
+    completed_at: datetime | None
 
 
 async def _check(name: str, probe: Callable[[], Awaitable[None]]) -> bool:
@@ -54,7 +74,7 @@ async def _check(name: str, probe: Callable[[], Awaitable[None]]) -> bool:
 
 def create_app(
     settings: Settings | None = None,
-    db: ProductStore | None = None,
+    db: Store | None = None,
     queue: OrderQueue | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
@@ -100,6 +120,38 @@ def create_app(
         if product is None:
             raise HTTPException(status_code=404, detail="product not found")
         return product
+
+    @app.post("/orders", response_model=Order, status_code=201)
+    async def create_order(order_in: OrderIn) -> dict:
+        """Store a PENDING order, then hand it to order-worker through the queue.
+
+        The insert is committed before the push, so the worker never pops an order
+        it cannot see yet. If the push fails, the order is marked FAILED instead of
+        staying PENDING forever, and the client gets 503.
+        """
+        order = await db.create_order(order_in.product_id, order_in.quantity)
+        if order is None:
+            raise HTTPException(status_code=404, detail="product not found")
+
+        try:
+            await queue.enqueue(order["id"])
+        except Exception:
+            log.exception("enqueue failed", extra={"order_id": order["id"]})
+            await db.mark_order_failed(order["id"])
+            raise HTTPException(status_code=503, detail="order queue unavailable") from None
+
+        log.info(
+            "order created",
+            extra={"order_id": order["id"], "product_id": order_in.product_id, "quantity": order_in.quantity},
+        )
+        return order
+
+    @app.get("/orders/{id}", response_model=Order)
+    async def get_order(id: int) -> dict:
+        order = await db.get_order(id)
+        if order is None:
+            raise HTTPException(status_code=404, detail="order not found")
+        return order
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception) -> JSONResponse:
