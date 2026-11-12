@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-12, Step 7-এর পরে। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-12, Step 9-এর পরে (Q1 শেষ)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -12,8 +12,8 @@
 
 | প্রশ্ন | বিষয় | মার্ক | অবস্থা |
 |---|---|---|---|
-| Q1 | Application | 8 | 🟡 ৯টা step-এর ৮টা শেষ (Step 8 কাজের সাথে সাথেই হয়ে গেছে); বাকি শুধু Step 9 (web) |
-| Q2 | Docker | 10 | 🟡 API আর worker-এর Dockerfile শর্ত মেনে তৈরি; web-এর Dockerfile, smoke test, Makefile বাকি; runtime image থেকে pip সরানো বাকি (section 7) |
+| Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
+| Q2 | Docker | 10 | 🟡 তিনটা Dockerfile শর্ত মেনে তৈরি (web সহ); compose-এ web, smoke test, Makefile আর runtime image থেকে pip সরানো বাকি (section 7) |
 | Q3 | Linux server | 5 | ⬜ AWS lab লাগবে |
 | Q4 | Terraform, Ansible | 17 | ⬜ AWS lab লাগবে |
 | Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
@@ -36,7 +36,7 @@
 | 6 | OpenTelemetry tracing, queue দিয়ে trace context | ✅ | `2a33e9c` |
 | 7 | ৪টা chaos flag | ✅ | `161c225` |
 | 8 | Unit test (কমপক্ষে ৫টা API test) | ✅ প্রতিটা step-এর সাথে লেখা; এখন ৭৭টা (API ৪৮, worker ২৯) | সব commit-এ |
-| 9 | web: Nginx + HTML/JS (product তালিকা, order, status) | ⬜ পরের কাজ | |
+| 9 | web: Nginx + HTML/JS (product তালিকা, order, status) | ✅ image-এর ১৬টা check সহ | `eb46deb` |
 
 ### প্রতিটা step-এ কী হলো আর কীভাবে যাচাই হলো
 
@@ -100,6 +100,19 @@ catalog-api   POST /orders               server
   - Memory leak: ৪০টা order-এ worker-এর RSS 50.0 থেকে 90.9 MiB (প্রতি order-এ ~1.02 MiB)।
   - সব flag বন্ধ করলে আবার স্বাভাবিক: order 1.8–2.1 s, RSS 48 MiB। সব log মিলিয়ে "chaos" শব্দ একবারও নেই।
 
+**Step 9: web**
+- `services/web/`: Nginx-এর উপর একটা static page (`public/`)। Product-এর তালিকা দেখায়, order নেয়, প্রতি সেকেন্ডে status দেখে যতক্ষণ না `COMPLETED` বা `FAILED` হয়। ID দিয়ে order খোঁজা যায়, আর API-র error (404, 500) বার্তা হিসেবে দেখায়।
+- Page-এর সব call যায় `/api/...`-তে। Nginx সেটা catalog-api-তে পাঠায়, `/api` অংশ বাদ দিয়ে, query রেখে।
+- Image: `nginxinc/nginx-unprivileged:1.30.6-alpine`, uid 101, port 8080, `HEALTHCHECK`, unpack করা size 64.6 MB। Stage তিনটা: `builder` page-এ version বসায়, `test` চালায় ১৬টা check, `runtime` আসল image।
+- Log প্রতি লাইনে JSON, অন্য দুই service-এর মতো একই পাঁচটা field (`trace_id` null, কারণ nginx-এ trace নেই)। 5xx হলে ERROR, 4xx হলে WARNING; `/healthz` log হয় না।
+- যাচাই:
+  - Test stage-এ ১৬টা check pass। ইচ্ছা করে ভুল upstream দিলে proxy-র check FAIL করে, exit 1।
+  - Web-কে compose-এর network-এ চালিয়ে browser থেকে: ১২টা product, order #145 আর #146 1.2–1.7 s-এ `COMPLETED`, ID দিয়ে খোঁজা কাজ করে, না-থাকা order-এ 404-এর বার্তা।
+  - `CHAOS_ERROR_RATE=1` দিলে page দেখায় "Could not place the order (HTTP 500: internal server error)"। JavaScript-এর কোনো error নেই।
+  - ফোনের মাপে (375 px) page পাশে scroll করে না; Stock column লুকিয়ে যায়।
+  - Upstream-এর নাম না মিললেও nginx healthy থাকে, page 200, `/api` 502।
+  - ১৪টা access log লাইনের সবগুলো বৈধ JSON। CPU limit 1 দিলে worker process ১টা।
+
 ## 3. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -110,6 +123,7 @@ catalog-api   POST /orders               server
 | `225269e` | 2026-11-12 | ৬টা metric (Step 5) |
 | `2a33e9c` | 2026-11-12 | Tracing (Step 6) |
 | `161c225` | 2026-11-12 | ৪টা chaos flag (Step 7) |
+| `eb46deb` | 2026-11-12 | web: page, Nginx, Dockerfile (Step 9) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -123,6 +137,11 @@ devops-final/
 │   ├── .env.example                      local-এর setting; আসল .env Git-এ যায় না
 │   ├── helm/shoplite/files/init.sql      table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
 │   └── services/
+│       ├── web/
+│       │   ├── public/                   index.html, app.js, style.css: page
+│       │   ├── nginx/default.conf.template  /api proxy, no-cache, /healthz, JSON log
+│       │   ├── tests/                    image-এর ১৬টা check, fake API
+│       │   └── Dockerfile                builder → test → runtime
 │       ├── catalog-api/app/
 │       │   ├── main.py                   সব endpoint
 │       │   ├── faults.py                 CHAOS_LATENCY_MS, CHAOS_ERROR_RATE
@@ -179,6 +198,16 @@ Unit test (service-এর folder থেকে, যেমন `services/catalog-ap
 docker build --target test -t test-image . && docker run --rm test-image
 ```
 
+`services/web`-এও একই command; সেখানে test মানে image-এর ১৬টা check।
+
+Web এখনো compose-এ নেই (Q2-তে যোগ হবে)। তার আগে page দেখতে চাইলে, stack চালু থাকা অবস্থায় `shoplite-app` থেকে:
+
+```bash
+docker build --target runtime -t shoplite/web:local services/web && docker run -d --rm --name shoplite-web-check --network shoplite_default -p 127.0.0.1:8088:8080 shoplite/web:local
+```
+
+তারপর http://127.0.0.1:8088 খোলো। কাজ শেষে `docker stop shoplite-web-check`; চালু থাকলে `docker compose down` network মুছতে পারে না।
+
 ## 6. পথে নেওয়া সিদ্ধান্ত (demo আর README-র deviation log-এ লাগবে)
 
 - **Worker product-এর stock কমায় না।** কমালে Q8-এর ১৫ মিনিটের load test-এ stock শেষ হয়ে সব order `FAILED` হতো, আর তদন্ত গুলিয়ে যেত।
@@ -194,17 +223,23 @@ docker build --target test -t test-image . && docker run --rm test-image
 - **Memory leak-এ non-zero byte।** শূন্য দিয়ে ভরা memory Linux অনেক সময় সত্যিই খরচ করে না, তখন pod-এর memory বাড়ত না।
 - **Random source বাইরে থেকে দেওয়া যায়** (`FaultInjector`-এর `rng` আর `sleep`)। তাই test-এ ঠিক করে দেওয়া যায় কোন request-এ দেরি বা error হবে।
 - **কাজের ক্রম (12 Nov):** আগে অ্যাপ পুরো শেষ (Step 9, Q2), তারপর Terraform, Ansible, Helm, monitoring আর CI। ওগুলোর code এই PC-তেই লেখা হবে; lab-এ শুধু চালানো আর প্রমাণ নেওয়া।
+- **Web চলে uid 101-এ, বাকি দুইটা 10001-এ।** 101 হলো `nginx-unprivileged` image-এর নিজের non-root user; বদলালে nginx-এর লেখার folder-গুলোর permission নতুন করে ঠিক করতে হতো।
+- **Web-এর config container চালু হওয়ার সময় তৈরি হয়।** Image-এর entrypoint template থেকে `API_UPSTREAM` আর DNS server বসায়। `proxy_pass`-এ variable থাকায় nginx নাম খোঁজে প্রতি request-এ, তাই catalog-api না থাকলেও চালু হয়। Kubernetes-এ `API_UPSTREAM`-এ পুরো নাম দিতে হবে (`catalog-api.<namespace>.svc.cluster.local:8000`), কারণ nginx-এর resolver search domain মানে না। Kubernetes-এ অবশ্য `/api` সরাসরি Traefik থেকে catalog-api-তে যাবে (PLAN Phase 6)।
+- **Page-এর সব ফাইলে `Cache-Control: no-cache`, আর heading নেয় `<title>`-এর লেখা।** Q7-এ শুধু `<title>` বদলালে tab আর page দুই জায়গাতেই নতুন নাম দেখা যাবে, reload-এই।
+- **Footer-এ build-এর version।** `docker build --build-arg VERSION=<short SHA>` দিলে page-এ দেখা যায় কোন commit চলছে (Q7-এ CI দেবে); local-এ `dev`।
+- **Worker process-এর সংখ্যা CPU limit অনুযায়ী** (`NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE`)। `auto` দিলে nginx পুরো machine-এর CPU গুনে এই PC-তে ২৮–৩২টা process চালু করত।
 
 ## 7. জানা বিষয়
 
 - **Docker 29-এ image-এর size দুইভাবে দেখায়।** এই PC-তে Docker containerd image store ব্যবহার করে। `docker images`-এ DISK USAGE (API 159 MB, worker 132 MB) মানে unpack করা layer আর compressed blob মিলিয়ে; CONTENT SIZE (36.6 MB, 30.4 MB) মানে compressed। আসল unpack করা size API 122.6 MB, worker 101.4 MB, দুটোই শর্তের ভেতরে। তবু grader যাতে 159 দেখে ভুল না বোঝে, Q2-তে runtime venv থেকে pip (13 MB) সরানো হবে; তাতে DISK USAGE-ও 150 MB-এর নিচে নামবে।
 - **Windows-এর curl দেরি একটু কম মাপে।** Docker-এর ভেতরের 0.5 s-এর দেরি curl দেখায় 0.498 s। তাই latency যাচাই হবে server-এর histogram দিয়ে।
+- **এই PC-তে port 80 আর 8080 আগে থেকেই ব্যস্ত।** 80 ধরে আছে `httpd` (Apache), 8080 ধরে আছে একটা `php` process। Q2-তে web-এর default port 80-ই থাকবে (lab-এর পরিষ্কার machine-এ ফাঁকা); এই PC-তে `.env`-এ `WEB_PORT=8088` দিতে হবে।
+- **Claude-এর window লুকানো থাকলে built-in browser-এর screenshot time out হয়।** তখন page-এর লেখা পড়ে আর JavaScript দিয়ে মেপে যাচাই করা হয়।
 
 ## 8. পরের কাজ
 
-1. **Step 9:** web frontend (Nginx unprivileged, port 8080), `/api` proxy করবে catalog-api-তে।
-2. **Q2:** web-এর Dockerfile, পুরো compose (৫টা component), `scripts/smoke-test.sh`, `Makefile` (`build up down test smoke`); runtime image থেকে pip সরানো।
-3. অ্যাপ শেষ হলে infra-র code, এই PC-তেই: Q3-এর Linux ফাইল, Q4-এর Terraform module আর Ansible role, Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow।
-4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
+1. **Q2:** web-কে compose-এ যোগ (শুধু web বাইরে খোলা, `${WEB_PORT:-80}:8080`, catalog-api healthy হলে তবে চালু), `scripts/smoke-test.sh`, `Makefile` (`build up down test smoke`), runtime image থেকে pip সরানো। Checkpoint: পরিষ্কার Linux machine-এ `make up && make smoke`।
+2. তারপর infra-র code, এই PC-তেই: Q3-এর Linux ফাইল, Q4-এর Terraform module আর Ansible role, Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow।
+3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
 
-**সময়:** PLAN.md অনুযায়ী আজ (12 Nov) প্রথম lab session S1 হওয়ার কথা ছিল; এখনো Q1/Q2 চলছে, তাই প্রায় এক দিন পিছিয়ে। পিছিয়ে পড়লে PLAN-এর নিয়মে আগে S9 (EKS), তারপর S8 বাদ যাবে।
+**সময়:** PLAN.md অনুযায়ী আজ (12 Nov) প্রথম lab session S1 হওয়ার কথা ছিল; Q1 শেষ, Q2 চলছে, তাই প্রায় এক দিন পিছিয়ে। পিছিয়ে পড়লে PLAN-এর নিয়মে আগে S9 (EKS), তারপর S8 বাদ যাবে।

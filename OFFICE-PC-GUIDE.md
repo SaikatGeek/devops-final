@@ -124,10 +124,10 @@ docker compose --profile tracing down
 | ক্রম | কাজ | কোথায় |
 |---|---|---|
 | ✅ | Step 7: ৪টা chaos flag (`161c225`) | হয়ে গেছে |
-| 1 | Step 9: web frontend | যেকোনো PC, Docker |
-| 2 | Q2: web-এর Dockerfile, পুরো compose, smoke test, Makefile | যেকোনো PC, Docker |
-| 3 | Q3 থেকে Q7-এর code (Linux ফাইল, Terraform, Ansible, Helm, monitoring, workflow) | যেকোনো PC |
-| 4 | Q3 থেকে Q8 চালানো আর প্রমাণ | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
+| ✅ | Step 9: web frontend (`eb46deb`); Q1 শেষ | হয়ে গেছে |
+| 1 | Q2: compose-এ web, smoke test, Makefile, image থেকে pip সরানো | যেকোনো PC, Docker |
+| 2 | Q3 থেকে Q7-এর code (Linux ফাইল, Terraform, Ansible, Helm, monitoring, workflow) | যেকোনো PC |
+| 3 | Q3 থেকে Q8 চালানো আর প্রমাণ | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
 
 ## ৮. সমস্যা হলে
 
