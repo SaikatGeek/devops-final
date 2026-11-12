@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-12, Q4 step 4.1-এর পরে। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-12, Q4 step 4.2-এর পরে। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -17,7 +17,7 @@
 | Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
-| Q4 | Terraform, Ansible | 17 | 🟡 ৮টা step-এর প্রথমটা (4.1: state bucket, backend-এর lock, tag, budget) শেষ; চালানো lab-এ |
+| Q4 | Terraform, Ansible | 17 | 🟡 ৮টা step-এর দুইটা শেষ (4.1: state bucket, backend-এর lock, tag, budget; 4.2: network module); চালানো lab-এ |
 | Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
@@ -190,8 +190,8 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 | Step | কাজ | প্রশ্নের অংশ | অবস্থা |
 |---|---|---|---|
 | 4.1 | State bucket (`terraform/bootstrap`), S3 backend lock সহ, সব resource-এ `project=shoplite`, USD 20-এর Budget | (e) remote state, Cost guard | ✅ `d690cb5` |
-| 4.2 | `network` module: দুই AZ, ২টা public আর ২টা private subnet, IGW, NAT Gateway | (a), (f) | ⬜ পরের কাজ |
-| 4.3 | `compute` module: node-এর security group, SSM-এর IAM role, ৩টা EC2 private subnet-এ | (b), (c), (f) | ⬜ |
+| 4.2 | `network` module: দুই AZ, ২টা public আর ২টা private subnet, IGW, NAT Gateway | (a), (f) | ✅ `6733b56` |
+| 4.3 | `compute` module: node-এর security group, SSM-এর IAM role, ৩টা EC2 private subnet-এ | (b), (c), (f) | ⬜ পরের কাজ |
 | 4.4 | `alb` module: public subnet-এ ALB, Kubernetes ingress-এ forward | (d), (f) | ⬜ |
 | 4.5 | `ecr` module: তিনটা image repo | (e), (f) | ⬜ |
 | 4.6 | `terraform/q3-server`: Q3-এর EC2 | Q3-এর server | ⬜ |
@@ -215,6 +215,18 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 
 **Lab-এ বাকি:** bootstrap আর মূল configuration `apply`; tag দিয়ে resource খোঁজার output; budget দেখা; শেষে `destroy`।
 
+**Step 4.2-এ কী হলো** (`terraform/modules/network/`)
+- VPC `10.0.0.0/16`, DNS support আর hostname চালু।
+- দুইটা public subnet (`10.0.0.0/24`, `10.0.1.0/24`) আর দুইটা private (`10.0.10.0/24`, `10.0.11.0/24`)। প্রতিটা ধরনের i-তম subnet i-তম AZ-এ, তাই VPC দুই AZ জুড়ে। কোনো subnet নিজে থেকে public IP দেয় না।
+- Internet Gateway। Public route table: `0.0.0.0/0` → IGW, দুই public subnet-এর জন্য।
+- NAT Gateway একটাই, Elastic IP সহ, প্রথম public subnet-এ। Private route table: `0.0.0.0/0` → NAT, দুই private subnet-এর জন্য। ফলে node-গুলো বাইরে যেতে পারে (image, SSM, update), কিন্তু বাইরে থেকে node-এ ঢোকার পথ নেই।
+- Name tag (`shoplite-vpc`, `shoplite-public-a`, ...)। Variable-এর validation: প্রতি ধরনের কমপক্ষে দুইটা subnet, আর দুই ধরনের সংখ্যা সমান।
+- Output: `vpc_id`, `vpc_cidr`, `azs`, `public_subnet_ids`, `private_subnet_ids`। মূল configuration-এ `module "network"` বসানো হয়েছে, আর `outputs.tf` VPC ও subnet-এর id দেখায়।
+
+**যাচাই:**
+- Module-এ ৭টা test, মূল configuration-এ ৩টা, bootstrap-এ ৩টা, সব pass। Module-এর test-এ দেখা হয়: subnet আর AZ, IGW-এর route, NAT-এর route, নাম, তিন AZ-এও চলে কিনা, এক AZ আর অসমান তালিকা বাতিল হয় কিনা।
+- ইচ্ছা করে private subnet-এর route IGW-তে পাঠালে NAT-এর test fail করে।
+
 ## 6. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -229,6 +241,7 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 | `6c68826` | 2026-11-12 | Q2: compose-এ পাঁচটা component, smoke test, Makefile, pip ছাড়া image |
 | `3019a9a` | 2026-11-12 | Q3: `linux/` folder (sshd_config, backup service আর timer, UFW, commands) |
 | `d690cb5` | 2026-11-12 | Q4 step 4.1: state bucket, S3 backend lock সহ, tag, budget |
+| `6733b56` | 2026-11-12 | Q4 step 4.2: network module (দুই AZ-এ VPC, subnet, IGW, NAT) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -251,7 +264,9 @@ devops-final/
 │   ├── terraform/                        Q4
 │   │   ├── bootstrap/                    state-এর S3 bucket (একবার, account প্রতি)
 │   │   ├── backend.tf                    S3 backend, use_lockfile
-│   │   ├── main.tf, variables.tf         provider, project=shoplite tag, USD 20 budget (module পরে আসবে)
+│   │   ├── main.tf, variables.tf         provider, project=shoplite tag, USD 20 budget, module-গুলো জোড়া
+│   │   ├── outputs.tf                    VPC আর subnet-এর id
+│   │   ├── modules/network/              VPC, subnet, IGW, NAT, route table (+ নিজের tests/)
 │   │   └── tests/                        terraform test, mock provider
 │   └── services/
 │       ├── web/
@@ -378,6 +393,9 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 - **Budget পুরো account-এর খরচ দেখে, tag দিয়ে ছাঁকে না।** Tag দিয়ে ছাঁকতে আগে cost allocation tag চালু করতে হয়, যা কার্যকর হতে এক দিন লাগে। Lab-এর account শুধু এই project-এর।
 - **Budget-এর email Git-এ নেই;** দেওয়া হয় `TF_VAR_budget_alert_email` দিয়ে।
 - **Region আপাতত `ap-southeast-1` (Singapore),** variable হিসেবে। Lab-এ কোন region, সেটা preflight-এ দেখে ঠিক করতে হবে।
+- **NAT Gateway একটাই,** প্রথম AZ-এ। দুই AZ-এ দুইটা দিলে একটা AZ বন্ধ হলেও চলত, কিন্তু খরচ দ্বিগুণ। Lab-এর জন্য একটাই যথেষ্ট, আর প্রশ্নও "a NAT Gateway" চায়।
+- **কোনো subnet নিজে থেকে public IP দেয় না** (`map_public_ip_on_launch = false`, স্পষ্ট করে লেখা)। ALB আর NAT নিজের ঠিকানা পায়, আর Kubernetes node-এ বাইরে থেকে পৌঁছানো যাবে না (4b)।
+- **Module-এর subnet-এর তালিকা variable দিয়ে আসে,** সংখ্যা যেকোনো (কমপক্ষে ২)। প্রশ্ন "reusable modules" চায়, আর test-এ তিন AZ দিয়েও চালিয়ে দেখা হয়েছে।
 
 ## 10. জানা বিষয়
 
@@ -397,15 +415,17 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
   - D-Bus নেই, তাই `systemctl status` root হিসেবে চালাতে হয়।
 - **Mock provider-এর সীমা।** Provider-এর `default_tags` আসল provider-এর ভেতরে মেশে, তাই mock test দিয়ে প্রমাণ করা যায় না যে tag বসেছে। সেটা দেখা হবে lab-এ, tag দিয়ে resource খুঁজে।
 - **Credential ছাড়া `terraform init` (backend সহ) থামে "No valid credential sources found"-এ।** এটা প্রত্যাশিত; test-এর জন্য `init -backend=false` চালাতে হয়।
+- **Mock provider AWS-এর default মান বসায় না** (যেমন `map_public_ip_on_launch` থাকে `null`)। যে মান test-এ যাচাই করতে হবে, সেটা code-এ স্পষ্ট করে লিখতে হয়।
+- **Resource-গুলোর পরস্পরের যোগ (subnet → VPC, route → gateway) দেখতে test-এ `command = apply` লাগে।** Mock apply AWS ছোঁয় না, শুধু id বানিয়ে দেয়; `plan`-এ id অজানা থাকে।
+- **একটা variable-এর validation fail করলে, যে validation সেই variable দেখে, Terraform সেটা আর চালায় না।** তাই এক AZ-এর test-এ শুধু `public_subnet_cidrs`-এর error আশা করা হয়।
 
 ## 11. পরের কাজ
 
-1. **Q4 step 4.2: `network` module** (`terraform/modules/network/`, project.md 4a)। থাকবে:
-   - দুই AZ-এ VPC (`10.0.0.0/16`)।
-   - ২টা public আর ২টা private subnet।
-   - Internet Gateway, একটা NAT Gateway।
-   - Route table।
+1. **Q4 step 4.3: `compute` module** (`terraform/modules/compute/`, project.md 4b আর 4c)। থাকবে:
+   - Node-এর security group, least privilege: internet থেকে কিছুই না; cluster-এর ভেতরের port শুধু node-গুলোর মধ্যে।
+   - SSM আর ECR থেকে image টানার IAM role আর instance profile।
+   - ৩টা EC2 private subnet-এ, public IP ছাড়া: control-plane `t3.medium`, দুইটা worker `t3.large` (PLAN)।
    - Mock provider-এ test।
-2. তারপর Q4-এর বাকি step: 4.3 `compute`, 4.4 `alb`, 4.5 `ecr`, 4.6 `q3-server`, 4.7 Ansible, 4.8 lab-এর পদ্ধতি (section 5-এর table)।
+2. তারপর Q4-এর বাকি step: 4.4 `alb`, 4.5 `ecr`, 4.6 `q3-server`, 4.7 Ansible, 4.8 lab-এর পদ্ধতি (section 5-এর table)।
 3. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
 4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।

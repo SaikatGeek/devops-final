@@ -136,7 +136,7 @@ docker compose down
 | ✅ | Q1: application, ৯টা step | হয়ে গেছে |
 | ✅ | Q2: Dockerfile, compose, smoke test, Makefile (`6c68826`) | হয়ে গেছে |
 | ✅ | Q3-এর code: `linux/` folder (`3019a9a`), local-এ রিহার্সাল করা | হয়ে গেছে |
-| 🟡 | Q4: step 4.1 (state bucket, backend lock, tag, budget) শেষ (`d690cb5`); পরের step 4.2 `network` module | যেকোনো PC, Docker |
+| 🟡 | Q4: step 4.1 (state bucket, backend lock, tag, budget, `d690cb5`) আর 4.2 (network module, `6733b56`) শেষ; পরের step 4.3 `compute` module | যেকোনো PC, Docker |
 | 1 | Q4-এর বাকি step, তারপর Q5 থেকে Q7-এর code (Helm, monitoring, workflow) | যেকোনো PC |
 | 2 | Q3 থেকে Q8 চালানো আর প্রমাণ (Q3: `linux/evidence/commands.md` ধরে) | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
 
