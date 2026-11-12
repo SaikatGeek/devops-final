@@ -18,6 +18,7 @@ htmlcov/
 *.tfstate
 *.tfstate.*
 *.tfplan
+*.tfvars
 crash.log
 override.tf
 override.tf.json
