@@ -53,11 +53,19 @@ cd devops-final/shoplite-app
 cp .env.example .env
 ```
 
+এই PC-তে port 80 অন্য কোনো program (যেমন Apache) ধরে থাকলে `.env`-এ `WEB_PORT=80`-এর জায়গায় লেখো `WEB_PORT=127.0.0.1:8088`। তাহলে page শুধু এই PC থেকে, port 8088-এ খোলা যাবে।
+
 ```bash
 docker compose up -d --build --wait
 ```
 
-তারপর browser-এ http://127.0.0.1:8000/docs খোলো। Product-এর তালিকা দেখা গেলে সব ঠিক আছে।
+তারপর browser-এ page খোলো: http://localhost (WEB_PORT 80 হলে) অথবা http://127.0.0.1:8088। Product-এর তালিকা দেখা গেলে সব ঠিক আছে। পুরো পথটা (page → API → database → queue → worker) একবারে যাচাই করতে চাইলে:
+
+```bash
+sh scripts/smoke-test.sh
+```
+
+শেষে `[smoke] PASS` দেখা গেলে সব ঠিক।
 
 `.env` Git-এ থাকে না, তাই প্রতিটা নতুন PC-তে এটা আবার বানাতে হয়। Database-এর data-ও PC থেকে PC-তে যায় না; নতুন PC-তে Postgres প্রথমবার চালু হলে ১২টা product নিজে থেকেই বসে যায়।
 
@@ -84,7 +92,7 @@ CLAUDE.md আর PROGRESS.md পড়ো। তারপর বলো এখন
 **পরের step শুরু করাতে:**
 
 ```text
-Step 7 শুরু করো
+Q3 শুরু করো
 ```
 
 **এক step শেষ হলে Claude নিজেই যা করবে (CLAUDE.md-তে লেখা আছে):**
@@ -116,18 +124,19 @@ git status
 Docker-এর container বন্ধ করতে চাইলে (data থেকে যায়), `shoplite-app` folder থেকে:
 
 ```bash
-docker compose --profile tracing down
+docker compose down
 ```
 
 ## ৭. বাকি কাজের ক্রম (বিস্তারিত PROGRESS.md-তে)
 
+মূল নিয়ম: প্রশ্নে (`project.md`) যা চাওয়া, শুধু সেটুকুই বানানো হবে।
+
 | ক্রম | কাজ | কোথায় |
 |---|---|---|
-| ✅ | Step 7: ৪টা chaos flag (`161c225`) | হয়ে গেছে |
-| ✅ | Step 9: web frontend (`eb46deb`); Q1 শেষ | হয়ে গেছে |
-| 1 | Q2: compose-এ web, smoke test, Makefile, image থেকে pip সরানো | যেকোনো PC, Docker |
-| 2 | Q3 থেকে Q7-এর code (Linux ফাইল, Terraform, Ansible, Helm, monitoring, workflow) | যেকোনো PC |
-| 3 | Q3 থেকে Q8 চালানো আর প্রমাণ | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
+| ✅ | Q1: application, ৯টা step | হয়ে গেছে |
+| ✅ | Q2: Dockerfile, compose, smoke test, Makefile (`6c68826`) | হয়ে গেছে |
+| 1 | Q3 থেকে Q7-এর code (Linux ফাইল, Terraform, Ansible, Helm, monitoring, workflow) | যেকোনো PC |
+| 2 | Q3 থেকে Q8 চালানো আর প্রমাণ | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
 
 ## ৮. সমস্যা হলে
 
@@ -135,6 +144,6 @@ docker compose --profile tracing down
 |---|---|
 | `docker` command কাজ করে না | Docker Desktop চালু করো, পুরো চালু হওয়া পর্যন্ত অপেক্ষা করো |
 | `set POSTGRES_PASSWORD in .env` error | `shoplite-app`-এ `cp .env.example .env` চালাও |
-| Port 8000 বা 80 আগে থেকেই ব্যবহৃত | যে program port ধরে আছে সেটা বন্ধ করো, অথবা Claude-কে বলো port বদলাতে |
+| Port 80 আগে থেকেই ব্যবহৃত (`ports are not available`) | `.env`-এ `WEB_PORT=127.0.0.1:8088` লেখো, তারপর আবার `docker compose up -d --wait` |
 | `git push` প্রত্যাখ্যাত | আগে `git pull`, তারপর আবার push |
 | অফিসের network-এ Docker image নামে না | Proxy-র ব্যাপার; IT-কে জিজ্ঞেস করো, অথবা বাসার PC-তে কাজ করো |

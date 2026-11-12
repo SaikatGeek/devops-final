@@ -10,6 +10,7 @@ Course capstone (Poridhi "Mastering DevOps and AWS", Batch 03), deadline **17 No
 
 ## How to work with this user
 
+- **Build only what `project.md` asks for** (the user's rule, 12 Nov). No extra tools, services or features for convenience: Jaeger, a version footer and extra published ports were removed for this reason. Files needed to make the project reproducible are fine, because the question allows them. Time pressure is never a reason to skip or shortcut something the question asks. If something not asked looks useful, propose it and let the user decide; do not add it.
 - The user writes in Bengali (sometimes Banglish). Reply in Bengali; keep technical terms, code, commands and errors in English.
 - Work in **small steps**, one at a time. Before starting a step, say in a line what it will do. Do not jump ahead to the next step without the user's go-ahead.
 - A step is done only when:
@@ -29,60 +30,59 @@ Course capstone (Poridhi "Mastering DevOps and AWS", Batch 03), deadline **17 No
 ## Code conventions already in place (keep them)
 
 - Python 3.12 on `python:3.12-alpine`. Dependencies pinned in each service's `requirements.txt` / `requirements-dev.txt`. To add one, install it in a throwaway `python:3.12-alpine` container, read the resolved version, pin it.
-- Dockerfiles: stages `builder` → `test` → `runtime`; runtime runs as uid/gid `10001` (web: the nginx image's own uid 101), has `HEALTHCHECK`, `.dockerignore`; images must stay **under 150 MB** (unpacked now 122.6 MB API, 101.4 MB worker, 64.6 MB web; see the Docker 29 gotcha).
-- web (`services/web/`): `nginxinc/nginx-unprivileged:1.30.6-alpine`, port 8080. `nginx/default.conf.template` is rendered by the image's entrypoint at start (`API_UPSTREAM`, DNS from resolv.conf via `NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1`); `proxy_pass` uses a variable so nginx starts without the upstream. `/api/` strips the prefix and keeps the query; `Cache-Control: no-cache` on static files; `/healthz`; JSON access log with the five fields (level from status). The heading copies `<title>` (Q7) and the footer shows the `VERSION` build arg. Its "unit tests" are `tests/run.sh` (16 checks against a fake API) in the test stage.
+- Dockerfiles: API and worker have stages `builder` → `test` → `runtime`; the venv is created `--without-pip` and the base image's pip installs into it with `--python`. web has `test` → `runtime`. Runtime runs as uid/gid `10001` (web: the nginx image's own uid 101), has `HEALTHCHECK`, `.dockerignore`. Images must stay **under 150 MB**: unpacked now 64.6 MB web, 109.2 MB API, 88.0 MB worker (see the Docker 29 gotcha).
+- web (`services/web/`): `nginxinc/nginx-unprivileged:1.30.6-alpine`, port 8080. `nginx/default.conf.template` is rendered by the image's entrypoint at start (`API_UPSTREAM`, DNS from resolv.conf via `NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1`); `proxy_pass` uses a variable so nginx starts without the upstream. `/api/` strips the prefix and keeps the query; `Cache-Control: no-cache` on static files (the Q7 checkpoint changes `<title>`); `/healthz`; JSON access log with the five fields (level from status). Its "unit tests" are `tests/run.sh` (15 checks against a fake API) in the test stage.
+- Compose (`docker-compose.yml`): exactly the five components. Only web is published (`${WEB_PORT:-80}:8080`; `WEB_PORT` may be `IP:PORT`); the API is reached through web's `/api/`. `depends_on` uses `service_healthy`. No trace backend in compose: spans are created (trace_id in logs) but exported only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, which happens in Kubernetes (Tempo).
+- `scripts/smoke-test.sh` (POSIX sh, curl and sed, no jq) goes through web: up, `/api/readyz`, POST `/api/orders`, poll until `COMPLETED`. `Makefile` targets: `build up down test smoke`; `.env` is copied from `.env.example` on first use.
 - Config only from environment variables (`config.py`), validated at startup.
 - JSON logs on stdout with `timestamp, level, service, message, trace_id` (`logging_setup.py`, identical copy in both services).
 - Metrics: exact Q6.2 names/labels; `route` label is the route template; `/healthz`, `/readyz`, `/metrics` are excluded from HTTP metrics, traces and INFO logs.
-- Tracing: OTel SDK; spans always created, exported only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. DB spans are written by hand (no auto-instrumentation). Queue messages carry `traceparent`; the worker continues the same trace.
+- Tracing: OTel SDK; spans always created, exported over OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. DB spans are written by hand (no auto-instrumentation). Queue messages carry `traceparent`; the worker continues the same trace.
 - `create_app(settings, db, queue, faults)`, `OrderProcessor(store, ...)` and `OrderStore(settings, pool)` take dependencies as arguments; tests use in-memory fakes (`tests/conftest.py`, `tests/fakes.py`), never real Postgres/Redis.
 - Chaos flags (Q1.5, Step 7, all off by default): `CHAOS_LATENCY_MS` and `CHAOS_ERROR_RATE` in catalog-api `app/faults.py` (`FaultInjector`, injectable `rng` and `sleep`); `CHAOS_MEMORY_LEAK` in worker `processor.py`, `CHAOS_SLOW_DB` in worker `store.py`. Never name a flag or print its value in logs, error bodies or span names (Q8 must be solved from observability). Keep comments that name a flag on their own line, never beside an executing line: tracebacks print the executing line.
 
 ## Commands
 
-Run from `shoplite-app/`:
+Run from `shoplite-app/`. On Linux (and the question's checkpoint):
 
 ```bash
-cp .env.example .env                       # once per machine
-docker compose up -d --build --wait         # postgres, redis, catalog-api, order-worker
-docker compose --profile tracing up -d      # + Jaeger UI on http://127.0.0.1:16686 (needs OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318 in .env)
-docker compose logs -f catalog-api order-worker
-CHAOS_SLOW_DB=true docker compose up -d --wait   # turn one chaos flag on; rerun without it to turn it off
+make up && make smoke       # .env from .env.example if missing, build, start, wait healthy, smoke test
+make test                   # unit tests of web, catalog-api and order-worker in Docker
+make down                   # stop; the pgdata volume stays
 ```
 
-Unit tests of one service (`catalog-api`, `order-worker` or `web`):
+Windows Git Bash has no `make`; the same by hand:
 
 ```bash
+cp .env.example .env                                    # once per machine
+docker compose up -d --build --wait && sh scripts/smoke-test.sh
 docker build --target test -t shoplite/catalog-api:test services/catalog-api && docker run --rm shoplite/catalog-api:test
+docker compose logs -f
+CHAOS_SLOW_DB=true docker compose up -d --wait          # turn one chaos flag on; rerun without it to turn it off
 ```
 
-Until Q2 adds web to compose, run it on the compose network (stop it before `docker compose down`, or the network cannot be removed):
+On PC-01 real `make` runs in WSL Ubuntu: `wsl.exe -d Ubuntu --cd /mnt/e/devops-final/shoplite-app -- make up` (see the WSL gotcha for anything longer).
 
-```bash
-docker build --target runtime -t shoplite/web:local services/web && docker run -d --rm --name shoplite-web-check --network shoplite_default -p 127.0.0.1:8088:8080 shoplite/web:local
-```
-
-API docs: http://127.0.0.1:8000/docs. The worker's `/healthz` and `/metrics` are on port 8001 inside the container only (`docker compose exec order-worker wget -qO- http://127.0.0.1:8001/metrics`).
+The page is at `http://127.0.0.1:<WEB_PORT>` (PC-01: http://127.0.0.1:8088); the API through it at `/api/...` (`/api/readyz`, `/api/products`, `/api/metrics`). The worker's `/healthz` and `/metrics` are on port 8001 inside its container only (`docker compose exec order-worker wget -qO- http://127.0.0.1:8001/metrics`).
 
 ## Gotchas found so far
 
-- Windows Git Bash rewrites absolute paths in arguments (`/opt/venv/...` becomes `C:/Program Files/Git/...`). Prefix such `docker run` and `docker exec` commands with `MSYS_NO_PATHCONV=1`.
-- On PC-01 (the Windows machine with the repo at `E:\devops-final`) port 80 is taken by `httpd` and 8080 by a `php` process (the user's own; leave them). Publish web on 8088 there (`WEB_PORT=8088` in `.env` once Q2 adds it to compose); keep the default 80 for the clean lab machine.
+- Windows Git Bash rewrites absolute paths and `X:\...` paths in arguments (`/opt/venv/...` becomes `C:/Program Files/Git/...`). Prefix such `docker run`, `docker exec` and `wsl.exe` commands with `MSYS_NO_PATHCONV=1`.
+- On PC-01 (the Windows machine with the repo at `E:\devops-final`) port 80 is taken by `httpd` and 8080 by a `php` process (the user's own; leave them). Its `.env` has `WEB_PORT=127.0.0.1:8088`; keep the default 80 for the clean lab machine.
+- WSL Ubuntu 24.04 on PC-01 has `make`, `docker` (same Docker Desktop daemon) and `curl`. Its default shell is zsh: `wsl.exe -- bash -c '...'` lets zsh expand `$(...)` first, in the wrong folder. Put longer commands in a script file and run `wsl.exe -d Ubuntu -- bash <file>`.
+- For a clean-machine check, clone into WSL and run with `COMPOSE_PROJECT_NAME=<other>` and another `WEB_PORT`, so the running stack and its volume stay untouched; remove the test volume and clone afterwards.
 - nginx's `resolver` ignores search domains: in Kubernetes `API_UPSTREAM` needs the full service name (`catalog-api.<namespace>.svc.cluster.local:8000`).
 - The built-in browser's screenshots time out while the Claude window is hidden; check pages with `get_page_text`, `find` and `javascript_tool` instead. Compare page width with `document.documentElement.clientWidth`, not `innerWidth` (that includes the scrollbar).
-- `core.autocrlf=true` on Windows: `.gitattributes` in both subfolders forces LF. Keep it; shell scripts must be LF.
-- `make` may be missing on Windows. Run the equivalent commands directly; the Makefile itself must target Linux (AWS lab).
-- Jaeger 2.23's HTTP API is `/api/v3/...` (the old `/api/traces` returns 404). `/api/v3/traces` takes `query.service_name`, `query.operation_name`, `query.start_time_min`/`max` (RFC 3339), `query.search_depth`, `query.duration_min`; span status codes are numeric (2 = ERROR).
+- `core.autocrlf=true` on Windows: `.gitattributes` in both subfolders forces LF. Keep it; shell scripts must be LF. Mark scripts executable in Git with `git add --chmod=+x`.
+- `make` is missing on Windows itself. The Makefile must target Linux (AWS lab).
 - No `jq` or Python on the Windows host: parse JSON with `docker run --rm -i python:3.12-alpine python -c "..."`.
-- Docker 29 on PC-01 uses the containerd image store (other new installs may too): `docker images` shows DISK USAGE (unpacked + compressed, 159 MB for the API) and CONTENT SIZE (compressed, 36.6 MB). The unpacked size is the sum of `docker history --human=false --format '{{.Size}}'` (122.6 MB API). Q2 drops pip (13 MB) from the runtime venv so DISK USAGE is under 150 MB too.
+- Docker 29 on PC-01 uses the containerd image store (other new installs may too): `docker images` shows DISK USAGE (unpacked + compressed: 90 MB web, 142 MB API, 114 MB worker) and CONTENT SIZE (compressed). The unpacked size is the sum of `docker history --human=false --format '{{.Size}}'`.
 - curl on Windows measures delays served from Docker slightly short (a 0.5 s sleep reads 0.498 s). Judge latency from the server's histogram.
 - New OTel SDK sets `traceparent` flags to `03` (sampled + random), not `01`.
 - `init.sql` runs only when the `pgdata` volume is empty; after a schema change use `docker compose down -v` (wipes local data).
 
 ## Next work (details in PROGRESS.md)
 
-Order agreed with the user on 12 Nov: finish the application first (Q1 is done; Q2 next), then write the infrastructure code (Q3 Linux files, Q4 Terraform and Ansible, Q5 Helm, Q6 monitoring, Q7 workflows) on the user's own PC, and use the AWS lab only to run it and take evidence.
+Q1 and Q2 are done. Order agreed with the user on 12 Nov: write the infrastructure code on the user's own PC (Q3 Linux files, Q4 Terraform and Ansible, Q5 Helm, Q6 monitoring, Q7 workflows), and use the AWS lab only to run it and take evidence (Q3 → Q8; PLAN.md sections 5 and 6).
 
-**Q2 (next):** add web to compose (only web published, `${WEB_PORT:-80}:8080`, `depends_on` catalog-api `service_healthy`), `scripts/smoke-test.sh` (starts the stack, waits for `/api/readyz`, places an order, polls until `COMPLETED`, non-zero exit on any failure, no `jq`), `Makefile` with `build up down test smoke` (creates `.env` from `.env.example` if missing). Also drop pip from the runtime venv (see the Docker 29 gotcha). Checkpoint: `make up && make smoke` on a clean Linux machine.
-
-After Q2: infrastructure code on the user's own PC, then the AWS lab (Q3 → Q8); follow PLAN.md sections 5 and 6.
+**Q3 (next):** the `linux/` folder from `project.md` 3.1–3.4 and PLAN Phase 4: `sshd_config` (no root login, no password login), commands for the `deploy` user and `ops` group, `/var/log/shoplite/` permissions (chown, chmod, exactly one setfacl), `systemd/` with `shoplite-backup.service` (`Restart=on-failure`) and `shoplite-backup.timer` (nightly `pg_dump` into `/var/backups/shoplite/`), `firewall/` (UFW: deny incoming by default, allow only 22, 80, 443), and `evidence/` for the lab screenshots. They are applied and evidenced on the lab's Ubuntu EC2, which is also the clean machine for Q2's checkpoint video.
