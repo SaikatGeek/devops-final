@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-12, Q4 step 4.5-এর পরে। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-12, Q4 step 4.6-এর পরে। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -16,8 +16,8 @@
 |---|---|---|---|
 | Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
-| Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
-| Q4 | Terraform, Ansible | 17 | 🟡 ৮টা step-এর পাঁচটা শেষ (4.1: state bucket, backend-এর lock, tag, budget; 4.2–4.5: প্রশ্নের চারটা module network, compute, alb, ecr); চালানো lab-এ |
+| Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
+| Q4 | Terraform, Ansible | 17 | 🟡 ৮টা step-এর ছয়টা শেষ (4.1: state bucket, backend-এর lock, tag, budget; 4.2–4.5: প্রশ্নের চারটা module network, compute, alb, ecr; 4.6: Q3-এর server); বাকি Ansible আর lab-এর পদ্ধতি; চালানো lab-এ |
 | Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
@@ -194,8 +194,8 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 | 4.3 | `compute` module: node-এর security group, SSM-এর IAM role, ৩টা EC2 private subnet-এ | (b), (c), (f) | ✅ `bd07fcf` |
 | 4.4 | `alb` module: public subnet-এ ALB, Kubernetes ingress-এ forward | (d), (f) | ✅ `2d9d0fc` |
 | 4.5 | `ecr` module: তিনটা image repo | (e), (f) | ✅ `9e1c75e` |
-| 4.6 | `terraform/q3-server`: Q3-এর EC2 | Q3-এর server | ⬜ পরের কাজ |
-| 4.7 | Ansible: hardening, container runtime, k3s, worker join, kubeconfig | (g) | ⬜ |
+| 4.6 | `terraform/q3-server`: Q3-এর EC2 | Q3-এর server | ✅ `5a0b220` |
+| 4.7 | Ansible: hardening, container runtime, k3s, worker join, kubeconfig | (g) | ⬜ পরের কাজ |
 | 4.8 | Lab-এ চালানোর পদ্ধতি | সব | ⬜ |
 
 **Step 4.1-এ কী হলো**
@@ -277,6 +277,21 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 
 এই step-এর সাথে প্রশ্নের চাওয়া চারটা module-ই (`network`, `compute`, `alb`, `ecr`) তৈরি হলো: 4(f)-এর code দিক পূর্ণ।
 
+**Step 4.6-এ কী হলো** (`terraform/q3-server/`)
+
+Q3-এর server-ও Terraform দিয়ে বানানো হবে, কারণ console শুধু billing দেখার জন্য।
+- **নিজের ছোট VPC** (user-এর সিদ্ধান্ত, 12 Nov): `10.1.0.0/16`, একটা public subnet, Internet Gateway আর তার route। NAT নেই। Default VPC বা মূল configuration-এর উপর নির্ভর করে না, তাই Q4-এর বড় infra-র আগেই বানানো যায়।
+- **Server:** একটা Ubuntu 24.04 `t3.medium`, public IP সহ। IMDSv2, encrypted 20 GiB gp3 disk। SSH key pair বানানো হয় admin-এর public key থেকে।
+- **Security group:** শুধু admin-এর address থেকে 22, 80, 443, আর 3.4-এর পরীক্ষার port 8000। বাইরে যাওয়া খোলা।
+- **State:** একই state bucket, আলাদা key `q3-server/terraform.tfstate`, lock সহ।
+- **`admin_cidr`:** /24 বা তার চেয়ে ছোট হতে হবে, কখনো `0.0.0.0/0` নয়। এটা আর `ssh_public_key` যাচাই করা হয়, আর আসে শুধু `TF_VAR_` দিয়ে।
+- **Output:** `public_ip`, `ssh`, `instance_id`।
+- **`linux/evidence/commands.md`:** শুরুতে নতুন অংশ "0.1 Create the server" (bootstrap, init, apply, ssh-এর command), আর শেষে "After grading" (destroy)।
+
+**যাচাই:**
+- q3-server-এর ৭টা test pass; Terraform-এর মোট ৪২টা test pass।
+- ইচ্ছা করে inbound rule `0.0.0.0/0`-এ খুললে test fail করে।
+
 ## 6. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -295,6 +310,7 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 | `bd07fcf` | 2026-11-12 | Q4 step 4.3: compute module (security group, SSM-এর role, ৩টা node) |
 | `2d9d0fc` | 2026-11-12 | Q4 step 4.4: alb module (ALB, listener 80 আর 8080, target group, security group) |
 | `9e1c75e` | 2026-11-12 | Q4 step 4.5: ecr module (তিনটা image repo) |
+| `5a0b220` | 2026-11-12 | Q4 step 4.6: q3-server (Q3-এর EC2, নিজের ছোট VPC-তে) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -316,6 +332,7 @@ devops-final/
 │   │   └── evidence/commands.md          lab-এর command, প্রত্যাশিত output, screenshot-এর তালিকা
 │   ├── terraform/                        Q4
 │   │   ├── bootstrap/                    state-এর S3 bucket (একবার, account প্রতি)
+│   │   ├── q3-server/                    Q3-এর EC2, নিজের ছোট VPC-তে (+ নিজের tests/)
 │   │   ├── backend.tf                    S3 backend, use_lockfile
 │   │   ├── main.tf, variables.tf         provider, project=shoplite tag, USD 20 budget, module-গুলো জোড়া
 │   │   ├── outputs.tf                    VPC আর subnet-এর id, node-এর instance id, app-এর URL, ECR-এর URL
@@ -467,6 +484,9 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 - **Health check ingress-এর (`/ping`), কোনো একটা app-এর নয়।** তাতে একটা app বসে গেলে পুরো ALB-র target unhealthy হয় না।
 - **HTTPS নেই।** Domain আর certificate ছাড়া ALB-তে HTTPS দেওয়া যায় না, আর প্রশ্নও চায়নি।
 - **ECR repository-র নাম `shoplite/<image>`,** local image-এর নামের মতো। Repo-তে শুধু `force_delete` (destroy-এর জন্য); scan, lifecycle আর immutable tag প্রশ্নে নেই বলে রাখা হয়নি।
+- **Q3-এর server নিজের ছোট VPC-তে (user-এর সিদ্ধান্ত, 12 Nov)।** Default VPC অনেক lab account-এ থাকে না, আর মূল VPC-তে রাখলে Q3 শুরু করা যেত Q4-এর পরে। নিজের VPC-তে NAT নেই, তাই খরচও কম।
+- **Q3-এর server-এ SSH খোলা (শুধু admin-এর IP থেকে), node-এ নয়।** Q3 নিজেই SSH-এর কাজ: key দিয়ে login, আর root ও password-এর login প্রত্যাখ্যাত হওয়া দেখাতে হয়।
+- **`admin_cidr` /24-এর চেয়ে চওড়া হতে পারে না।** ভুল করেও যেন server পুরো internet-এর জন্য খুলে না যায়।
 
 ## 10. জানা বিষয়
 
@@ -493,12 +513,13 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 
 ## 11. পরের কাজ
 
-1. **Q4 step 4.6: `terraform/q3-server`** (PLAN Phase 4)। Q3-এর জন্য আলাদা Terraform configuration, যাতে Q3-এর server-ও console ছাড়া তৈরি হয় (console শুধু billing দেখার জন্য)। থাকবে:
-   - একটা Ubuntu 24.04 EC2, public IP আর SSH key সহ।
-   - Security group-এ শুধু নিজের IP থেকে 22, 80, 443, আর firewall-এর পরীক্ষার জন্য 8000।
-   - একই state bucket, আলাদা key।
-   - কোন VPC-তে বসবে (default VPC, নাকি নিজের ছোট VPC), সেটা শুরুতে ঠিক করতে হবে।
-   - Mock provider-এ test।
-2. তারপর Q4-এর বাকি step: 4.7 Ansible, 4.8 lab-এর পদ্ধতি (section 5-এর table)।
+1. **Q4 step 4.7: Ansible** (`ansible/`, project.md 4g, PLAN Phase 5)। কাজ বড়, তাই শুরুর সময় আরও ছোট ভাগে ভাঙা হবে। থাকবে:
+   - **Inventory:** node-গুলো `role` tag দিয়ে খোঁজা হবে। Private node-এ পৌঁছানো হবে SSM-এর ভেতর দিয়ে, কোনো port খোলা ছাড়া।
+   - **`hardening` role:** Q3-এর 3.1, 3.2 আর 3.4, `linux/` folder-এর ফাইল দিয়েই, প্রতিটা node-এ। UFW-তে cluster-এর port খোলা থাকবে শুধু VPC-র ভেতর থেকে: 8472/udp, 10250, 9100, আর control-plane-এ 6443। Forward policy ACCEPT, যাতে NodePort-এর traffic চলে। 3.3 (backup) node-এ নয়।
+   - **`container_runtime` role:** kernel module আর sysctl। k3s-এর containerd চালু আছে কিনা যাচাই।
+   - **`k3s_server` আর `k3s_agent` role:** pin করা k3s version। k3s-এর নিজের Traefik বন্ধ (PLAN: Traefik আলাদা chart দিয়ে আসবে)। Worker join করবে token দিয়ে। ECR থেকে image টানার জন্য kubelet-এর ECR credential provider।
+   - **`kubeconfig` role:** kubeconfig local-এ আনা, SSM port-forward দিয়ে ব্যবহারের জন্য।
+   - **রিহার্সাল:** local systemd container-এ, Q3-এর মতো।
+2. তারপর 4.8: lab-এ চালানোর পদ্ধতি (section 5-এর table)।
 3. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
 4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
