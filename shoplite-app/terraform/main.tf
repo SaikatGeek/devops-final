@@ -24,6 +24,12 @@ provider "aws" {
   }
 }
 
+# Question 4a: VPC over two AZs, two public and two private subnets, IGW, NAT Gateway.
+module "network" {
+  source = "./modules/network"
+  name   = "shoplite"
+}
+
 # Cost guard: an e-mail as soon as this month's actual cost passes USD 20.
 resource "aws_budgets_budget" "monthly" {
   name         = "shoplite-monthly"

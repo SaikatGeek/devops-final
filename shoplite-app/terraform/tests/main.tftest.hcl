@@ -1,10 +1,25 @@
 # Unit tests without AWS: the aws provider is mocked, so `terraform test` plans offline.
 # Run after `terraform init -backend=false` (tests never touch the S3 backend).
 
-mock_provider "aws" {}
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names = ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
+    }
+  }
+}
 
 variables {
   budget_alert_email = "alerts@example.com"
+}
+
+run "network_module_gives_two_public_and_two_private_subnets" {
+  command = apply
+
+  assert {
+    condition     = length(output.public_subnet_ids) == 2 && length(output.private_subnet_ids) == 2
+    error_message = "The root configuration must expose two public and two private subnets."
+  }
 }
 
 run "budget_alarm_at_20_usd" {
