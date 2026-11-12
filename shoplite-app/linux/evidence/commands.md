@@ -8,7 +8,26 @@ The screenshot for each part is listed at its end; the files go in this folder.
 > **Safety:** keep a second SSH session to the server open the whole time you change SSH or the
 > firewall. If the new settings lock you out, undo them from that second session.
 
-## 0. Prepare the server and start the stack
+## 0.1 Create the server
+
+**other machine**, with AWS credentials, from the `shoplite-app` folder. `terraform/q3-server` creates the
+server in a small VPC of its own; the security group lets in only this machine's address, on 22, 80, 443
+and the test port 8000. Run `terraform/bootstrap` (the state bucket) first, once per AWS account.
+
+```bash
+terraform -chdir=terraform/bootstrap init && terraform -chdir=terraform/bootstrap apply
+terraform -chdir=terraform/q3-server init \
+  -backend-config="bucket=$(terraform -chdir=terraform/bootstrap output -raw state_bucket)" \
+  -backend-config="region=$(terraform -chdir=terraform/bootstrap output -raw region)"
+test -f ~/.ssh/id_ed25519 || ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ''
+export TF_VAR_admin_cidr="$(curl -s https://checkip.amazonaws.com)/32"
+export TF_VAR_ssh_public_key="$(cat ~/.ssh/id_ed25519.pub)"
+terraform -chdir=terraform/q3-server apply
+SERVER=$(terraform -chdir=terraform/q3-server output -raw public_ip)
+ssh ubuntu@$SERVER
+```
+
+## 0.2 Prepare the server and start the stack
 
 This is also question 2's checkpoint on a clean machine.
 
@@ -174,3 +193,11 @@ nc -vz -w 5 SERVER 8000                                                   # bloc
 
 Screenshots: `08-ufw-status.png` (`ufw status verbose`), `09-listening-ports.png` (`ss -tulpn`),
 `10-port-test.png` (the `curl` and `nc` results from the other machine).
+
+## After grading
+
+**other machine** (cost guard): remove the server, its VPC and its key pair.
+
+```bash
+terraform -chdir=terraform/q3-server destroy
+```
