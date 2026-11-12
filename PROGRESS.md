@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-12, Q4 step 4.4-এর পরে। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-12, Q4 step 4.5-এর পরে। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -17,7 +17,7 @@
 | Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
-| Q4 | Terraform, Ansible | 17 | 🟡 ৮টা step-এর চারটা শেষ (4.1: state bucket, backend-এর lock, tag, budget; 4.2: network; 4.3: compute; 4.4: alb); চালানো lab-এ |
+| Q4 | Terraform, Ansible | 17 | 🟡 ৮টা step-এর পাঁচটা শেষ (4.1: state bucket, backend-এর lock, tag, budget; 4.2–4.5: প্রশ্নের চারটা module network, compute, alb, ecr); চালানো lab-এ |
 | Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
@@ -193,8 +193,8 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 | 4.2 | `network` module: দুই AZ, ২টা public আর ২টা private subnet, IGW, NAT Gateway | (a), (f) | ✅ `6733b56` |
 | 4.3 | `compute` module: node-এর security group, SSM-এর IAM role, ৩টা EC2 private subnet-এ | (b), (c), (f) | ✅ `bd07fcf` |
 | 4.4 | `alb` module: public subnet-এ ALB, Kubernetes ingress-এ forward | (d), (f) | ✅ `2d9d0fc` |
-| 4.5 | `ecr` module: তিনটা image repo | (e), (f) | ⬜ পরের কাজ |
-| 4.6 | `terraform/q3-server`: Q3-এর EC2 | Q3-এর server | ⬜ |
+| 4.5 | `ecr` module: তিনটা image repo | (e), (f) | ✅ `9e1c75e` |
+| 4.6 | `terraform/q3-server`: Q3-এর EC2 | Q3-এর server | ⬜ পরের কাজ |
 | 4.7 | Ansible: hardening, container runtime, k3s, worker join, kubeconfig | (g) | ⬜ |
 | 4.8 | Lab-এ চালানোর পদ্ধতি | সব | ⬜ |
 
@@ -261,6 +261,22 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 
 **Q5-এর জন্য মনে রাখতে হবে:** Traefik default-এ `/ping` দেয় নিজের আলাদা port-এ (9000), web port-এ নয়। Traefik বসানোর সময় web entrypoint-এও `/ping` চালু করতে হবে, নইলে ALB-র target unhealthy হবে। দুইটা উপায়: `ping.manualRouting` আর `/ping`-এর জন্য একটা IngressRoute, অথবা health check-এর path variable (`health_check_path`) বদলানো।
 
+**Step 4.5-এ কী হলো** (`terraform/modules/ecr/`)
+- তিনটা repository: `shoplite/web`, `shoplite/catalog-api`, `shoplite/order-worker`। নাম local image-এর নামের সাথে মেলে।
+- `force_delete`, যাতে শেষের `terraform destroy` image থাকা অবস্থাতেও repo মুছতে পারে।
+- প্রশ্নে চাওয়া হয়নি বলে নেই: scan-on-push (scan হবে Q7-এ Trivy দিয়ে), পুরনো image মোছার নিয়ম, immutable tag। Encryption AWS-এর default।
+- Output:
+  - `repository_urls` আর `repository_arns`, ছোট নাম ধরে। ARN লাগবে Q7-এ CI-এর role-কে শুধু এই repo-তে push-এর অনুমতি দিতে।
+  - `registry`, `docker login`-এর host।
+- মূল configuration-এ `ecr_repository_urls` আর `ecr_registry` output।
+- Validation: কমপক্ষে একটা নাম, কোনো নাম দুইবার নয়, আর ECR-এর নামের নিয়ম (ছোট হাতের অক্ষর)।
+
+**যাচাই:**
+- ECR-এর ৪টা test pass। মূল configuration-এ এখন ৬টা; Terraform-এর মোট ৩৫টা test pass।
+- `force_delete` বন্ধ করলে test fail করে।
+
+এই step-এর সাথে প্রশ্নের চাওয়া চারটা module-ই (`network`, `compute`, `alb`, `ecr`) তৈরি হলো: 4(f)-এর code দিক পূর্ণ।
+
 ## 6. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -278,6 +294,7 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 | `6733b56` | 2026-11-12 | Q4 step 4.2: network module (দুই AZ-এ VPC, subnet, IGW, NAT) |
 | `bd07fcf` | 2026-11-12 | Q4 step 4.3: compute module (security group, SSM-এর role, ৩টা node) |
 | `2d9d0fc` | 2026-11-12 | Q4 step 4.4: alb module (ALB, listener 80 আর 8080, target group, security group) |
+| `9e1c75e` | 2026-11-12 | Q4 step 4.5: ecr module (তিনটা image repo) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -301,10 +318,11 @@ devops-final/
 │   │   ├── bootstrap/                    state-এর S3 bucket (একবার, account প্রতি)
 │   │   ├── backend.tf                    S3 backend, use_lockfile
 │   │   ├── main.tf, variables.tf         provider, project=shoplite tag, USD 20 budget, module-গুলো জোড়া
-│   │   ├── outputs.tf                    VPC আর subnet-এর id, node-এর instance id, app-এর URL
+│   │   ├── outputs.tf                    VPC আর subnet-এর id, node-এর instance id, app-এর URL, ECR-এর URL
 │   │   ├── modules/network/              VPC, subnet, IGW, NAT, route table (+ নিজের tests/)
 │   │   ├── modules/compute/              node-এর security group, IAM role, ৩টা EC2 (+ নিজের tests/)
 │   │   ├── modules/alb/                  ALB, listener, target group, ALB → node-এর rule (+ নিজের tests/)
+│   │   ├── modules/ecr/                  তিনটা image repository (+ নিজের tests/)
 │   │   └── tests/                        terraform test, mock provider
 │   └── services/
 │       ├── web/
@@ -448,6 +466,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 - **ALB-র target শুধু worker।** Control-plane user traffic নেয় না; NodePort যেকোনো node-এ চলে, তাই worker-ই যথেষ্ট।
 - **Health check ingress-এর (`/ping`), কোনো একটা app-এর নয়।** তাতে একটা app বসে গেলে পুরো ALB-র target unhealthy হয় না।
 - **HTTPS নেই।** Domain আর certificate ছাড়া ALB-তে HTTPS দেওয়া যায় না, আর প্রশ্নও চায়নি।
+- **ECR repository-র নাম `shoplite/<image>`,** local image-এর নামের মতো। Repo-তে শুধু `force_delete` (destroy-এর জন্য); scan, lifecycle আর immutable tag প্রশ্নে নেই বলে রাখা হয়নি।
 
 ## 10. জানা বিষয়
 
@@ -474,10 +493,12 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 
 ## 11. পরের কাজ
 
-1. **Q4 step 4.5: `ecr` module** (`terraform/modules/ecr/`, project.md 4e)। থাকবে:
-   - তিনটা image-এর repository: `shoplite/web`, `shoplite/catalog-api`, `shoplite/order-worker`।
-   - `force_delete`, যাতে শেষের `terraform destroy` image থাকা অবস্থাতেও repo মুছতে পারে।
+1. **Q4 step 4.6: `terraform/q3-server`** (PLAN Phase 4)। Q3-এর জন্য আলাদা Terraform configuration, যাতে Q3-এর server-ও console ছাড়া তৈরি হয় (console শুধু billing দেখার জন্য)। থাকবে:
+   - একটা Ubuntu 24.04 EC2, public IP আর SSH key সহ।
+   - Security group-এ শুধু নিজের IP থেকে 22, 80, 443, আর firewall-এর পরীক্ষার জন্য 8000।
+   - একই state bucket, আলাদা key।
+   - কোন VPC-তে বসবে (default VPC, নাকি নিজের ছোট VPC), সেটা শুরুতে ঠিক করতে হবে।
    - Mock provider-এ test।
-2. তারপর Q4-এর বাকি step: 4.6 `q3-server`, 4.7 Ansible, 4.8 lab-এর পদ্ধতি (section 5-এর table)।
+2. তারপর Q4-এর বাকি step: 4.7 Ansible, 4.8 lab-এর পদ্ধতি (section 5-এর table)।
 3. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
 4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
