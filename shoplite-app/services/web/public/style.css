@@ -1,0 +1,138 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --text: #1c2230;
+  --muted: #5d6878;
+  --border: #dde2e8;
+  --error: #b42318;
+  /* Buttons and badges keep one colour in both themes (white text stays readable). */
+  --button: #2557d6;
+  --pending: #687280;
+  --processing: #2557d6;
+  --completed: #17803d;
+  --failed: #b42318;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161d;
+    --card: #1a2029;
+    --text: #e5e8ed;
+    --muted: #9aa4b2;
+    --border: #2c3541;
+    --error: #f97066;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+header, main, footer {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+header { padding-top: 32px; }
+h1 { margin: 0; font-size: 2rem; }
+h2 { margin: 0 0 12px; font-size: 1.25rem; }
+.muted { color: var(--muted); }
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* lets the cards shrink below their table's width */
+  gap: 24px;
+  margin-top: 16px;
+}
+
+section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.table-scroll { overflow-x: auto; } /* a too-wide table scrolls inside its card, not the page */
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; }
+th { font-size: 0.875rem; color: var(--muted); font-weight: 600; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+input[type="number"] {
+  width: 5.5em;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+button {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--button);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.6; cursor: progress; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--button); outline-offset: 2px; }
+
+#lookup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+#message { margin: 0 0 12px; }
+#message:empty { display: none; }
+#message.error { color: var(--error); }
+
+#orders { margin: 0; padding: 0; list-style: none; }
+#orders li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+
+.badge {
+  display: inline-block;
+  margin: 0 8px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.badge.pending { background: var(--pending); }
+.badge.processing { background: var(--processing); }
+.badge.completed { background: var(--completed); }
+.badge.failed { background: var(--failed); }
+
+footer { padding: 24px 16px 32px; color: var(--muted); font-size: 0.875rem; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Phones: drop the stock column and tighten spacing so the table fits the screen. */
+@media (max-width: 600px) {
+  .stock { display: none; }
+  section { padding: 14px; }
+  th, td { padding: 8px 4px; }
+  input[type="number"] { width: 4.2em; }
+  button { padding: 6px 10px; }
+}

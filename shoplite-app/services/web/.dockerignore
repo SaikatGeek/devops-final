@@ -1,0 +1,4 @@
+# Only nginx/, public/ and tests/ (for the test stage) are needed in the build context.
+*.md
+Dockerfile
+.dockerignore

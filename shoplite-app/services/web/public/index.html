@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The Q7 checkpoint changes this title; the page heading copies it (app.js). -->
+  <title>ShopLite</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1 id="page-title">ShopLite</h1>
+    <p class="muted">Pick a product, place an order, and watch it being processed.</p>
+  </header>
+
+  <main>
+    <section aria-labelledby="products-heading">
+      <h2 id="products-heading">Products</h2>
+      <p id="products-status" class="muted">Loading products…</p>
+      <div class="table-scroll">
+        <table id="products" hidden>
+          <thead>
+            <tr>
+              <th scope="col">Product</th>
+              <th scope="col" class="num">Price</th>
+              <th scope="col" class="num stock">Stock</th>
+              <th scope="col">Quantity</th>
+              <th scope="col"><span class="visually-hidden">Order</span></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="orders-heading">
+      <h2 id="orders-heading">Your orders</h2>
+      <p id="message" role="status"></p>
+      <form id="lookup">
+        <label for="lookup-id">Check an order by ID</label>
+        <input id="lookup-id" type="number" min="1" required>
+        <button type="submit">Check</button>
+      </form>
+      <p id="no-orders" class="muted">No orders yet.</p>
+      <ul id="orders" aria-live="polite"></ul>
+    </section>
+  </main>
+
+  <footer>ShopLite · version <span id="version">__VERSION__</span></footer>
+</body>
+</html>
