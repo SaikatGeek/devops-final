@@ -35,6 +35,7 @@ Course capstone (Poridhi "Mastering DevOps and AWS", Batch 03), deadline **17 No
 - Compose (`docker-compose.yml`): exactly the five components. Only web is published (`${WEB_PORT:-80}:8080`; `WEB_PORT` may be `IP:PORT`); the API is reached through web's `/api/`. `depends_on` uses `service_healthy`. No trace backend in compose: spans are created (trace_id in logs) but exported only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, which happens in Kubernetes (Tempo).
 - `scripts/smoke-test.sh` (POSIX sh, curl and sed, no jq) goes through web: up, `/api/readyz`, POST `/api/orders`, poll until `COMPLETED`. `Makefile` targets: `build up down test smoke`; `.env` is copied from `.env.example` on first use.
 - `linux/` (Q3): `sshd_config` (Ubuntu 24.04 default plus PermitRootLogin, PasswordAuthentication, KbdInteractiveAuthentication and PubkeyAuthentication placed **before** the Include, because sshd keeps the first value), `systemd/shoplite-backup.{service,timer,sh}` (oneshot, Restart=on-failure 5 min, 3 starts/h; nightly 02:00; `docker compose -p shoplite exec -T postgres pg_dump` with the container's env, root-only `.sql` in `/var/backups/shoplite`), `firewall/ufw.sh`, and `evidence/commands.md` (English; the lab procedure, expected output and screenshot list). The Ansible `hardening` role in Q4 must apply the same files.
+- `terraform/` (Q4): Terraform 1.17.2 (image `hashicorp/terraform:1.17.2`), AWS provider `~> 6.73` locked at 6.73.0 (commit `.terraform.lock.hcl`). `bootstrap/` creates the state bucket `shoplite-tfstate-<account>-<region>` (versioning, force_destroy, local state). The root uses a partial S3 backend (`key`, `encrypt`, `use_lockfile` in `backend.tf`; bucket and region via `-backend-config` at init), provider `default_tags` `project=shoplite`, and the USD 20 budget (`budget_alert_email` only via `TF_VAR_`, never in Git). Modules go in `terraform/modules/{network,compute,alb,ecr}` with their own `required_providers`. Every module and root config has `tests/*.tftest.hcl` with `mock_provider "aws"`, so `terraform test` runs without AWS; the real apply happens only in the lab. Q4 is split into steps 4.1–4.8 (PROGRESS section 5).
 - Config only from environment variables (`config.py`), validated at startup.
 - JSON logs on stdout with `timestamp, level, service, message, trace_id` (`logging_setup.py`, identical copy in both services).
 - Metrics: exact Q6.2 names/labels; `route` label is the route template; `/healthz`, `/readyz`, `/metrics` are excluded from HTTP metrics, traces and INFO logs.
@@ -62,6 +63,15 @@ docker compose logs -f
 CHAOS_SLOW_DB=true docker compose up -d --wait          # turn one chaos flag on; rerun without it to turn it off
 ```
 
+Terraform (no install needed; from `shoplite-app/`; on Linux use `$PWD` instead of `$(pwd -W)`):
+
+```bash
+TF="docker run --rm -v $(pwd -W)/terraform:/tf -w /tf hashicorp/terraform:1.17.2"
+MSYS_NO_PATHCONV=1 $TF fmt -check -recursive
+MSYS_NO_PATHCONV=1 $TF -chdir=bootstrap init -backend=false && MSYS_NO_PATHCONV=1 $TF -chdir=bootstrap test
+MSYS_NO_PATHCONV=1 $TF init -backend=false && MSYS_NO_PATHCONV=1 $TF validate && MSYS_NO_PATHCONV=1 $TF test
+```
+
 On PC-01 real `make` runs in WSL Ubuntu: `wsl.exe -d Ubuntu --cd /mnt/e/devops-final/shoplite-app -- make up` (see the WSL gotcha for anything longer).
 
 The page is at `http://127.0.0.1:<WEB_PORT>` (PC-01: http://127.0.0.1:8088); the API through it at `/api/...` (`/api/readyz`, `/api/products`, `/api/metrics`). The worker's `/healthz` and `/metrics` are on port 8001 inside its container only (`docker compose exec order-worker wget -qO- http://127.0.0.1:8001/metrics`).
@@ -87,4 +97,4 @@ The page is at `http://127.0.0.1:<WEB_PORT>` (PC-01: http://127.0.0.1:8088); the
 
 Q1 and Q2 are done; Q3's code is done and rehearsed (its screenshots are taken in the lab with `linux/evidence/commands.md`). Order agreed with the user on 12 Nov: write the infrastructure code on the user's own PC (Q4 Terraform and Ansible, Q5 Helm, Q6 monitoring, Q7 workflows), and use the AWS lab only to run it and take evidence (Q3 → Q8; PLAN.md sections 5 and 6).
 
-**Q4 (next), split into small steps when it starts:** Terraform modules `network`, `compute`, `alb`, `ecr` under `terraform/modules/` (project.md 4a–4f, PLAN Phase 5), S3 remote state with `use_lockfile = true`, `project=shoplite` on every resource via provider `default_tags`, a USD 20 budget; Ansible (`site.yml`, roles hardening, container_runtime, k3s_server, k3s_agent, kubeconfig) applying Q3's `linux/` files to every node (with the cluster-port UFW exception from PLAN Phase 5). PLAN's `terraform/q3-server` creates Q3's EC2, since the console is for billing only. Lab limits are unknown until the PLAN Phase 3 preflight; keep alternatives (bastion, NAT instance) in mind.
+**Q4, in steps (PROGRESS section 5):** 4.1 base (state bucket, S3 backend with lock, tags, budget) is done. **4.2 (next): `terraform/modules/network`**: VPC 10.0.0.0/16 over two AZs, two public and two private subnets, Internet Gateway, one NAT Gateway, route tables, mock-provider tests (project.md 4a). Then 4.3 `compute` (least-privilege node security group, SSM + ECR-read instance profile, 1 control-plane and 2 workers in private subnets, no public IP; PLAN sizes t3.medium/t3.large), 4.4 `alb` (public subnets, listeners to the Traefik NodePorts, the ALB→node security-group rule), 4.5 `ecr` (three repos, force_delete for the final destroy), 4.6 `terraform/q3-server` (Q3's EC2; console is for billing only), 4.7 Ansible (`site.yml`, roles hardening from `linux/` with PLAN Phase 5's cluster-port UFW exception, container_runtime, k3s_server, k3s_agent, kubeconfig; rehearse on systemd containers), 4.8 the lab procedure. Lab limits are unknown until the PLAN Phase 3 preflight; keep alternatives (bastion, NAT instance) in mind. No Route 53 record unless the user has a domain.

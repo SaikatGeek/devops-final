@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-12, Q3-এর code-এর পরে। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-12, Q4 step 4.1-এর পরে। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -17,7 +17,7 @@
 | Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
-| Q4 | Terraform, Ansible | 17 | ⬜ পরের কাজ: code নিজের PC-তে, চালানো lab-এ |
+| Q4 | Terraform, Ansible | 17 | 🟡 ৮টা step-এর প্রথমটা (4.1: state bucket, backend-এর lock, tag, budget) শেষ; চালানো lab-এ |
 | Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
@@ -183,7 +183,39 @@ catalog-api   POST /orders               server
 
 **Lab-এ বাকি:** Ubuntu 24.04 EC2-তে `commands.md` ধরে চালানো আর screenshot নেওয়া। Security group-এ 8000 খোলা রাখতে হবে, যাতে প্রমাণ হয় আটকাচ্ছে UFW।
 
-## 5. Commit-এর তালিকা
+## 5. Q4: Terraform আর Ansible
+
+AWS-এর credential শুধু lab-এ থাকে। তাই এখানে code লেখা হয় আর যাচাই হয় `terraform test` দিয়ে, mock provider ব্যবহার করে; এটা AWS account ছাড়াই module-এর logic পরীক্ষা করে। আসল `apply` হবে lab-এ।
+
+| Step | কাজ | প্রশ্নের অংশ | অবস্থা |
+|---|---|---|---|
+| 4.1 | State bucket (`terraform/bootstrap`), S3 backend lock সহ, সব resource-এ `project=shoplite`, USD 20-এর Budget | (e) remote state, Cost guard | ✅ `d690cb5` |
+| 4.2 | `network` module: দুই AZ, ২টা public আর ২টা private subnet, IGW, NAT Gateway | (a), (f) | ⬜ পরের কাজ |
+| 4.3 | `compute` module: node-এর security group, SSM-এর IAM role, ৩টা EC2 private subnet-এ | (b), (c), (f) | ⬜ |
+| 4.4 | `alb` module: public subnet-এ ALB, Kubernetes ingress-এ forward | (d), (f) | ⬜ |
+| 4.5 | `ecr` module: তিনটা image repo | (e), (f) | ⬜ |
+| 4.6 | `terraform/q3-server`: Q3-এর EC2 | Q3-এর server | ⬜ |
+| 4.7 | Ansible: hardening, container runtime, k3s, worker join, kubeconfig | (g) | ⬜ |
+| 4.8 | Lab-এ চালানোর পদ্ধতি | সব | ⬜ |
+
+**Step 4.1-এ কী হলো**
+- `terraform/bootstrap/`: state রাখার S3 bucket, নাম `shoplite-tfstate-<account id>-<region>`। এর versioning চালু, যাতে state নষ্ট হলে আগেরটা ফেরানো যায়। `force_destroy` দেওয়া, যাতে শেষে `terraform destroy` ভরা bucket-ও মুছতে পারে। এর নিজের ছোট state local-এ থাকে; যে bucket এখনো তৈরিই হয়নি, তাতে তার নিজের state রাখা যায় না।
+- `terraform/backend.tf`: S3 backend, key `shoplite/terraform.tfstate`, `use_lockfile = true`। Terraform চলার সময় state-এর পাশে একটা `.tflock` ফাইল রাখে, তাই দুইজন একসাথে state বদলাতে পারে না। DynamoDB লাগে না। Bucket আর region দেওয়া হয় `init`-এর সময়, কারণ bucket-এর নামে account id থাকে।
+- `terraform/main.tf`:
+  - Terraform ≥ 1.10, AWS provider `~> 6.73` (lock ফাইলে ঠিক 6.73.0)।
+  - Provider-এর `default_tags` দিয়ে প্রতিটা resource-এ `project=shoplite`।
+  - মাসিক USD 20-এর cost Budget: আসল খরচ 100% (মানে USD 20) পেরোলে email যায়।
+- `terraform/variables.tf`: `region` (lab-এর preflight-এর আগ পর্যন্ত `ap-southeast-1`) আর `budget_alert_email`। Email-টা যাচাই করা হয় আর কখনো Git-এ যায় না; দেওয়া হয় `TF_VAR_budget_alert_email` দিয়ে। `.gitignore`-এ `*.tfvars` যোগ হয়েছে।
+- Test: bucket-এর ৩টা, budget-এর ২টা।
+
+**যাচাই** (`hashicorp/terraform:1.17.2`, Docker-এ):
+- `fmt` পরিষ্কার, `validate` ঠিক, ৫টা test pass।
+- Budget 25 করলে test fail করে।
+- আসল backend দিয়ে `init` চালালে থামে শুধু credential না থাকায়, অর্থাৎ backend-এর setting ঠিক আছে।
+
+**Lab-এ বাকি:** bootstrap আর মূল configuration `apply`; tag দিয়ে resource খোঁজার output; budget দেখা; শেষে `destroy`।
+
+## 6. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
 |---|---|---|
@@ -196,10 +228,11 @@ catalog-api   POST /orders               server
 | `eb46deb` | 2026-11-12 | web: page, Nginx, Dockerfile (Step 9) |
 | `6c68826` | 2026-11-12 | Q2: compose-এ পাঁচটা component, smoke test, Makefile, pip ছাড়া image |
 | `3019a9a` | 2026-11-12 | Q3: `linux/` folder (sshd_config, backup service আর timer, UFW, commands) |
+| `d690cb5` | 2026-11-12 | Q4 step 4.1: state bucket, S3 backend lock সহ, tag, budget |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
-## 6. কোথায় কী আছে
+## 7. কোথায় কী আছে
 
 ```text
 devops-final/
@@ -215,6 +248,11 @@ devops-final/
 │   │   ├── systemd/                      shoplite-backup.service, .timer, .sh (রাতে pg_dump)
 │   │   ├── firewall/ufw.sh               deny incoming; শুধু 22, 80, 443
 │   │   └── evidence/commands.md          lab-এর command, প্রত্যাশিত output, screenshot-এর তালিকা
+│   ├── terraform/                        Q4
+│   │   ├── bootstrap/                    state-এর S3 bucket (একবার, account প্রতি)
+│   │   ├── backend.tf                    S3 backend, use_lockfile
+│   │   ├── main.tf, variables.tf         provider, project=shoplite tag, USD 20 budget (module পরে আসবে)
+│   │   └── tests/                        terraform test, mock provider
 │   └── services/
 │       ├── web/
 │       │   ├── public/                   index.html, app.js, style.css: page
@@ -241,7 +279,7 @@ devops-final/
 └── shoplite-gitops/                      এখন শুধু README; কাজ Q5, Q7-এ
 ```
 
-## 7. Local-এ চালানো আর দেখা
+## 8. Local-এ চালানো আর দেখা
 
 Linux-এ, `shoplite-app` folder থেকে (প্রশ্নের checkpoint):
 
@@ -288,7 +326,19 @@ docker build --target test -t test-image . && docker run --rm test-image
 
 বন্ধ করতে `make down` বা `docker compose down`; data volume থেকে যায়।
 
-## 8. পথে নেওয়া সিদ্ধান্ত (demo আর README-র deviation log-এ লাগবে)
+Terraform-এর test, `shoplite-app` থেকে, Docker-এ (Windows Git Bash-এ; Linux-এ `$(pwd -W)`-এর বদলে `$PWD`):
+
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp/terraform:1.17.2 init -backend=false
+```
+
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp/terraform:1.17.2 test
+```
+
+`bootstrap`-এর জন্য একই command, শুধু `-chdir=bootstrap` যোগ করে। সব ফাইলের format দেখতে: `fmt -check -recursive`।
+
+## 9. পথে নেওয়া সিদ্ধান্ত (demo আর README-র deviation log-এ লাগবে)
 
 - **শুধু প্রশ্নে যা চাওয়া, সেটুকুই (12 Nov, user-এর সিদ্ধান্ত)।** সুবিধার জন্য বাড়তি tool বা feature যোগ হবে না, সময় লাগলেও কাটছাঁট নয়। প্রকল্প reproducible করতে যে ফাইল লাগে, সেগুলো রাখা যায়, কারণ প্রশ্নই তার অনুমতি দেয়। এই নিয়মে Q2-তে সরানো হয়েছে: Jaeger, compose-এর OTEL endpoint, catalog-api-র host port, web-এর version footer আর heading-এ `<title>` copy করা।
 - **Worker product-এর stock কমায় না।** কমালে Q8-এর ১৫ মিনিটের load test-এ stock শেষ হয়ে সব order `FAILED` হতো, আর তদন্ত গুলিয়ে যেত।
@@ -321,8 +371,15 @@ docker build --target test -t test-image . && docker run --rm test-image
 - **`Restart=on-failure`-এর সাথে সীমা দেওয়া** (৫ মিনিট পরপর, এক ঘণ্টায় সর্বোচ্চ ৩ বার)। নইলে কোনো সমস্যা থেকে গেলে সারারাত প্রতি মিনিটে চেষ্টা চলতে থাকত।
 - **Blocked port দেখাতে 8000-এ একটা অস্থায়ী listener।** ওই port-এ কিছু শুনছে, তবু বাইরে থেকে timeout হয়, তাই বোঝা যায় আটকাচ্ছে firewall। Lab-এর security group-এ 8000 খোলা রাখা হবে, যাতে আটকানোটা শুধু UFW-র কাজ হয়।
 - **`linux/evidence/commands.md` ইংরেজিতে,** কারণ এটা grader পড়বেন। PROGRESS আর PLAN নিজের জন্য, তাই বাংলায়।
+- **Terraform 1.17.2 আর AWS provider 6.73.0, pin করা।** Provider-এর lock ফাইল (`.terraform.lock.hcl`) Git-এ থাকে, তাই lab আর CI ঠিক একই provider পায়।
+- **Q4-এর code যাচাই হয় `terraform test` আর mock provider দিয়ে।** AWS-এর credential শুধু lab-এ থাকে, অথচ module-এর logic (নাম, সংখ্যা, setting) আগেই পরীক্ষা করা যায়। Test-গুলো Docker-এর `hashicorp/terraform` image-এ চলে।
+- **State bucket-এর নামে account id আর region**, আর সেটা backend-এ দেওয়া হয় `init`-এর সময় (`-backend-config`)। Lab-এর account বদলালেও code বদলাতে হয় না।
+- **State bucket-এ শুধু versioning যোগ করা হয়েছে।** Encryption আর public access বন্ধ রাখা এখন S3-এর নতুন bucket-এ এমনিতেই থাকে।
+- **Budget পুরো account-এর খরচ দেখে, tag দিয়ে ছাঁকে না।** Tag দিয়ে ছাঁকতে আগে cost allocation tag চালু করতে হয়, যা কার্যকর হতে এক দিন লাগে। Lab-এর account শুধু এই project-এর।
+- **Budget-এর email Git-এ নেই;** দেওয়া হয় `TF_VAR_budget_alert_email` দিয়ে।
+- **Region আপাতত `ap-southeast-1` (Singapore),** variable হিসেবে। Lab-এ কোন region, সেটা preflight-এ দেখে ঠিক করতে হবে।
 
-## 9. জানা বিষয়
+## 10. জানা বিষয়
 
 - **Docker 29-এ image-এর size দুইভাবে দেখায়।** PC-01-এ (যেখানে repo আছে `E:\devops-final`-এ) Docker containerd image store ব্যবহার করে। `docker images`-এ দুইটা সংখ্যা আসে:
   - DISK USAGE: unpack করা layer আর compressed blob মিলিয়ে। Q2-তে pip সরানোর পর web 90 MB, API 142 MB, worker 114 MB; আগে API ছিল 159 MB।
@@ -338,14 +395,17 @@ docker build --target test -t test-image . && docker run --rm test-image
   - Docker CLI আর compose plugin `docker:29-cli` image থেকে copy করতে হয়।
   - Host-এর Docker socket `/docker.sock`-এ mount করতে হয়, আর boot-এর পরে `/run/docker.sock`-এ symlink দিতে হয়, কারণ systemd `/run`-এর mount ঢেকে দেয়।
   - D-Bus নেই, তাই `systemctl status` root হিসেবে চালাতে হয়।
+- **Mock provider-এর সীমা।** Provider-এর `default_tags` আসল provider-এর ভেতরে মেশে, তাই mock test দিয়ে প্রমাণ করা যায় না যে tag বসেছে। সেটা দেখা হবে lab-এ, tag দিয়ে resource খুঁজে।
+- **Credential ছাড়া `terraform init` (backend সহ) থামে "No valid credential sources found"-এ।** এটা প্রত্যাশিত; test-এর জন্য `init -backend=false` চালাতে হয়।
 
-## 10. পরের কাজ
+## 11. পরের কাজ
 
-1. **Q4-এর code**, নিজের PC-তে (project.md Q4, PLAN Phase 5)। কাজ বড়, তাই শুরুর সময় ছোট step-এ ভাঙা হবে:
-   - Terraform: `network`, `compute`, `alb`, `ecr` module।
-   - S3-এ remote state, lock সহ।
-   - সব resource-এ `project=shoplite` tag, আর USD 20-এর Budget।
-   - Ansible: Q3-এর hardening প্রতিটা node-এ, container runtime, k3s, worker join, kubeconfig।
-   - PLAN-এর `terraform/q3-server`: Q3-এর EC2-টাও Terraform দিয়েই হবে, কারণ console শুধু billing দেখার জন্য।
-2. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
-3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
+1. **Q4 step 4.2: `network` module** (`terraform/modules/network/`, project.md 4a)। থাকবে:
+   - দুই AZ-এ VPC (`10.0.0.0/16`)।
+   - ২টা public আর ২টা private subnet।
+   - Internet Gateway, একটা NAT Gateway।
+   - Route table।
+   - Mock provider-এ test।
+2. তারপর Q4-এর বাকি step: 4.3 `compute`, 4.4 `alb`, 4.5 `ecr`, 4.6 `q3-server`, 4.7 Ansible, 4.8 lab-এর পদ্ধতি (section 5-এর table)।
+3. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
+4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
