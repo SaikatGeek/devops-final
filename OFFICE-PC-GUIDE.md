@@ -92,7 +92,7 @@ CLAUDE.md আর PROGRESS.md পড়ো। তারপর বলো এখন
 **পরের step শুরু করাতে:**
 
 ```text
-Q3 শুরু করো
+Q4 শুরু করো
 ```
 
 **এক step শেষ হলে Claude নিজেই যা করবে (CLAUDE.md-তে লেখা আছে):**
@@ -135,8 +135,9 @@ docker compose down
 |---|---|---|
 | ✅ | Q1: application, ৯টা step | হয়ে গেছে |
 | ✅ | Q2: Dockerfile, compose, smoke test, Makefile (`6c68826`) | হয়ে গেছে |
-| 1 | Q3 থেকে Q7-এর code (Linux ফাইল, Terraform, Ansible, Helm, monitoring, workflow) | যেকোনো PC |
-| 2 | Q3 থেকে Q8 চালানো আর প্রমাণ | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
+| ✅ | Q3-এর code: `linux/` folder (`3019a9a`), local-এ রিহার্সাল করা | হয়ে গেছে |
+| 1 | Q4 থেকে Q7-এর code (Terraform, Ansible, Helm, monitoring, workflow) | যেকোনো PC |
+| 2 | Q3 থেকে Q8 চালানো আর প্রমাণ (Q3: `linux/evidence/commands.md` ধরে) | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
 
 ## ৮. সমস্যা হলে
 

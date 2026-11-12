@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-12, Q2-এর পরে। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-12, Q3-এর code-এর পরে। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -16,8 +16,8 @@
 |---|---|---|---|
 | Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
-| Q3 | Linux server | 5 | ⬜ পরের কাজ: `linux/` ফাইল নিজের PC-তে লেখা; চালানো আর প্রমাণ lab-এর EC2-তে |
-| Q4 | Terraform, Ansible | 17 | ⬜ code নিজের PC-তে, চালানো lab-এ |
+| Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
+| Q4 | Terraform, Ansible | 17 | ⬜ পরের কাজ: code নিজের PC-তে, চালানো lab-এ |
 | Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
@@ -157,7 +157,33 @@ catalog-api   POST /orders               server
   - **চালু stack:** পাঁচটা container healthy। Host-এ খোলা শুধু web, port 8000-এ কিছু নেই। App container-এর user 101/10001/10001। `depends_on` তিনটাই `service_healthy`। Postgres-এর data `shoplite_pgdata` volume-এ।
   - **Browser:** compose-এর web-এ ১২টা product, order #149 1.3 s-এ `COMPLETED`, footer নেই।
 
-## 4. Commit-এর তালিকা
+## 4. Q3: Linux server
+
+| অংশ | মার্ক | ফাইল | অবস্থা |
+|---|---|---|---|
+| 3.1 Users, SSH | 1.5 | `linux/sshd_config`; user আর group-এর command `evidence/commands.md`-এ | 🟡 code আর রিহার্সাল `3019a9a`; lab-এ screenshot বাকি |
+| 3.2 Permission | 1 | command আর 777-এর উত্তর `evidence/commands.md`-এ | 🟡 একই |
+| 3.3 Backup | 1.5 | `linux/systemd/`: service, timer, script | 🟡 একই |
+| 3.4 Firewall | 1 | `linux/firewall/ufw.sh` | 🟡 একই |
+
+**কী হলো**
+- `linux/sshd_config`: `PermitRootLogin no`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no` (PAM দিয়েও password বন্ধ), `PubkeyAuthentication yes`। বাকিটা হুবহু Ubuntu 24.04-এর default।
+- `linux/systemd/`:
+  - `shoplite-backup.sh`: compose-এর postgres container-এর ভেতরে `pg_dump` চালায়, আর ফলাফল লেখে `/var/backups/shoplite/shoplite-<সময়>.sql`-এ। ফাইল শুধু root পড়তে পারে।
+  - `shoplite-backup.service`: `Restart=on-failure`, ব্যর্থ হলে ৫ মিনিট পর আবার চেষ্টা, এক ঘণ্টায় সর্বোচ্চ ৩ বার।
+  - `shoplite-backup.timer`: প্রতি রাত 02:00।
+- `linux/firewall/ufw.sh`: default deny incoming; শুধু 22, 80, 443 খোলা।
+- `linux/evidence/commands.md`: lab-এ কোন command কোন ক্রমে চালাতে হবে, কী output আসা উচিত, কোন screenshot নিতে হবে (`00` থেকে `10`), আর 777 কেন ভুল তার এক লাইনের উত্তর। Q2-এর পরিষ্কার machine-এর checkpoint-ও শুরুতে আছে।
+
+**রিহার্সাল (এই PC-তে, Docker-এর ভেতরে):** systemd সহ একটা অস্থায়ী Ubuntu 24.04 "server", আর "অন্য machine" হিসেবে আরেকটা container। `commands.md`-এর command প্রায় হুবহু চালানো হয়েছে; শেষে দুইটা container আর তাদের image মুছে ফেলা হয়েছে।
+- **3.1:** `sshd_config.d/`-এ ইচ্ছা করে এমন একটা ফাইল রাখা হয়েছিল, যা root আর password login চালু করে। তবু আমাদের ফাইল বসানোর পর `sshd -T` দেখায় `permitrootlogin no`, `passwordauthentication no`। Key দিয়ে deploy-এর login হয়। Password দিয়ে চেষ্টা করলে `Permission denied (publickey)`। Root-কে বৈধ key দিলেও `Permission denied`, আর log-এ `ROOT LOGIN REFUSED`।
+- **3.2:** folder `drwxr-s---+ root ops`। নতুন ফাইল নিজে থেকেই `-rw-r----- root:ops`। `deploy` পড়তে পারে, `nobody` আর `ubuntu` পারে না।
+- **3.3:** `systemd-analyze verify`-এ কোনো error নেই। Timer `active (waiting)`, পরের চালানো 02:00। একটা backup-এ দুইটা table আর ১২টা product। Postgres বন্ধ রেখে চালালে service ব্যর্থ হয়; postgres ফিরলে systemd নিজেই আবার চালায়, আর backup লেখা হয়। অর্ধেক লেখা কোনো ফাইল থাকে না।
+- **3.4:** UFW active, default deny। ভেতরে program শুনছে এমন port 8000-ও বাইরে থেকে timeout হয়। Port 22 খোলা। Firewall চালুর পরেও SSH চলে।
+
+**Lab-এ বাকি:** Ubuntu 24.04 EC2-তে `commands.md` ধরে চালানো আর screenshot নেওয়া। Security group-এ 8000 খোলা রাখতে হবে, যাতে প্রমাণ হয় আটকাচ্ছে UFW।
+
+## 5. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
 |---|---|---|
@@ -169,10 +195,11 @@ catalog-api   POST /orders               server
 | `161c225` | 2026-11-12 | ৪টা chaos flag (Step 7) |
 | `eb46deb` | 2026-11-12 | web: page, Nginx, Dockerfile (Step 9) |
 | `6c68826` | 2026-11-12 | Q2: compose-এ পাঁচটা component, smoke test, Makefile, pip ছাড়া image |
+| `3019a9a` | 2026-11-12 | Q3: `linux/` folder (sshd_config, backup service আর timer, UFW, commands) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
-## 5. কোথায় কী আছে
+## 6. কোথায় কী আছে
 
 ```text
 devops-final/
@@ -183,6 +210,11 @@ devops-final/
 │   ├── scripts/smoke-test.sh             stack চালু → readyz → order → COMPLETED
 │   ├── .env.example                      local-এর setting (WEB_PORT সহ); আসল .env Git-এ যায় না
 │   ├── helm/shoplite/files/init.sql      table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
+│   ├── linux/                            Q3
+│   │   ├── sshd_config                   root আর password login বন্ধ
+│   │   ├── systemd/                      shoplite-backup.service, .timer, .sh (রাতে pg_dump)
+│   │   ├── firewall/ufw.sh               deny incoming; শুধু 22, 80, 443
+│   │   └── evidence/commands.md          lab-এর command, প্রত্যাশিত output, screenshot-এর তালিকা
 │   └── services/
 │       ├── web/
 │       │   ├── public/                   index.html, app.js, style.css: page
@@ -209,7 +241,7 @@ devops-final/
 └── shoplite-gitops/                      এখন শুধু README; কাজ Q5, Q7-এ
 ```
 
-## 6. Local-এ চালানো আর দেখা
+## 7. Local-এ চালানো আর দেখা
 
 Linux-এ, `shoplite-app` folder থেকে (প্রশ্নের checkpoint):
 
@@ -256,7 +288,7 @@ docker build --target test -t test-image . && docker run --rm test-image
 
 বন্ধ করতে `make down` বা `docker compose down`; data volume থেকে যায়।
 
-## 7. পথে নেওয়া সিদ্ধান্ত (demo আর README-র deviation log-এ লাগবে)
+## 8. পথে নেওয়া সিদ্ধান্ত (demo আর README-র deviation log-এ লাগবে)
 
 - **শুধু প্রশ্নে যা চাওয়া, সেটুকুই (12 Nov, user-এর সিদ্ধান্ত)।** সুবিধার জন্য বাড়তি tool বা feature যোগ হবে না, সময় লাগলেও কাটছাঁট নয়। প্রকল্প reproducible করতে যে ফাইল লাগে, সেগুলো রাখা যায়, কারণ প্রশ্নই তার অনুমতি দেয়। এই নিয়মে Q2-তে সরানো হয়েছে: Jaeger, compose-এর OTEL endpoint, catalog-api-র host port, web-এর version footer আর heading-এ `<title>` copy করা।
 - **Worker product-এর stock কমায় না।** কমালে Q8-এর ১৫ মিনিটের load test-এ stock শেষ হয়ে সব order `FAILED` হতো, আর তদন্ত গুলিয়ে যেত।
@@ -281,8 +313,16 @@ docker build --target test -t test-image . && docker run --rm test-image
 - **API আর worker-এর virtualenv-এ নিজের pip নেই।** Runtime-এ pip কখনো লাগে না, অথচ 13 MB নিত; সরানোর পর `docker images`-এর সব সংখ্যা 150 MB-এর নিচে।
 - **Smoke test চলে web-এর ভেতর দিয়ে** (`/api/readyz`, `/api/orders`)। তাই এক পরীক্ষাতেই web, API, Postgres, Redis আর worker সবই যাচাই হয়। Port নেয় compose থেকে, তাই `WEB_PORT` যা-ই থাকুক চলে।
 - **`make test` প্রতিটা service-এর Dockerfile-এর test stage চালায়,** তাই machine-এ Python লাগে না।
+- **sshd-র নিষেধগুলো `Include`-এর আগে।** sshd প্রতিটা setting-এর প্রথম মান রাখে, আর EC2-র Ubuntu-তে `sshd_config.d/`-এ cloud-এর নিজের ফাইল থাকে। আগে রাখায় কোনো drop-in ফাইল এগুলো উল্টাতে পারে না। কার্যকর মান দেখা হয় `sshd -T` দিয়ে।
+- **Root-এর login আটকানোর প্রমাণে root-কে সাময়িকভাবে বৈধ key দেওয়া হয়।** তাহলে বোঝা যায় আটকাচ্ছে `PermitRootLogin no`-ই, key না থাকা নয়; sshd-র log-এ আসে `ROOT LOGIN REFUSED`। পরীক্ষা শেষে key সরানো হয়।
+- **একটাই `setfacl` rule, আর সেটা default ACL** (`g:ops:rx`)। পরে তৈরি হওয়া ফাইলও শুধু `ops` পড়তে পারে, যে program ফাইল বানাক তার umask যা-ই হোক। সাথে setgid (`chmod 2750`), তাই নতুন ফাইলের group-ও `ops`।
+- **Backup চলে postgres container-এর ভেতরে** (`docker compose -p shoplite exec postgres pg_dump`)। Postgres host-এ খোলা নেই, তাই বাইরে থেকে `pg_dump` চালানো যায় না। Database-এর নাম আর user নেওয়া হয় container-এর নিজের env থেকে, তাই script-এ কিছু hard-code করা নেই।
+- **Backup সাধারণ `.sql` ফাইল।** Compression আর পুরনো backup মোছা প্রশ্নে চাওয়া হয়নি, তাই নেই। ফাইল শুধু root পড়তে পারে (`umask 077`), কারণ এতে সব order থাকে।
+- **`Restart=on-failure`-এর সাথে সীমা দেওয়া** (৫ মিনিট পরপর, এক ঘণ্টায় সর্বোচ্চ ৩ বার)। নইলে কোনো সমস্যা থেকে গেলে সারারাত প্রতি মিনিটে চেষ্টা চলতে থাকত।
+- **Blocked port দেখাতে 8000-এ একটা অস্থায়ী listener।** ওই port-এ কিছু শুনছে, তবু বাইরে থেকে timeout হয়, তাই বোঝা যায় আটকাচ্ছে firewall। Lab-এর security group-এ 8000 খোলা রাখা হবে, যাতে আটকানোটা শুধু UFW-র কাজ হয়।
+- **`linux/evidence/commands.md` ইংরেজিতে,** কারণ এটা grader পড়বেন। PROGRESS আর PLAN নিজের জন্য, তাই বাংলায়।
 
-## 8. জানা বিষয়
+## 9. জানা বিষয়
 
 - **Docker 29-এ image-এর size দুইভাবে দেখায়।** PC-01-এ (যেখানে repo আছে `E:\devops-final`-এ) Docker containerd image store ব্যবহার করে। `docker images`-এ দুইটা সংখ্যা আসে:
   - DISK USAGE: unpack করা layer আর compressed blob মিলিয়ে। Q2-তে pip সরানোর পর web 90 MB, API 142 MB, worker 114 MB; আগে API ছিল 159 MB।
@@ -294,16 +334,18 @@ docker build --target test -t test-image . && docker run --rm test-image
 - **PC-01-এর WSL Ubuntu 24.04-এ `make`, `docker` আর `curl` আছে।** Docker Desktop-এর daemon একই, তাই Makefile আসল Linux-এ চালিয়ে দেখা যায়।
 - **WSL-এর default shell zsh।** `wsl.exe -- bash -c '...'` দিলে ভেতরের `$(...)` অংশ zsh আগেই, ভুল folder-এ চালিয়ে ফেলে। লম্বা কাজ একটা script ফাইলে লিখে `wsl.exe -d Ubuntu -- bash <file>` দিয়ে চালাও।
 - **Claude-এর window লুকানো থাকলে built-in browser-এর screenshot time out হয়।** তখন page-এর লেখা পড়ে আর JavaScript দিয়ে মেপে যাচাই করা হয়।
+- **Server-এর কাজ local-এ রিহার্সাল করার উপায় (Q3-এ ব্যবহার হয়েছে, Q4-এর Ansible-এও লাগবে):** systemd সহ Ubuntu 24.04 container, `--privileged` দিয়ে চালানো। UFW-ও এতে চলে। কয়েকটা জিনিস মাথায় রাখতে হয়:
+  - Docker CLI আর compose plugin `docker:29-cli` image থেকে copy করতে হয়।
+  - Host-এর Docker socket `/docker.sock`-এ mount করতে হয়, আর boot-এর পরে `/run/docker.sock`-এ symlink দিতে হয়, কারণ systemd `/run`-এর mount ঢেকে দেয়।
+  - D-Bus নেই, তাই `systemctl status` root হিসেবে চালাতে হয়।
 
-## 9. পরের কাজ
+## 10. পরের কাজ
 
-1. **Q3-এর code**, `linux/` folder-এ, নিজের PC-তে লেখা হবে (project.md 3.1–3.4, PLAN Phase 4):
-   - `sshd_config`: root আর password দিয়ে login বন্ধ।
-   - `deploy` user আর `ops` group বানানোর command।
-   - `/var/log/shoplite/`-এর permission: `chown`, `chmod`, আর ঠিক একটা `setfacl`।
-   - `systemd/`: `shoplite-backup.service` (`Restart=on-failure`) আর `.timer`; প্রতি রাতে `pg_dump` যাবে `/var/backups/shoplite/`-এ।
-   - `firewall/`: UFW, default deny, শুধু 22, 80, 443 খোলা।
-
-   চালানো আর screenshot হবে lab-এর Ubuntu EC2-তে। Q2-এর পরিষ্কার machine-এর প্রমাণও (ভিডিও V1) সেখানেই নেওয়া হবে।
-2. তারপর Q4-এর Terraform module আর Ansible role, Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
-3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
+1. **Q4-এর code**, নিজের PC-তে (project.md Q4, PLAN Phase 5)। কাজ বড়, তাই শুরুর সময় ছোট step-এ ভাঙা হবে:
+   - Terraform: `network`, `compute`, `alb`, `ecr` module।
+   - S3-এ remote state, lock সহ।
+   - সব resource-এ `project=shoplite` tag, আর USD 20-এর Budget।
+   - Ansible: Q3-এর hardening প্রতিটা node-এ, container runtime, k3s, worker join, kubeconfig।
+   - PLAN-এর `terraform/q3-server`: Q3-এর EC2-টাও Terraform দিয়েই হবে, কারণ console শুধু billing দেখার জন্য।
+2. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
+3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
