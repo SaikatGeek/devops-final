@@ -89,10 +89,10 @@ git pull
 CLAUDE.md আর PROGRESS.md পড়ো। তারপর বলো এখন কোথায় আছি আর পরের step কী। আমি হ্যাঁ বললে সেই step শুরু করবে।
 ```
 
-**পরের step শুরু করাতে:**
+**পরের step শুরু করাতে** (এখন পরের step 4.7b):
 
 ```text
-Q4 শুরু করো
+4.7b শুরু করো
 ```
 
 **এক step শেষ হলে Claude নিজেই যা করবে (CLAUDE.md-তে লেখা আছে):**
@@ -149,3 +149,44 @@ docker compose down
 | Port 80 আগে থেকেই ব্যবহৃত (`ports are not available`) | `.env`-এ `WEB_PORT=127.0.0.1:8088` লেখো, তারপর আবার `docker compose up -d --wait` |
 | `git push` প্রত্যাখ্যাত | আগে `git pull`, তারপর আবার push |
 | অফিসের network-এ Docker image নামে না | Proxy-র ব্যাপার; IT-কে জিজ্ঞেস করো, অথবা বাসার PC-তে কাজ করো |
+| `orphan containers` সতর্কবার্তা, বা পুরনো `jaeger` container চলছে | `docker compose down --remove-orphans`, তারপর আবার `up` |
+
+## ৯. অফিস আর বাসার PC-র মধ্যে যাওয়া (দ্রুত তালিকা)
+
+**যে PC ছেড়ে যাচ্ছ:**
+
+1. `git status` দেখো। `working tree clean` না হলে Claude-কে বলো `PROGRESS.md আপডেট করে commit আর push করো`।
+2. চাইলে stack বন্ধ করো (data থেকে যায়), `shoplite-app` থেকে:
+
+```bash
+docker compose down
+```
+
+**যে PC-তে বসছ** (প্রতিবার; ধাপ ৩ আর ৪ শুধু প্রথমবার বা কিছু বদলালে):
+
+1. Docker Desktop চালু করো।
+2. নতুন কাজ নামাও, `devops-final` থেকে:
+
+```bash
+git pull
+```
+
+3. পুরনো container সরাও আর stack নতুন করে চালাও, `shoplite-app` থেকে। বাসার PC-তে আগের Jaeger container থাকতে পারে, `--remove-orphans` সেটা সরিয়ে দেয়:
+
+```bash
+docker compose down --remove-orphans
+```
+
+```bash
+docker compose up -d --build --wait && sh scripts/smoke-test.sh
+```
+
+শেষে `[smoke] PASS` দেখা গেলে সব ঠিক। Port 80 ব্যস্ত থাকলে আগে `.env`-এ `WEB_PORT=127.0.0.1:8088` যোগ করো (`.env.example` দেখে)।
+
+4. `devops-final` folder-এ Claude Code খোলো আর বলো:
+
+```text
+CLAUDE.md আর PROGRESS.md পড়ো। তারপর 4.7b শুরু করো।
+```
+
+Claude-এর memory এক PC থেকে আরেক PC-তে যায় না। কাজের জন্য দরকারি সব কিছু `CLAUDE.md` আর `PROGRESS.md`-তে লেখা থাকে, তাই এতে কিছু হারায় না।

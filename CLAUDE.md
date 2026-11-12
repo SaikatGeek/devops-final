@@ -6,7 +6,8 @@ Course capstone (Poridhi "Mastering DevOps and AWS", Batch 03), deadline **17 No
 
 1. `PROGRESS.md`: what is done, the commit of each step, decisions taken, and **what to do next**. Start from its "পরের কাজ" section.
 2. `project.md`: the question paper. Names, labels, endpoints and file paths in it are graded; match them exactly.
-3. `PLAN.md` (Bengali): the full plan with decisions already made (Python 3.12 + FastAPI, k3s, Traefik, Grafana Alloy, SSM, NAT Gateway, S3 lockfile, Slack, k6, ...). Follow them; do not re-open them unless something is impossible.
+3. When the user has just switched PCs (office PC-01 ↔ home PC), the PC needs `OFFICE-PC-GUIDE.md` section ৯ first (`git pull`, `docker compose down --remove-orphans` to drop an old Jaeger container, `.env` check, smoke test). Claude's memory stays on each PC; everything needed is in this file and `PROGRESS.md`.
+4. `PLAN.md` (Bengali): the full plan with decisions already made (Python 3.12 + FastAPI, k3s, Traefik, Grafana Alloy, SSM, NAT Gateway, S3 lockfile, Slack, k6, ...). Follow them; do not re-open them unless something is impossible.
 
 ## How to work with this user
 

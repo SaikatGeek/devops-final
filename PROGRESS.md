@@ -561,6 +561,8 @@ bash ansible/tests/run.sh
 
 ## 11. পরের কাজ
 
+**পরের session বাসার PC-তে (12 Nov রাত):** আগে [OFFICE-PC-GUIDE.md](OFFICE-PC-GUIDE.md)-এর section ৯ ধরে PC প্রস্তুত করো (`git pull`, পুরনো container সরানো, smoke test), তারপর 4.7b।
+
 1. **Q4 step 4.7b: k3s-এর role** (`ansible/roles/`, project.md 4g)। থাকবে:
    - **`container_runtime`:** kernel module আর sysctl। k3s-এর ভেতরের containerd চালু আছে কিনা যাচাই, version ছাপানো।
    - **`k3s_server`:** pin করা k3s version। k3s-এর নিজের Traefik বন্ধ (PLAN: Traefik আসবে আলাদা chart দিয়ে)। Join-এর token।
