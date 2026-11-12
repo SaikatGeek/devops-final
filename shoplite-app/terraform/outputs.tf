@@ -22,3 +22,8 @@ output "worker_instance_ids" {
   description = "k3s agents (SSM targets)."
   value       = module.compute.worker_instance_ids
 }
+
+output "app_urls" {
+  description = "ShopLite in the browser: prod on port 80, dev on port 8080 of the ALB."
+  value       = module.alb.urls
+}

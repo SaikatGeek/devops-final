@@ -39,6 +39,17 @@ module "compute" {
   private_subnet_ids = module.network.private_subnet_ids
 }
 
+# Question 4d: public ALB in the public subnets, forwarding to the Kubernetes ingress
+# (Traefik NodePorts) on the workers: :80 -> prod, :8080 -> dev.
+module "alb" {
+  source                 = "./modules/alb"
+  name                   = "shoplite"
+  vpc_id                 = module.network.vpc_id
+  public_subnet_ids      = module.network.public_subnet_ids
+  node_security_group_id = module.compute.node_security_group_id
+  target_instance_ids    = module.compute.worker_instance_ids
+}
+
 # Cost guard: an e-mail as soon as this month's actual cost passes USD 20.
 resource "aws_budgets_budget" "monthly" {
   name         = "shoplite-monthly"

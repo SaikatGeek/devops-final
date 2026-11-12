@@ -7,6 +7,21 @@ mock_provider "aws" {
       names = ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
     }
   }
+
+  # The provider validates ARN arguments (listener -> load balancer, target group), so the
+  # mocked load balancer and target groups need well-formed ARNs.
+  mock_resource "aws_lb" {
+    defaults = {
+      arn      = "arn:aws:elasticloadbalancing:ap-southeast-1:123456789012:loadbalancer/app/shoplite/1111111111111111"
+      dns_name = "shoplite-1234567890.ap-southeast-1.elb.amazonaws.com"
+    }
+  }
+
+  mock_resource "aws_lb_target_group" {
+    defaults = {
+      arn = "arn:aws:elasticloadbalancing:ap-southeast-1:123456789012:targetgroup/shoplite/2222222222222222"
+    }
+  }
 }
 
 variables {
@@ -33,6 +48,15 @@ run "compute_module_puts_the_nodes_in_the_private_subnets" {
   assert {
     condition     = module.compute.control_plane_private_ip != null
     error_message = "The control plane must have a private IP for the agents to join."
+  }
+}
+
+run "alb_gives_a_prod_and_a_dev_url" {
+  command = apply
+
+  assert {
+    condition     = keys(output.app_urls) == ["dev", "prod"] && endswith(output.app_urls["dev"], ":8080")
+    error_message = "The root configuration must expose the prod URL and the dev URL on port 8080."
   }
 }
 
