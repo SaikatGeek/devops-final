@@ -222,24 +222,24 @@ docker build --target runtime -t shoplite/web:local services/web && docker run -
 - **Latency-র নিজের কোনো span নেই।** Trace-এ সেটা DB span-এর আগের ফাঁক হিসেবে দেখা যায়, আসল কোনো bug-এর মতো।
 - **Memory leak-এ non-zero byte।** শূন্য দিয়ে ভরা memory Linux অনেক সময় সত্যিই খরচ করে না, তখন pod-এর memory বাড়ত না।
 - **Random source বাইরে থেকে দেওয়া যায়** (`FaultInjector`-এর `rng` আর `sleep`)। তাই test-এ ঠিক করে দেওয়া যায় কোন request-এ দেরি বা error হবে।
-- **কাজের ক্রম (12 Nov):** আগে অ্যাপ পুরো শেষ (Step 9, Q2), তারপর Terraform, Ansible, Helm, monitoring আর CI। ওগুলোর code এই PC-তেই লেখা হবে; lab-এ শুধু চালানো আর প্রমাণ নেওয়া।
+- **কাজের ক্রম (12 Nov):** আগে অ্যাপ পুরো শেষ (Step 9, Q2), তারপর Terraform, Ansible, Helm, monitoring আর CI। ওগুলোর code নিজের PC-তেই লেখা হবে; lab-এ শুধু চালানো আর প্রমাণ নেওয়া।
 - **Web চলে uid 101-এ, বাকি দুইটা 10001-এ।** 101 হলো `nginx-unprivileged` image-এর নিজের non-root user; বদলালে nginx-এর লেখার folder-গুলোর permission নতুন করে ঠিক করতে হতো।
 - **Web-এর config container চালু হওয়ার সময় তৈরি হয়।** Image-এর entrypoint template থেকে `API_UPSTREAM` আর DNS server বসায়। `proxy_pass`-এ variable থাকায় nginx নাম খোঁজে প্রতি request-এ, তাই catalog-api না থাকলেও চালু হয়। Kubernetes-এ `API_UPSTREAM`-এ পুরো নাম দিতে হবে (`catalog-api.<namespace>.svc.cluster.local:8000`), কারণ nginx-এর resolver search domain মানে না। Kubernetes-এ অবশ্য `/api` সরাসরি Traefik থেকে catalog-api-তে যাবে (PLAN Phase 6)।
 - **Page-এর সব ফাইলে `Cache-Control: no-cache`, আর heading নেয় `<title>`-এর লেখা।** Q7-এ শুধু `<title>` বদলালে tab আর page দুই জায়গাতেই নতুন নাম দেখা যাবে, reload-এই।
 - **Footer-এ build-এর version।** `docker build --build-arg VERSION=<short SHA>` দিলে page-এ দেখা যায় কোন commit চলছে (Q7-এ CI দেবে); local-এ `dev`।
-- **Worker process-এর সংখ্যা CPU limit অনুযায়ী** (`NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE`)। `auto` দিলে nginx পুরো machine-এর CPU গুনে এই PC-তে ২৮–৩২টা process চালু করত।
+- **Worker process-এর সংখ্যা CPU limit অনুযায়ী** (`NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE`)। `auto` দিলে nginx পুরো machine-এর CPU গুনে PC-01-এ ২৮–৩২টা process চালু করত।
 
 ## 7. জানা বিষয়
 
-- **Docker 29-এ image-এর size দুইভাবে দেখায়।** এই PC-তে Docker containerd image store ব্যবহার করে। `docker images`-এ DISK USAGE (API 159 MB, worker 132 MB) মানে unpack করা layer আর compressed blob মিলিয়ে; CONTENT SIZE (36.6 MB, 30.4 MB) মানে compressed। আসল unpack করা size API 122.6 MB, worker 101.4 MB, দুটোই শর্তের ভেতরে। তবু grader যাতে 159 দেখে ভুল না বোঝে, Q2-তে runtime venv থেকে pip (13 MB) সরানো হবে; তাতে DISK USAGE-ও 150 MB-এর নিচে নামবে।
+- **Docker 29-এ image-এর size দুইভাবে দেখায়।** PC-01-এ (যেখানে repo আছে `E:\devops-final`-এ) Docker containerd image store ব্যবহার করে। `docker images`-এ DISK USAGE (API 159 MB, worker 132 MB) মানে unpack করা layer আর compressed blob মিলিয়ে; CONTENT SIZE (36.6 MB, 30.4 MB) মানে compressed। আসল unpack করা size API 122.6 MB, worker 101.4 MB, দুটোই শর্তের ভেতরে। তবু grader যাতে 159 দেখে ভুল না বোঝে, Q2-তে runtime venv থেকে pip (13 MB) সরানো হবে; তাতে DISK USAGE-ও 150 MB-এর নিচে নামবে।
 - **Windows-এর curl দেরি একটু কম মাপে।** Docker-এর ভেতরের 0.5 s-এর দেরি curl দেখায় 0.498 s। তাই latency যাচাই হবে server-এর histogram দিয়ে।
-- **এই PC-তে port 80 আর 8080 আগে থেকেই ব্যস্ত।** 80 ধরে আছে `httpd` (Apache), 8080 ধরে আছে একটা `php` process। Q2-তে web-এর default port 80-ই থাকবে (lab-এর পরিষ্কার machine-এ ফাঁকা); এই PC-তে `.env`-এ `WEB_PORT=8088` দিতে হবে।
+- **PC-01-এ port 80 আর 8080 আগে থেকেই ব্যস্ত।** 80 ধরে আছে `httpd` (Apache), 8080 ধরে আছে একটা `php` process। Q2-তে web-এর default port 80-ই থাকবে (lab-এর পরিষ্কার machine-এ ফাঁকা); PC-01-এ `.env`-এ `WEB_PORT=8088` দিতে হবে।
 - **Claude-এর window লুকানো থাকলে built-in browser-এর screenshot time out হয়।** তখন page-এর লেখা পড়ে আর JavaScript দিয়ে মেপে যাচাই করা হয়।
 
 ## 8. পরের কাজ
 
 1. **Q2:** web-কে compose-এ যোগ (শুধু web বাইরে খোলা, `${WEB_PORT:-80}:8080`, catalog-api healthy হলে তবে চালু), `scripts/smoke-test.sh`, `Makefile` (`build up down test smoke`), runtime image থেকে pip সরানো। Checkpoint: পরিষ্কার Linux machine-এ `make up && make smoke`।
-2. তারপর infra-র code, এই PC-তেই: Q3-এর Linux ফাইল, Q4-এর Terraform module আর Ansible role, Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow।
+2. তারপর infra-র code, নিজের PC-তেই: Q3-এর Linux ফাইল, Q4-এর Terraform module আর Ansible role, Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow।
 3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
 
 **সময়:** PLAN.md অনুযায়ী আজ (12 Nov) প্রথম lab session S1 হওয়ার কথা ছিল; Q1 শেষ, Q2 চলছে, তাই প্রায় এক দিন পিছিয়ে। পিছিয়ে পড়লে PLAN-এর নিয়মে আগে S9 (EKS), তারপর S8 বাদ যাবে।

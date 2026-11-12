@@ -67,22 +67,22 @@ API docs: http://127.0.0.1:8000/docs. The worker's `/healthz` and `/metrics` are
 ## Gotchas found so far
 
 - Windows Git Bash rewrites absolute paths in arguments (`/opt/venv/...` becomes `C:/Program Files/Git/...`). Prefix such `docker run` and `docker exec` commands with `MSYS_NO_PATHCONV=1`.
-- On this PC port 80 is taken by `httpd` and 8080 by a `php` process (the user's own; leave them). Publish web on 8088 here (`WEB_PORT=8088` in `.env` once Q2 adds it to compose); keep the default 80 for the clean lab machine.
+- On PC-01 (the Windows machine with the repo at `E:\devops-final`) port 80 is taken by `httpd` and 8080 by a `php` process (the user's own; leave them). Publish web on 8088 there (`WEB_PORT=8088` in `.env` once Q2 adds it to compose); keep the default 80 for the clean lab machine.
 - nginx's `resolver` ignores search domains: in Kubernetes `API_UPSTREAM` needs the full service name (`catalog-api.<namespace>.svc.cluster.local:8000`).
 - The built-in browser's screenshots time out while the Claude window is hidden; check pages with `get_page_text`, `find` and `javascript_tool` instead. Compare page width with `document.documentElement.clientWidth`, not `innerWidth` (that includes the scrollbar).
 - `core.autocrlf=true` on Windows: `.gitattributes` in both subfolders forces LF. Keep it; shell scripts must be LF.
 - `make` may be missing on Windows. Run the equivalent commands directly; the Makefile itself must target Linux (AWS lab).
 - Jaeger 2.23's HTTP API is `/api/v3/...` (the old `/api/traces` returns 404). `/api/v3/traces` takes `query.service_name`, `query.operation_name`, `query.start_time_min`/`max` (RFC 3339), `query.search_depth`, `query.duration_min`; span status codes are numeric (2 = ERROR).
 - No `jq` or Python on the Windows host: parse JSON with `docker run --rm -i python:3.12-alpine python -c "..."`.
-- Docker 29 on this PC uses the containerd image store: `docker images` shows DISK USAGE (unpacked + compressed, 159 MB for the API) and CONTENT SIZE (compressed, 36.6 MB). The unpacked size is the sum of `docker history --human=false --format '{{.Size}}'` (122.6 MB API). Q2 drops pip (13 MB) from the runtime venv so DISK USAGE is under 150 MB too.
+- Docker 29 on PC-01 uses the containerd image store (other new installs may too): `docker images` shows DISK USAGE (unpacked + compressed, 159 MB for the API) and CONTENT SIZE (compressed, 36.6 MB). The unpacked size is the sum of `docker history --human=false --format '{{.Size}}'` (122.6 MB API). Q2 drops pip (13 MB) from the runtime venv so DISK USAGE is under 150 MB too.
 - curl on Windows measures delays served from Docker slightly short (a 0.5 s sleep reads 0.498 s). Judge latency from the server's histogram.
 - New OTel SDK sets `traceparent` flags to `03` (sampled + random), not `01`.
 - `init.sql` runs only when the `pgdata` volume is empty; after a schema change use `docker compose down -v` (wipes local data).
 
 ## Next work (details in PROGRESS.md)
 
-Order agreed with the user on 12 Nov: finish the application first (Q1 is done; Q2 next), then write the infrastructure code (Q3 Linux files, Q4 Terraform and Ansible, Q5 Helm, Q6 monitoring, Q7 workflows) on this PC, and use the AWS lab only to run it and take evidence.
+Order agreed with the user on 12 Nov: finish the application first (Q1 is done; Q2 next), then write the infrastructure code (Q3 Linux files, Q4 Terraform and Ansible, Q5 Helm, Q6 monitoring, Q7 workflows) on the user's own PC, and use the AWS lab only to run it and take evidence.
 
 **Q2 (next):** add web to compose (only web published, `${WEB_PORT:-80}:8080`, `depends_on` catalog-api `service_healthy`), `scripts/smoke-test.sh` (starts the stack, waits for `/api/readyz`, places an order, polls until `COMPLETED`, non-zero exit on any failure, no `jq`), `Makefile` with `build up down test smoke` (creates `.env` from `.env.example` if missing). Also drop pip from the runtime venv (see the Docker 29 gotcha). Checkpoint: `make up && make smoke` on a clean Linux machine.
 
-After Q2: infrastructure code on this PC, then the AWS lab (Q3 → Q8); follow PLAN.md sections 5 and 6.
+After Q2: infrastructure code on the user's own PC, then the AWS lab (Q3 → Q8); follow PLAN.md sections 5 and 6.
