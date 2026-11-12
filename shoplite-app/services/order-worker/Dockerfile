@@ -3,18 +3,21 @@
 ARG PYTHON_IMAGE=python:3.12-alpine
 
 # ---- builder: install runtime dependencies into a virtualenv ----
+# The venv gets no pip of its own (13 MB the runtime never uses); the base image's
+# pip installs into it with --python.
 FROM ${PYTHON_IMAGE} AS builder
 ENV PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore
 WORKDIR /build
 COPY requirements.txt .
-RUN python -m venv /opt/venv \
- && /opt/venv/bin/pip install -r requirements.txt
+RUN python -m venv --without-pip /opt/venv \
+ && pip --python /opt/venv/bin/python install -r requirements.txt
 
 # ---- test: builder + dev dependencies; `docker build --target test` then run it ----
 FROM builder AS test
 COPY requirements-dev.txt .
-RUN /opt/venv/bin/pip install -r requirements-dev.txt
+RUN pip --python /opt/venv/bin/python install -r requirements-dev.txt
 WORKDIR /src
 COPY worker ./worker
 COPY tests ./tests

@@ -1,18 +1,29 @@
 name: shoplite
 
-# Local development stack. web is added in a later step.
-# Postgres and Redis publish no host ports, and catalog-api is bound to 127.0.0.1;
-# only the web container will be reachable from outside (Q3 firewall test relies on
-# this, because Docker bypasses UFW).
-#
-# Optional local trace viewer (Jaeger): set OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
-# in .env, run `docker compose --profile tracing up -d`, open http://127.0.0.1:16686.
-# In Kubernetes the same variable points at Tempo instead.
+# The five ShopLite components (question 2b): web, catalog-api, order-worker, postgres, redis.
+# Only web is published on the host (WEB_PORT, default 80). The page calls /api/..., which
+# web forwards to catalog-api; the other four services are reachable only inside this
+# compose network. (Docker bypasses UFW for published ports, so publishing only web also
+# keeps the Q3 firewall rules true.)
 #
 # CHAOS_* are the fault-injection flags of question 1.5, used in Q8. All are off by
 # default; set one in .env or the shell to turn it on (see .env.example).
 
 services:
+  web:
+    build:
+      context: ./services/web
+      target: runtime
+    image: shoplite/web:local
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: catalog-api:8000
+    ports:
+      - "${WEB_PORT:-80}:8080"
+    depends_on:
+      catalog-api:
+        condition: service_healthy
+
   catalog-api:
     build:
       context: ./services/catalog-api
@@ -28,11 +39,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-shoplite}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (cp .env.example .env)}
       REDIS_URL: redis://redis:6379/0
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       CHAOS_LATENCY_MS: ${CHAOS_LATENCY_MS:-0}
       CHAOS_ERROR_RATE: ${CHAOS_ERROR_RATE:-0}
-    ports:
-      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,7 +63,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (cp .env.example .env)}
       REDIS_URL: redis://redis:6379/0
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       CHAOS_MEMORY_LEAK: ${CHAOS_MEMORY_LEAK:-false}
       CHAOS_SLOW_DB: ${CHAOS_SLOW_DB:-false}
     # Time to finish in-flight orders (max 2 s each) after SIGTERM before SIGKILL.
@@ -91,16 +98,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
-  # Only started with `--profile tracing`; not one of the five ShopLite components.
-  jaeger:
-    image: jaegertracing/jaeger:2.23.0
-    profiles: ["tracing"]
-    restart: unless-stopped
-    environment:
-      JAEGER_LISTEN_HOST: 0.0.0.0  # accept OTLP from other containers, not only localhost
-    ports:
-      - "127.0.0.1:16686:16686"  # UI
 
 volumes:
   pgdata:

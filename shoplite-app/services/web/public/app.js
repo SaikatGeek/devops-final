@@ -149,5 +149,4 @@ byId("lookup").addEventListener("submit", async (event) => {
 
 // ---- start ----
 
-byId("page-title").textContent = document.title; // so the Q7 title change is visible on the page too
 loadProducts();

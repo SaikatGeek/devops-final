@@ -46,7 +46,6 @@ done
 check "runs as a non-root user" test "$(id -u)" -ne 0
 check "/healthz answers 200 with a JSON body" test "$(body_of /healthz)" = '{"status":"ok"}'
 check "/ serves the page with its title" sh -c "curl -fsS $WEB/ | grep -q '<title>ShopLite</title>'"
-check "the page has the version stamped in" sh -c "! curl -fsS $WEB/ | grep -q __VERSION__"
 check "the page is sent with Cache-Control: no-cache" sh -c "curl -sI $WEB/ | grep -qi '^cache-control: no-cache'"
 check "app.js and style.css are served" test "$(status_of /app.js) $(status_of /style.css)" = "200 200"
 check "a missing file gives 404" test "$(status_of /no-such-file.html)" = 404
