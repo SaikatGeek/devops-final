@@ -23,6 +23,8 @@ Claude কী নিয়মে কাজ করবে, সেটা লেখ�
 gh auth login
 ```
 
+Git for Windows-এর Credential Manager দিয়ে আগে থেকেই login করা থাকলে `gh` লাগবে না। দেখার উপায়: repo-র ভেতরে `git push --dry-run` চালাও; `Everything up-to-date` দেখালে push-এর অনুমতি আছে।
+
 তারপর repo নামাও:
 
 ```bash
@@ -121,10 +123,11 @@ docker compose --profile tracing down
 
 | ক্রম | কাজ | কোথায় |
 |---|---|---|
-| 1 | Step 7: ৪টা chaos flag | যেকোনো PC, Docker |
-| 2 | Step 9: web frontend | যেকোনো PC, Docker |
-| 3 | Q2: web-এর Dockerfile, পুরো compose, smoke test, Makefile | যেকোনো PC, Docker |
-| 4 | Q3 থেকে Q8 | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
+| ✅ | Step 7: ৪টা chaos flag (`161c225`) | হয়ে গেছে |
+| 1 | Step 9: web frontend | যেকোনো PC, Docker |
+| 2 | Q2: web-এর Dockerfile, পুরো compose, smoke test, Makefile | যেকোনো PC, Docker |
+| 3 | Q3 থেকে Q7-এর code (Linux ফাইল, Terraform, Ansible, Helm, monitoring, workflow) | যেকোনো PC |
+| 4 | Q3 থেকে Q8 চালানো আর প্রমাণ | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
 
 ## ৮. সমস্যা হলে
 

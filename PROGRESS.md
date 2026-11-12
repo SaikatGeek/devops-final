@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-12, Step 6-এর পরে। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-12, Step 7-এর পরে। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -12,14 +12,14 @@
 
 | প্রশ্ন | বিষয় | মার্ক | অবস্থা |
 |---|---|---|---|
-| Q1 | Application | 8 | 🟡 ৯টা step-এর ৭টা শেষ (Step 8 কাজের সাথে সাথেই হয়ে গেছে); বাকি Step 7 আর 9 |
-| Q2 | Docker | 10 | 🟡 API আর worker-এর Dockerfile শর্ত মেনে তৈরি; web-এর Dockerfile, smoke test, Makefile বাকি |
+| Q1 | Application | 8 | 🟡 ৯টা step-এর ৮টা শেষ (Step 8 কাজের সাথে সাথেই হয়ে গেছে); বাকি শুধু Step 9 (web) |
+| Q2 | Docker | 10 | 🟡 API আর worker-এর Dockerfile শর্ত মেনে তৈরি; web-এর Dockerfile, smoke test, Makefile বাকি; runtime image থেকে pip সরানো বাকি (section 7) |
 | Q3 | Linux server | 5 | ⬜ AWS lab লাগবে |
 | Q4 | Terraform, Ansible | 17 | ⬜ AWS lab লাগবে |
 | Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
-| Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code Step 7-এ |
+| Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
 
 **মোট কয়টা step:** Q1 ভাঙা হয়েছে ৯টা step-এ (নিচে)। পুরো project-এ ৮টা প্রশ্ন আর ৪টা bonus; PLAN.md অনুযায়ী Q1 আর Q2 চলে নিজের machine-এ, Q3 থেকে বাকিগুলো চলে AWS lab-এর ১০টা session-এ। Q2 শুরু হলে সেটাও এভাবে ছোট step-এ ভাঙা হবে।
@@ -34,9 +34,9 @@
 | 4 | order-worker, graceful SIGTERM | ✅ | `3ede8c1` |
 | 5 | ৬টা Prometheus metric | ✅ | `225269e` |
 | 6 | OpenTelemetry tracing, queue দিয়ে trace context | ✅ | `2a33e9c` |
-| 7 | ৪টা chaos flag | ⬜ পরের কাজ | |
-| 8 | Unit test (কমপক্ষে ৫টা API test) | ✅ প্রতিটা step-এর সাথে লেখা; এখন ৪৪টা (API ৩১, worker ১৩) | সব commit-এ |
-| 9 | web: Nginx + HTML/JS (product তালিকা, order, status) | ⬜ | |
+| 7 | ৪টা chaos flag | ✅ | `161c225` |
+| 8 | Unit test (কমপক্ষে ৫টা API test) | ✅ প্রতিটা step-এর সাথে লেখা; এখন ৭৭টা (API ৪৮, worker ২৯) | সব commit-এ |
+| 9 | web: Nginx + HTML/JS (product তালিকা, order, status) | ⬜ পরের কাজ | |
 
 ### প্রতিটা step-এ কী হলো আর কীভাবে যাচাই হলো
 
@@ -82,6 +82,24 @@ catalog-api   POST /orders               server
 - দুই service-এর log-এ একই `trace_id`। Latency histogram-এর exemplar-এ আসল `trace_id`।
 - Local-এ trace দেখার জন্য Jaeger (`--profile tracing`)। Kubernetes-এ এর জায়গায় Tempo বসবে।
 
+**Step 7: Chaos flag (Q1.5)**
+- চারটা flag, সবগুলো default বন্ধ। মান পড়া আর যাচাই হয় `config.py`-তে; ভুল মান দিলে service চালুই হয় না।
+
+| Flag | কোথায় | কী করে | Grafana/trace-এ কীভাবে ধরা পড়বে |
+|---|---|---|---|
+| `CHAOS_LATENCY_MS` | catalog-api, `app/faults.py` | ~30% `GET /products/{id}`-এ ওই কয় ms দেরি, DB query-র আগে | p95 লাফ দেয়; trace-এ server span লম্বা, DB span ছোট, শুরুতে ফাঁক |
+| `CHAOS_ERROR_RATE` | catalog-api, `app/faults.py` | ওই ভাগ `POST /orders`-এ 500, DB ছোঁয়ার আগেই | 5xx বাড়ে; ERROR log; trace-এ একটাই span, INSERT নেই |
+| `CHAOS_MEMORY_LEAK` | order-worker, `processor.py` | প্রতি processed order-এ 1 MiB ধরে রাখে, কখনো ছাড়ে না | worker-এর memory সোজা উপরে ওঠে, শেষে OOMKilled আর restart |
+| `CHAOS_SLOW_DB` | order-worker, `store.py` | প্রতিটা UPDATE-এর আগে `SELECT pg_sleep(2)` | queue জমে; `order_processing_seconds` বাড়ে; trace-এ 2 s-এর `SELECT` span |
+
+- Log, error-এর body বা span-এর নামে কোথাও flag-এর নাম বা মান নেই। দুই service-এর test-এ এটা যাচাই করা আছে।
+- যাচাই, Jaeger সহ আসল stack-এ:
+  - Latency 500 ms: server-এর histogram অনুযায়ী ৪৪০টার মধ্যে ১৩৪টা (৩০.৫%) 0.5 s-এর বেশি। Trace-এ DB span শুরু হয় +500.9 ms-এ, চলে 0.8 ms।
+  - Error rate 0.3: ১০০টা order-এ ২৫টা 500, DB-তে ঠিক ৭৫টা নতুন row। ব্যর্থ trace-এ শুধু 0.4 ms-এর একটা ERROR span। ২৫টা ERROR log, প্রতিটায় `trace_id`।
+  - Slow DB: order শেষ হয় 5.4 s-এ (স্বাভাবিক 1.2–2.1 s)। Trace-এ প্রতিটা UPDATE-এর আগে ~2000 ms-এর `SELECT pg_sleep(2)`। ৪২টা order-ই 5–7.5 s-এর bucket-এ।
+  - Memory leak: ৪০টা order-এ worker-এর RSS 50.0 থেকে 90.9 MiB (প্রতি order-এ ~1.02 MiB)।
+  - সব flag বন্ধ করলে আবার স্বাভাবিক: order 1.8–2.1 s, RSS 48 MiB। সব log মিলিয়ে "chaos" শব্দ একবারও নেই।
+
 ## 3. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -91,6 +109,7 @@ catalog-api   POST /orders               server
 | `3ede8c1` | 2026-11-12 | order-worker (Step 4) |
 | `225269e` | 2026-11-12 | ৬টা metric (Step 5) |
 | `2a33e9c` | 2026-11-12 | Tracing (Step 6) |
+| `161c225` | 2026-11-12 | ৪টা chaos flag (Step 7) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -106,6 +125,7 @@ devops-final/
 │   └── services/
 │       ├── catalog-api/app/
 │       │   ├── main.py                   সব endpoint
+│       │   ├── faults.py                 CHAOS_LATENCY_MS, CHAOS_ERROR_RATE
 │       │   ├── db.py                     Postgres query আর DB span
 │       │   ├── order_queue.py            Redis queue, traceparent সহ message
 │       │   ├── middleware.py             প্রতি request-এ log আর HTTP metric
@@ -115,8 +135,8 @@ devops-final/
 │       │   └── config.py                 env থেকে config
 │       └── order-worker/worker/
 │           ├── main.py                   consumer loop, SIGTERM
-│           ├── processor.py              একটা order process করা, consumer span
-│           ├── store.py                  status update আর DB span
+│           ├── processor.py              একটা order process করা, consumer span, CHAOS_MEMORY_LEAK
+│           ├── store.py                  status update আর DB span, CHAOS_SLOW_DB
 │           ├── metrics.py                ২টা metric
 │           ├── http_server.py            :8001 /healthz, /metrics
 │           └── tracing.py, logging_setup.py, config.py, order_queue.py
@@ -145,6 +165,14 @@ docker compose --profile tracing up -d --build
 | Trace (Jaeger) | http://127.0.0.1:16686 → Service `order-worker` → Find Traces |
 | Log | `docker compose logs -f catalog-api order-worker` |
 
+একটা chaos flag চালু করে দেখতে (যেমন slow DB):
+
+```bash
+CHAOS_SLOW_DB=true docker compose up -d --wait
+```
+
+বন্ধ করতে flag ছাড়া আবার `docker compose up -d --wait`। অথবা `.env`-এ লাইন বসাও; `.env.example`-এ চারটাই লেখা আছে।
+
 Unit test (service-এর folder থেকে, যেমন `services/catalog-api`):
 
 ```bash
@@ -161,12 +189,22 @@ docker build --target test -t test-image . && docker run --rm test-image
 - **`init.sql` রাখা Helm chart-এর ভেতরে**, যাতে Compose আর Kubernetes একই ফাইল ব্যবহার করে।
 - **Test-এ `httpx`-এর বদলে `httpx2`।** Starlette 1.x এটাই চায়।
 - **Local trace viewer Jaeger 2.23.0।** Production-এ Tempo + Grafana। Jaeger 2.23-এ API path `/api/v3`।
+- **Chaos flag-এর নাম কোথাও ছাপা হয় না।** Log, 500-এর body বা span-এর নাম, কোথাও না; Q8-এ কারণ বের করতে হবে লক্ষণ দেখে। যে comment-এ flag-এর নাম আছে, সেটা চলমান code-এর লাইনের পাশে না রেখে আলাদা লাইনে রাখা হয়েছে, কারণ exception হলে traceback ওই লাইনটা ছাপায়। ব্যতিক্রম শুধু ভুল মান: তখন service চালু হওয়ার সময়ই থেমে যায়, error-এ variable-এর নাম থাকে।
+- **Latency-র নিজের কোনো span নেই।** Trace-এ সেটা DB span-এর আগের ফাঁক হিসেবে দেখা যায়, আসল কোনো bug-এর মতো।
+- **Memory leak-এ non-zero byte।** শূন্য দিয়ে ভরা memory Linux অনেক সময় সত্যিই খরচ করে না, তখন pod-এর memory বাড়ত না।
+- **Random source বাইরে থেকে দেওয়া যায়** (`FaultInjector`-এর `rng` আর `sleep`)। তাই test-এ ঠিক করে দেওয়া যায় কোন request-এ দেরি বা error হবে।
+- **কাজের ক্রম (12 Nov):** আগে অ্যাপ পুরো শেষ (Step 9, Q2), তারপর Terraform, Ansible, Helm, monitoring আর CI। ওগুলোর code এই PC-তেই লেখা হবে; lab-এ শুধু চালানো আর প্রমাণ নেওয়া।
 
-## 7. পরের কাজ
+## 7. জানা বিষয়
 
-1. **Step 7:** ৪টা chaos flag (`CHAOS_LATENCY_MS`, `CHAOS_ERROR_RATE`, `CHAOS_MEMORY_LEAK`, `CHAOS_SLOW_DB`), default বন্ধ, test সহ।
-2. **Step 9:** web frontend (Nginx unprivileged, port 8080), `/api` proxy করবে catalog-api-তে।
-3. **Q2:** web-এর Dockerfile, পুরো compose (৫টা component), `scripts/smoke-test.sh`, `Makefile` (`build up down test smoke`)।
-4. তারপর AWS lab: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
+- **Docker 29-এ image-এর size দুইভাবে দেখায়।** এই PC-তে Docker containerd image store ব্যবহার করে। `docker images`-এ DISK USAGE (API 159 MB, worker 132 MB) মানে unpack করা layer আর compressed blob মিলিয়ে; CONTENT SIZE (36.6 MB, 30.4 MB) মানে compressed। আসল unpack করা size API 122.6 MB, worker 101.4 MB, দুটোই শর্তের ভেতরে। তবু grader যাতে 159 দেখে ভুল না বোঝে, Q2-তে runtime venv থেকে pip (13 MB) সরানো হবে; তাতে DISK USAGE-ও 150 MB-এর নিচে নামবে।
+- **Windows-এর curl দেরি একটু কম মাপে।** Docker-এর ভেতরের 0.5 s-এর দেরি curl দেখায় 0.498 s। তাই latency যাচাই হবে server-এর histogram দিয়ে।
 
-**সময়:** PLAN.md অনুযায়ী Q1 আর Q2 শেষ হওয়ার কথা ছিল 11 Nov-এ, তাই প্রায় এক দিন পিছিয়ে আছি। Q1-এর বাকি দুইটা step আর Q2 শেষ হলে lab-এর কাজ শুরু।
+## 8. পরের কাজ
+
+1. **Step 9:** web frontend (Nginx unprivileged, port 8080), `/api` proxy করবে catalog-api-তে।
+2. **Q2:** web-এর Dockerfile, পুরো compose (৫টা component), `scripts/smoke-test.sh`, `Makefile` (`build up down test smoke`); runtime image থেকে pip সরানো।
+3. অ্যাপ শেষ হলে infra-র code, এই PC-তেই: Q3-এর Linux ফাইল, Q4-এর Terraform module আর Ansible role, Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow।
+4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
+
+**সময়:** PLAN.md অনুযায়ী আজ (12 Nov) প্রথম lab session S1 হওয়ার কথা ছিল; এখনো Q1/Q2 চলছে, তাই প্রায় এক দিন পিছিয়ে। পিছিয়ে পড়লে PLAN-এর নিয়মে আগে S9 (EKS), তারপর S8 বাদ যাবে।
