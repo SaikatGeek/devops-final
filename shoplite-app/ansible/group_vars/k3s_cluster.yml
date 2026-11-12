@@ -1,0 +1,23 @@
+# Settings for every Kubernetes node.
+
+# The VPC's address range (terraform output: module.network.vpc_cidr). Only addresses in it
+# may use the cluster ports; the security groups already keep everything else out.
+vpc_cidr: 10.0.0.0/16
+
+# The k3s defaults for the pod and the service networks.
+k3s_pod_cidr: 10.42.0.0/16
+k3s_service_cidr: 10.43.0.0/16
+
+# Firewall of the nodes: question 3's rules (22, 80, 443) plus what Kubernetes needs.
+hardening_cluster_cidrs:
+  - "{{ vpc_cidr }}"
+hardening_cluster_ports:
+  - { port: 8472, proto: udp } # Flannel VXLAN: the pod network between nodes
+  - { port: 10250, proto: tcp } # kubelet
+  - { port: 9100, proto: tcp } # Prometheus node-exporter (question 6)
+# Pods and services talk to the node's own address from these networks (k3s's UFW advice).
+hardening_trusted_cidrs:
+  - "{{ k3s_pod_cidr }}"
+  - "{{ k3s_service_cidr }}"
+# Pod traffic and NodePort traffic is forwarded, not addressed to the node itself.
+hardening_allow_routed: true

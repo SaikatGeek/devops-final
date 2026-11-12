@@ -1,0 +1,12 @@
+# Configures the Kubernetes nodes (question 4g). Roles are added step by step:
+#   hardening          question 3's 3.1, 3.2 and 3.4 on every node
+#   (next) container_runtime, k3s_server, k3s_agent, kubeconfig
+#
+# Inventory groups: control_plane (the k3s server) and workers (the k3s agents), both in
+# k3s_cluster.
+
+- name: Harden every node with question 3's rules
+  hosts: k3s_cluster
+  become: true
+  roles:
+    - hardening

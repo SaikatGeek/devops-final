@@ -1,0 +1,67 @@
+# Test only: checks on every test node that site.yml applied question 3's hardening.
+- name: Check the hardening of every node
+  hosts: k3s_cluster
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read deploy's groups
+      ansible.builtin.command: id -nG deploy
+      register: deploy_groups
+      changed_when: false
+
+    - name: Read the settings sshd really uses
+      ansible.builtin.command: sshd -T
+      register: sshd_settings
+      changed_when: false
+
+    - name: Read the log folder
+      ansible.builtin.stat:
+        path: /var/log/shoplite
+      register: log_dir
+
+    - name: Read the log folder's ACL
+      ansible.builtin.command: getfacl -p /var/log/shoplite
+      register: log_acl
+      changed_when: false
+
+    - name: Read UFW
+      ansible.builtin.command: ufw status verbose
+      register: ufw
+      changed_when: false
+
+    - name: 3.1 deploy is in ops; no root login; keys only
+      ansible.builtin.assert:
+        that:
+          - "'ops' in deploy_groups.stdout.split()"
+          - "'permitrootlogin no' in sshd_settings.stdout_lines"
+          - "'passwordauthentication no' in sshd_settings.stdout_lines"
+          - "'kbdinteractiveauthentication no' in sshd_settings.stdout_lines"
+          - "'pubkeyauthentication yes' in sshd_settings.stdout_lines"
+
+    - name: 3.2 /var/log/shoplite is root:ops 2750 with one default ACL rule for ops
+      ansible.builtin.assert:
+        that:
+          - log_dir.stat.pw_name == 'root'
+          - log_dir.stat.gr_name == 'ops'
+          - log_dir.stat.mode == '2750'
+          - "'default:group:ops:r-x' in log_acl.stdout_lines"
+          - "'default:other::---' in log_acl.stdout_lines"
+
+    - name: 3.4 UFW is on, denies incoming, allows 22/80/443 and forwards for Kubernetes
+      ansible.builtin.assert:
+        that:
+          - "'Status: active' in ufw.stdout"
+          - "'Default: deny (incoming), allow (outgoing), allow (routed)' in ufw.stdout"
+          - ufw.stdout is search('^22/tcp\s+ALLOW IN\s+Anywhere', multiline=True)
+          - ufw.stdout is search('^80/tcp\s+ALLOW IN\s+Anywhere', multiline=True)
+          - ufw.stdout is search('^443/tcp\s+ALLOW IN\s+Anywhere', multiline=True)
+
+    - name: Cluster ports only from the VPC, the API port only on the control plane
+      ansible.builtin.assert:
+        that:
+          - ufw.stdout is search('^8472/udp\s+ALLOW IN\s+' ~ vpc_cidr, multiline=True)
+          - ufw.stdout is search('^10250/tcp\s+ALLOW IN\s+' ~ vpc_cidr, multiline=True)
+          - ufw.stdout is search('^9100/tcp\s+ALLOW IN\s+' ~ vpc_cidr, multiline=True)
+          - (ufw.stdout is search('^6443/tcp\s+ALLOW IN\s+' ~ vpc_cidr, multiline=True)) == (inventory_hostname in groups['control_plane'])
+          - ufw.stdout is search('Anywhere\s+ALLOW IN\s+10\.42\.0\.0/16', multiline=True)
+          - ufw.stdout is search('Anywhere\s+ALLOW IN\s+10\.43\.0\.0/16', multiline=True)

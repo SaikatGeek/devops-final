@@ -1,0 +1,46 @@
+# 3.4: UFW denies incoming traffic by default and allows 22, 80 and 443, the same rules as
+# linux/firewall/ufw.sh. A Kubernetes node additionally allows its cluster ports from the
+# VPC, everything from the cluster's own pod and service networks, and forwarded traffic.
+# The SSH port is allowed before UFW is switched on, so the session in use stays up.
+
+- name: Deny incoming traffic by default
+  community.general.ufw:
+    default: deny
+    direction: incoming
+
+- name: Allow outgoing traffic
+  community.general.ufw:
+    default: allow
+    direction: outgoing
+
+- name: Set the policy for forwarded traffic
+  community.general.ufw:
+    default: "{{ 'allow' if hardening_allow_routed else 'deny' }}"
+    direction: routed
+
+- name: Allow 22, 80 and 443 from anywhere
+  community.general.ufw:
+    rule: allow
+    port: "{{ item | string }}"
+    proto: tcp
+  loop: "{{ hardening_public_ports }}"
+
+- name: Allow the cluster ports from inside the VPC only
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.0.port | string }}"
+    proto: "{{ item.0.proto }}"
+    from_ip: "{{ item.1 }}"
+  loop: "{{ (hardening_cluster_ports + hardening_cluster_ports_extra) | product(hardening_cluster_cidrs) | list }}"
+  loop_control:
+    label: "{{ item.0.port }}/{{ item.0.proto }} from {{ item.1 }}"
+
+- name: Allow the cluster's pod and service networks
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item }}"
+  loop: "{{ hardening_trusted_cidrs }}"
+
+- name: Switch UFW on
+  community.general.ufw:
+    state: enabled

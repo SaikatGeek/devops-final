@@ -1,0 +1,6 @@
+# Collections the roles use (ansible-galaxy collection install -r ansible/requirements.yml).
+collections:
+  - name: ansible.posix # acl, authorized_key
+    version: 2.2.2
+  - name: community.general # ufw
+    version: 14.0.1

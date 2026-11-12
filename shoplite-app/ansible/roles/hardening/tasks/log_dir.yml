@@ -1,0 +1,18 @@
+# 3.2: /var/log/shoplite readable by the ops group only (chown, chmod, one setfacl rule).
+
+- name: Make the log folder root:ops, mode 2750 (setgid keeps new files in ops)
+  ansible.builtin.file:
+    path: "{{ hardening_log_dir }}"
+    state: directory
+    owner: root
+    group: "{{ hardening_ops_group }}"
+    mode: "2750"
+
+- name: Add the one default ACL rule, so files created later are readable by ops only
+  ansible.posix.acl:
+    path: "{{ hardening_log_dir }}"
+    etype: group
+    entity: "{{ hardening_ops_group }}"
+    permissions: rx
+    default: true
+    state: present

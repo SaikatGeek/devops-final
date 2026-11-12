@@ -1,0 +1,3 @@
+# Ansible itself (pip install -r ansible/requirements.txt). 2.21 is the newest line that
+# still runs on Python 3.12, which Ubuntu 24.04 (the lab machine) ships.
+ansible-core==2.21.6

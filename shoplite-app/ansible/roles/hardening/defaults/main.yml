@@ -1,0 +1,24 @@
+# Question 3's hardening (3.1 users and SSH, 3.2 log permissions, 3.4 firewall), applied
+# to every node. 3.3 (the backup service) is not hardening and belongs to the question 3
+# server only, which runs Postgres in Docker Compose; the nodes do not.
+
+# 3.1
+hardening_deploy_user: deploy
+hardening_ops_group: ops
+hardening_deploy_public_key: "" # optional: a key deploy may log in with
+# The very file question 3 uses, so the server and the nodes cannot drift apart.
+hardening_sshd_config_src: "{{ playbook_dir }}/../linux/sshd_config"
+
+# 3.2
+hardening_log_dir: /var/log/shoplite
+
+# 3.4: the same three ports as linux/firewall/ufw.sh ...
+hardening_public_ports: [22, 80, 443]
+# ... plus, for a Kubernetes node, the cluster ports from these address ranges only
+hardening_cluster_cidrs: []
+hardening_cluster_ports: []
+hardening_cluster_ports_extra: []
+# ... every port for these ranges (the cluster's own pod and service networks)
+hardening_trusted_cidrs: []
+# ... and forwarded (routed) traffic, which a Kubernetes node must pass on.
+hardening_allow_routed: false

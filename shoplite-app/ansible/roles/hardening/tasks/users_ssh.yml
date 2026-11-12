@@ -1,0 +1,31 @@
+# 3.1: the deploy user in the ops group; SSH without root and without passwords.
+
+- name: Create the ops group
+  ansible.builtin.group:
+    name: "{{ hardening_ops_group }}"
+    state: present
+
+- name: Create the deploy user in the ops group
+  ansible.builtin.user:
+    name: "{{ hardening_deploy_user }}"
+    groups: "{{ hardening_ops_group }}"
+    append: true
+    shell: /bin/bash
+    create_home: true
+
+- name: Let deploy log in with its key
+  ansible.posix.authorized_key:
+    user: "{{ hardening_deploy_user }}"
+    key: "{{ hardening_deploy_public_key }}"
+    exclusive: true
+  when: hardening_deploy_public_key | length > 0
+
+- name: Install linux/sshd_config (no root login, keys only)
+  ansible.builtin.copy:
+    src: "{{ hardening_sshd_config_src }}"
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Restart ssh

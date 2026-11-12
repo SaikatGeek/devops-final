@@ -1,0 +1,3 @@
+# The k3s server additionally serves the Kubernetes API to the other nodes.
+hardening_cluster_ports_extra:
+  - { port: 6443, proto: tcp } # k3s supervisor and Kubernetes API
