@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-12, Q4 step 4.6-এর পরে। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-12, Q4 step 4.7a-এর পরে। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -17,7 +17,7 @@
 | Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
-| Q4 | Terraform, Ansible | 17 | 🟡 ৮টা step-এর ছয়টা শেষ (4.1: state bucket, backend-এর lock, tag, budget; 4.2–4.5: প্রশ্নের চারটা module network, compute, alb, ecr; 4.6: Q3-এর server); বাকি Ansible আর lab-এর পদ্ধতি; চালানো lab-এ |
+| Q4 | Terraform, Ansible | 17 | 🟡 Terraform-এর সব step (4.1–4.6) শেষ; Ansible-এর প্রথম ভাগ (4.7a: hardening) শেষ; বাকি 4.7b (k3s), 4.7c (lab-এর সংযোগ), 4.8; চালানো lab-এ |
 | Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
@@ -195,7 +195,9 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 | 4.4 | `alb` module: public subnet-এ ALB, Kubernetes ingress-এ forward | (d), (f) | ✅ `2d9d0fc` |
 | 4.5 | `ecr` module: তিনটা image repo | (e), (f) | ✅ `9e1c75e` |
 | 4.6 | `terraform/q3-server`: Q3-এর EC2 | Q3-এর server | ✅ `5a0b220` |
-| 4.7 | Ansible: hardening, container runtime, k3s, worker join, kubeconfig | (g) | ⬜ পরের কাজ |
+| 4.7a | Ansible-এর ভিত আর `hardening` role (Q3-এর 3.1, 3.2, 3.4 প্রতিটা node-এ) | (g) | ✅ `4f4a286` |
+| 4.7b | `container_runtime`, `k3s_server`, `k3s_agent`, `kubeconfig` role | (g) | ⬜ পরের কাজ |
+| 4.7c | Lab-এর সংযোগ: SSM-এর ভেতর দিয়ে SSH (node-এ key), inventory, ECR থেকে image টানা | (c), (g) | ⬜ |
 | 4.8 | Lab-এ চালানোর পদ্ধতি | সব | ⬜ |
 
 **Step 4.1-এ কী হলো**
@@ -292,6 +294,32 @@ Q3-এর server-ও Terraform দিয়ে বানানো হবে, ক
 - q3-server-এর ৭টা test pass; Terraform-এর মোট ৪২টা test pass।
 - ইচ্ছা করে inbound rule `0.0.0.0/0`-এ খুললে test fail করে।
 
+**Step 4.7a-এ কী হলো** (`ansible/`)
+- **Version:** `requirements.txt` pin করে ansible-core 2.21.6; এটা Python 3.12-এ চলে এমন সর্বশেষ version, আর lab-এর Ubuntu 24.04-এ Python 3.12। `requirements.yml` pin করে ansible.posix 2.2.2 আর community.general 14.0.1।
+- **Playbook:** `ansible.cfg`, আর `site.yml` group `control_plane`, `workers` আর দুইটা মিলে `k3s_cluster`।
+- **`roles/hardening`:** Q3-এর 3.1, 3.2, 3.4, প্রতিটা node-এ। 3.3 (backup) শুধু Q3-এর server-এ, কারণ node-এ Compose-এর Postgres নেই।
+  - `ops` group আর `deploy` user। deploy-এর key optional।
+  - `linux/sshd_config` সরাসরি সেই ফাইল থেকেই। বসানোর আগে `sshd -t` দিয়ে যাচাই, বদল হলে handler ssh restart করে।
+  - `/var/log/shoplite`: `root:ops 2750`, সাথে একটা default ACL rule।
+  - UFW: incoming বন্ধ, outgoing খোলা, আর 22/80/443 খোলা, ঠিক `linux/firewall/ufw.sh`-এর মতো।
+- **Node-এর ব্যতিক্রম (`group_vars`):**
+  - VPC থেকে 8472/udp, 10250 আর 9100।
+  - Control-plane-এ VPC থেকে 6443।
+  - k3s-এর pod আর service network (`10.42.0.0/16`, `10.43.0.0/16`) থেকে সব। k3s-এর docs-এ UFW-এর জন্য এটাই বলা।
+  - Forward করা traffic চলতে দেওয়া (pod আর NodePort-এর জন্য, PLAN Phase 5)।
+- **`tests/` (local রিহার্সাল, শুধু Docker লাগে):**
+  - `node.Dockerfile`: EC2 node-এর মতো systemd আর sshd সহ Ubuntu 24.04।
+  - `controller.Dockerfile`: pin করা Ansible।
+  - `inventory.ini`, `verify.yml`।
+  - `run.sh`: ৩টা node চালু করে, `site.yml` দুইবার চালায় (দ্বিতীয়বার `changed=0` বাধ্যতামূলক), যাচাই চালায়, সত্যিকারের connection আর login পরীক্ষা করে, শেষে সব মুছে ফেলে।
+
+**যাচাই** (`bash ansible/tests/run.sh`, এক মিনিটের মতো):
+- প্রথম run-এ প্রতিটা node-এ `changed=11`, দ্বিতীয় run-এ `changed=0`। মানে idempotent; প্রশ্নের full-marks শর্ত "idempotent Ansible"।
+- `verify.yml` তিন node-এ pass।
+- VPC-র ভেতর থেকে 10250 খোলা। যে port-এর অনুমতি নেই, তাতে program শুনলেও আটকে যায়।
+- deploy key দিয়ে ঢুকতে পারে; root আর key ছাড়া login প্রত্যাখ্যাত।
+- ইচ্ছা করে প্রতিবার "changed" দেখানো একটা task ঢোকালে `run.sh` fail করে।
+
 ## 6. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -311,6 +339,7 @@ Q3-এর server-ও Terraform দিয়ে বানানো হবে, ক
 | `2d9d0fc` | 2026-11-12 | Q4 step 4.4: alb module (ALB, listener 80 আর 8080, target group, security group) |
 | `9e1c75e` | 2026-11-12 | Q4 step 4.5: ecr module (তিনটা image repo) |
 | `5a0b220` | 2026-11-12 | Q4 step 4.6: q3-server (Q3-এর EC2, নিজের ছোট VPC-তে) |
+| `4f4a286` | 2026-11-12 | Q4 step 4.7a: Ansible-এর ভিত আর hardening role |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -330,6 +359,12 @@ devops-final/
 │   │   ├── systemd/                      shoplite-backup.service, .timer, .sh (রাতে pg_dump)
 │   │   ├── firewall/ufw.sh               deny incoming; শুধু 22, 80, 443
 │   │   └── evidence/commands.md          lab-এর command, প্রত্যাশিত output, screenshot-এর তালিকা
+│   ├── ansible/                          Q4 (g)
+│   │   ├── site.yml, ansible.cfg         playbook (এখন: hardening)
+│   │   ├── requirements.txt, .yml        pin করা ansible-core আর collection
+│   │   ├── group_vars/                   VPC, cluster-এর port, control-plane-এর 6443
+│   │   ├── roles/hardening/              Q3-এর 3.1, 3.2, 3.4 প্রতিটা node-এ
+│   │   └── tests/                        ৩টা local node-এ রিহার্সাল (run.sh, verify.yml)
 │   ├── terraform/                        Q4
 │   │   ├── bootstrap/                    state-এর S3 bucket (একবার, account প্রতি)
 │   │   ├── q3-server/                    Q3-এর EC2, নিজের ছোট VPC-তে (+ নিজের tests/)
@@ -426,6 +461,12 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 
 `bootstrap`-এর জন্য একই command, শুধু `-chdir=bootstrap` যোগ করে। সব ফাইলের format দেখতে: `fmt -check -recursive`।
 
+Ansible-এর রিহার্সাল (শুধু Docker লাগে; ৩টা node, দুইবার run, যাচাই, শেষে সব মোছে), `shoplite-app` থেকে:
+
+```bash
+bash ansible/tests/run.sh
+```
+
 ## 9. পথে নেওয়া সিদ্ধান্ত (demo আর README-র deviation log-এ লাগবে)
 
 - **শুধু প্রশ্নে যা চাওয়া, সেটুকুই (12 Nov, user-এর সিদ্ধান্ত)।** সুবিধার জন্য বাড়তি tool বা feature যোগ হবে না, সময় লাগলেও কাটছাঁট নয়। প্রকল্প reproducible করতে যে ফাইল লাগে, সেগুলো রাখা যায়, কারণ প্রশ্নই তার অনুমতি দেয়। এই নিয়মে Q2-তে সরানো হয়েছে: Jaeger, compose-এর OTEL endpoint, catalog-api-র host port, web-এর version footer আর heading-এ `<title>` copy করা।
@@ -487,6 +528,11 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 - **Q3-এর server নিজের ছোট VPC-তে (user-এর সিদ্ধান্ত, 12 Nov)।** Default VPC অনেক lab account-এ থাকে না, আর মূল VPC-তে রাখলে Q3 শুরু করা যেত Q4-এর পরে। নিজের VPC-তে NAT নেই, তাই খরচও কম।
 - **Q3-এর server-এ SSH খোলা (শুধু admin-এর IP থেকে), node-এ নয়।** Q3 নিজেই SSH-এর কাজ: key দিয়ে login, আর root ও password-এর login প্রত্যাখ্যাত হওয়া দেখাতে হয়।
 - **`admin_cidr` /24-এর চেয়ে চওড়া হতে পারে না।** ভুল করেও যেন server পুরো internet-এর জন্য খুলে না যায়।
+- **ansible-core 2.21.6, 2.22 নয়।** 2.22-এর controller-এ Python 3.13 লাগে, আর lab-এর Ubuntu 24.04-এ আছে 3.12।
+- **Node-এ `sshd_config` সরাসরি `linux/sshd_config` থেকে।** Q3-এর server আর node-এ একই ফাইল, তাই দুইটা কখনো আলাদা হয়ে যায় না। UFW-এর মূল নিয়ম `linux/firewall/ufw.sh`-এর মতো; Ansible-এ `ufw` module দিয়ে, যাতে idempotent থাকে।
+- **Node-এর UFW-এ k3s-এর pod আর service network থেকে সব খোলা।** একই node-এর pod যখন node-এর IP-তে যায় (kubelet, node-exporter, API), তখন source থাকে pod-এর IP, VPC-র নয়। k3s-এর docs-এ UFW-এর জন্য এটাই বলা। NodePort-এর traffic forward হয়, তাই forward policy ACCEPT। এটা README-র deviation log-এ যাবে।
+- **`host_key_checking = False`।** Node প্রতি lab session-এ নতুন, আর পৌঁছানো হয় SSM দিয়ে, যা instance-এর পরিচয় নিজেই যাচাই করে।
+- **Ansible-এর test-এর ব্যবস্থা repo-তে (`ansible/tests/`)।** Product-এর অংশ নয়, তবে service-এর test-এর মতোই code-এর test; পরের role যোগ হলে আবার চালানো যাবে।
 
 ## 10. জানা বিষয়
 
@@ -509,17 +555,19 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 - **Mock provider AWS-এর default মান বসায় না** (যেমন `map_public_ip_on_launch` থাকে `null`)। যে মান test-এ যাচাই করতে হবে, সেটা code-এ স্পষ্ট করে লিখতে হয়।
 - **Resource-গুলোর পরস্পরের যোগ (subnet → VPC, route → gateway) দেখতে test-এ `command = apply` লাগে।** Mock apply AWS ছোঁয় না, শুধু id বানিয়ে দেয়; `plan`-এ id অজানা থাকে।
 - **একটা variable-এর validation fail করলে, যে validation সেই variable দেখে, Terraform সেটা আর চালায় না।** তাই এক AZ-এর test-এ শুধু `public_subnet_cidrs`-এর error আশা করা হয়।
+- **Windows থেকে mount করা folder world-writable দেখায়, তখন Ansible সেই folder-এর `ansible.cfg` উপেক্ষা করে।** তাই `run.sh` `ANSIBLE_CONFIG` env দিয়ে ফাইলটা স্পষ্ট করে দেয়।
+- **UFW বন্ধ থাকা অবস্থায় `ufw` module default policy বদলালে প্রথমবার "changed" দেখায়।** UFW চালু হওয়ার পরের run-এ আর দেখায় না, তাই idempotency-র পরীক্ষা হয় দ্বিতীয় run-এ।
 - **Mock হলেও provider ARN-এর আকার যাচাই করে** (যেমন listener-এর `load_balancer_arn`)। তাই test-এ load balancer আর target group-কে `mock_resource` দিয়ে বৈধ আকারের ARN দিতে হয়। প্রতিটা instance-কে আলাদা মান দিতে `override_resource { target = res["key"] }` চলে (Terraform 1.17)।
 
 ## 11. পরের কাজ
 
-1. **Q4 step 4.7: Ansible** (`ansible/`, project.md 4g, PLAN Phase 5)। কাজ বড়, তাই শুরুর সময় আরও ছোট ভাগে ভাঙা হবে। থাকবে:
-   - **Inventory:** node-গুলো `role` tag দিয়ে খোঁজা হবে। Private node-এ পৌঁছানো হবে SSM-এর ভেতর দিয়ে, কোনো port খোলা ছাড়া।
-   - **`hardening` role:** Q3-এর 3.1, 3.2 আর 3.4, `linux/` folder-এর ফাইল দিয়েই, প্রতিটা node-এ। UFW-তে cluster-এর port খোলা থাকবে শুধু VPC-র ভেতর থেকে: 8472/udp, 10250, 9100, আর control-plane-এ 6443। Forward policy ACCEPT, যাতে NodePort-এর traffic চলে। 3.3 (backup) node-এ নয়।
-   - **`container_runtime` role:** kernel module আর sysctl। k3s-এর containerd চালু আছে কিনা যাচাই।
-   - **`k3s_server` আর `k3s_agent` role:** pin করা k3s version। k3s-এর নিজের Traefik বন্ধ (PLAN: Traefik আলাদা chart দিয়ে আসবে)। Worker join করবে token দিয়ে। ECR থেকে image টানার জন্য kubelet-এর ECR credential provider।
-   - **`kubeconfig` role:** kubeconfig local-এ আনা, SSM port-forward দিয়ে ব্যবহারের জন্য।
-   - **রিহার্সাল:** local systemd container-এ, Q3-এর মতো।
-2. তারপর 4.8: lab-এ চালানোর পদ্ধতি (section 5-এর table)।
-3. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
-4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
+1. **Q4 step 4.7b: k3s-এর role** (`ansible/roles/`, project.md 4g)। থাকবে:
+   - **`container_runtime`:** kernel module আর sysctl। k3s-এর ভেতরের containerd চালু আছে কিনা যাচাই, version ছাপানো।
+   - **`k3s_server`:** pin করা k3s version। k3s-এর নিজের Traefik বন্ধ (PLAN: Traefik আসবে আলাদা chart দিয়ে)। Join-এর token।
+   - **`k3s_agent`:** worker token দিয়ে control-plane-এ join করবে।
+   - **`kubeconfig`:** kubeconfig local-এ আনা, server-এর ঠিকানা বদলে, যাতে SSM port-forward দিয়ে চলে।
+   - **রিহার্সাল:** `ansible/tests/run.sh` বাড়িয়ে, local container-এ k3s চালিয়ে; লক্ষ্য `kubectl get nodes`-এ ৩টা Ready আর দ্বিতীয় run-এ `changed=0`।
+2. তারপর **4.7c:** lab-এর সংযোগ। SSM-এর ভেতর দিয়ে SSH; এর জন্য node-এ SSH key লাগবে, তাই Terraform-এ key pair যোগ হবে। সাথে lab-এর inventory, আর ECR থেকে image টানার জন্য kubelet-এর ECR credential provider।
+3. তারপর 4.8: lab-এ চালানোর পদ্ধতি (section 5-এর table)।
+4. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
+5. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
