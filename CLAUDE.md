@@ -12,7 +12,7 @@ Course capstone (Poridhi "Mastering DevOps and AWS", Batch 03), deadline **17 No
 ## How to work with this user
 
 - **Build only what `project.md` asks for** (the user's rule, 12 Nov). No extra tools, services or features for convenience: Jaeger, a version footer and extra published ports were removed for this reason. Files needed to make the project reproducible are fine, because the question allows them. Time pressure is never a reason to skip or shortcut something the question asks. If something not asked looks useful, propose it and let the user decide; do not add it.
-- The user writes in Bengali (sometimes Banglish). Reply in Bengali; keep technical terms, code, commands and errors in English.
+- The user writes in Bengali (sometimes Banglish). Reply in Bengali; keep technical terms, code, commands and errors in English. Keep replies and explanations short and to the point (the user asked for this on 12 Nov).
 - Work in **small steps**, one at a time. Before starting a step, say in a line what it will do. Do not jump ahead to the next step without the user's go-ahead.
 - A step is done only when:
   1. unit tests pass (run in Docker, see below);
