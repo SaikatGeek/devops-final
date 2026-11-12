@@ -1,4 +1,4 @@
-"""Minimal HTTP server for the worker's probe (and later metrics) endpoints.
+"""Minimal HTTP server for the worker's probe and metrics endpoints.
 
 The worker is not a web app, so instead of a framework it uses asyncio's built-in
 TCP server. It only understands `GET <path>`, which is all Kubernetes probes and

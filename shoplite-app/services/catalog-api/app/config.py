@@ -25,6 +25,16 @@ def _int(name: str, default: int) -> int:
         raise ConfigError(f"environment variable {name} must be an integer, got {raw!r}") from exc
 
 
+def _float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ConfigError(f"environment variable {name} must be a number, got {raw!r}") from exc
+
+
 @dataclass(frozen=True)
 class Settings:
     service_name: str = "catalog-api"
@@ -39,9 +49,13 @@ class Settings:
 
     redis_url: str = "redis://localhost:6379/0"
 
+    # Fault injection for the Q8 exercise (question 1.5), off by default; see faults.py.
+    chaos_latency_ms: int = 0
+    chaos_error_rate: float = 0.0
+
     @classmethod
     def from_env(cls) -> "Settings":
-        return cls(
+        settings = cls(
             service_name=os.environ.get("SERVICE_NAME", "catalog-api"),
             log_level=os.environ.get("LOG_LEVEL", "INFO").upper(),
             port=_int("PORT", 8000),
@@ -51,4 +65,11 @@ class Settings:
             postgres_user=os.environ.get("POSTGRES_USER", "shoplite"),
             postgres_password=_require("POSTGRES_PASSWORD"),
             redis_url=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
+            chaos_latency_ms=_int("CHAOS_LATENCY_MS", 0),
+            chaos_error_rate=_float("CHAOS_ERROR_RATE", 0.0),
         )
+        if settings.chaos_latency_ms < 0:
+            raise ConfigError("CHAOS_LATENCY_MS must be 0 or more")
+        if not 0.0 <= settings.chaos_error_rate <= 1.0:  # also rejects nan and inf
+            raise ConfigError("CHAOS_ERROR_RATE must be between 0 and 1")
+        return settings

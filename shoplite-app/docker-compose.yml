@@ -8,6 +8,9 @@ name: shoplite
 # Optional local trace viewer (Jaeger): set OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 # in .env, run `docker compose --profile tracing up -d`, open http://127.0.0.1:16686.
 # In Kubernetes the same variable points at Tempo instead.
+#
+# CHAOS_* are the fault-injection flags of question 1.5, used in Q8. All are off by
+# default; set one in .env or the shell to turn it on (see .env.example).
 
 services:
   catalog-api:
@@ -26,6 +29,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (cp .env.example .env)}
       REDIS_URL: redis://redis:6379/0
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      CHAOS_LATENCY_MS: ${CHAOS_LATENCY_MS:-0}
+      CHAOS_ERROR_RATE: ${CHAOS_ERROR_RATE:-0}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -51,6 +56,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      CHAOS_MEMORY_LEAK: ${CHAOS_MEMORY_LEAK:-false}
+      CHAOS_SLOW_DB: ${CHAOS_SLOW_DB:-false}
     # Time to finish in-flight orders (max 2 s each) after SIGTERM before SIGKILL.
     stop_grace_period: 30s
     depends_on:

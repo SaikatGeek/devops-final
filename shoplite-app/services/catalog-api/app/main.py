@@ -1,7 +1,8 @@
 """catalog-api HTTP routes.
 
-`create_app` takes the database and queue as arguments so unit tests can pass
-in-memory fakes instead of real PostgreSQL and Redis.
+`create_app` takes the database, queue and fault injector as arguments so unit
+tests can pass in-memory fakes instead of real PostgreSQL and Redis, and decide
+which requests an injected fault hits.
 """
 
 import asyncio
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from .config import Settings
 from .db import INT4_MAX, Database
+from .faults import FaultInjector
 from .metrics import ORDER_QUEUE_DEPTH, ORDERS_CREATED, exemplar, render
 from .middleware import ObservabilityMiddleware
 from .order_queue import RedisQueue, build_message, publish_span
@@ -79,10 +81,14 @@ def create_app(
     settings: Settings | None = None,
     db: Store | None = None,
     queue: OrderQueue | None = None,
+    faults: FaultInjector | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     db = db or Database(settings)
     queue = queue or RedisQueue(settings.redis_url)
+    faults = faults or FaultInjector(
+        latency_ms=settings.chaos_latency_ms, error_rate=settings.chaos_error_rate
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -132,6 +138,8 @@ def create_app(
 
     @app.get("/products/{id}", response_model=Product)
     async def get_product(id: int) -> dict:
+        # CHAOS_LATENCY_MS. No span of its own: the trace shows a gap before the DB span.
+        await faults.maybe_delay()
         product = await db.get_product(id)
         if product is None:
             raise HTTPException(status_code=404, detail="product not found")
@@ -145,6 +153,11 @@ def create_app(
         it cannot see yet. If the push fails, the order is marked FAILED instead of
         staying PENDING forever, and the client gets 503.
         """
+        # CHAOS_ERROR_RATE: fail before the database is touched, with the same body as
+        # any unhandled error, so the response gives no hint of the cause.
+        if faults.should_fail():
+            raise HTTPException(status_code=500, detail="internal server error")
+
         order = await db.create_order(order_in.product_id, order_in.quantity)
         if order is None:
             raise HTTPException(status_code=404, detail="product not found")

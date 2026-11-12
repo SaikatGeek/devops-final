@@ -27,6 +27,24 @@ class FakeStore:
             self.status[order_id] = "FAILED"
 
 
+class FakePool:
+    """Stand-in for an asyncpg pool: records every statement, touches no database."""
+
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    async def fetchrow(self, sql: str, *args):
+        self.statements.append(" ".join(sql.split()))
+        return {"id": args[0], "product_id": 1, "quantity": 1}
+
+    async def execute(self, sql: str, *args) -> str:
+        self.statements.append(" ".join(sql.split()))
+        return "UPDATE 1"
+
+    async def close(self) -> None:
+        pass
+
+
 class FakeConsumer:
     def __init__(self, order_ids: list[int] | None = None) -> None:
         self.messages = [json.dumps({"order_id": i}) for i in order_ids or []]

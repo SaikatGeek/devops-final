@@ -27,6 +27,10 @@ tracer = trace.get_tracer("shoplite.order-worker")
 
 PENDING_QUEUE = "orders:pending"
 
+# CHAOS_MEMORY_LEAK: memory kept for every processed order and never freed. About 1 MB
+# per order makes the pod's memory climb steadily until it is OOMKilled.
+RETAINED_BYTES_PER_ORDER = 1024 * 1024
+
 
 class Store(Protocol):
     async def start_processing(self, order_id: int) -> dict[str, Any] | None: ...
@@ -71,11 +75,14 @@ class OrderProcessor:
         min_seconds: float = 1.0,
         max_seconds: float = 2.0,
         cpu_seconds: float = 0.2,
+        memory_leak: bool = False,
     ) -> None:
         self.store = store
         self.min_seconds = min_seconds
         self.max_seconds = max_seconds
         self.cpu_seconds = cpu_seconds
+        self.memory_leak = memory_leak
+        self.retained: list[bytes] = []  # grows only while memory_leak is on
 
     async def simulate_work(self) -> None:
         total = random.uniform(self.min_seconds, self.max_seconds)
@@ -121,6 +128,9 @@ class OrderProcessor:
             ORDERS_PROCESSED.labels(result=result).inc()
             if result in ("completed", "failed"):
                 ORDER_PROCESSING.observe(time.perf_counter() - start, exemplar=exemplar())
+                if self.memory_leak:
+                    # Non-zero bytes: the pages are really written, so they count in the pod's memory.
+                    self.retained.append(b"\xff" * RETAINED_BYTES_PER_ORDER)
         return result
 
     async def _process(self, order_id: int, span: trace.Span) -> str:

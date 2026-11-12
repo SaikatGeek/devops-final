@@ -107,6 +107,7 @@ async def run(settings: Settings) -> None:
         min_seconds=settings.processing_min_seconds,
         max_seconds=settings.processing_max_seconds,
         cpu_seconds=settings.processing_cpu_seconds,
+        memory_leak=settings.chaos_memory_leak,
     )
     worker = Worker(processor, queue, settings.concurrency, settings.http_port)
     try:
