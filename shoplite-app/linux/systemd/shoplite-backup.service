@@ -1,0 +1,16 @@
+# One backup of the ShopLite database (question 3.3), started every night by
+# shoplite-backup.timer. Installed in /etc/systemd/system/.
+# Run it by hand with: sudo systemctl start shoplite-backup.service
+[Unit]
+Description=ShopLite database backup (pg_dump to /var/backups/shoplite)
+Requires=docker.service
+After=docker.service
+# Restart=on-failure below retries a failed backup; give up after 3 starts within an hour.
+StartLimitIntervalSec=1h
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/shoplite-backup
+Restart=on-failure
+RestartSec=5min

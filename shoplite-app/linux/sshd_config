@@ -1,0 +1,22 @@
+# SSH server settings for the ShopLite server (question 3.1).
+# Installed as /etc/ssh/sshd_config; check it with `sudo sshd -t`, then `sudo systemctl restart ssh`.
+#
+# sshd keeps the FIRST value it reads for each setting. These lines come before the
+# Include below, so no file in /etc/ssh/sshd_config.d/ can switch them back on.
+
+# No logins as root, not even with a valid key.
+PermitRootLogin no
+
+# Keys only: no passwords, also not through keyboard-interactive (PAM).
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+
+Include /etc/ssh/sshd_config.d/*.conf
+
+# The rest is Ubuntu 24.04's default sshd_config, unchanged.
+UsePAM yes
+X11Forwarding yes
+PrintMotd no
+AcceptEnv LANG LC_*
+Subsystem	sftp	/usr/lib/openssh/sftp-server
