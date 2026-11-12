@@ -22,6 +22,20 @@ run "network_module_gives_two_public_and_two_private_subnets" {
   }
 }
 
+run "compute_module_puts_the_nodes_in_the_private_subnets" {
+  command = apply
+
+  assert {
+    condition     = length(output.worker_instance_ids) == 2 && output.control_plane_instance_id != ""
+    error_message = "The root configuration must create one control plane and two workers."
+  }
+
+  assert {
+    condition     = module.compute.control_plane_private_ip != null
+    error_message = "The control plane must have a private IP for the agents to join."
+  }
+}
+
 run "budget_alarm_at_20_usd" {
   command = plan
 

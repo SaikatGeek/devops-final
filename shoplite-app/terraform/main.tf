@@ -30,6 +30,15 @@ module "network" {
   name   = "shoplite"
 }
 
+# Questions 4b and 4c: least-privilege security groups, SSM access, one control-plane
+# and two workers in the private subnets.
+module "compute" {
+  source             = "./modules/compute"
+  name               = "shoplite"
+  vpc_id             = module.network.vpc_id
+  private_subnet_ids = module.network.private_subnet_ids
+}
+
 # Cost guard: an e-mail as soon as this month's actual cost passes USD 20.
 resource "aws_budgets_budget" "monthly" {
   name         = "shoplite-monthly"
