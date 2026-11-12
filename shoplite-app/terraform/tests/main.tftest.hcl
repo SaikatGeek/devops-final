@@ -60,6 +60,15 @@ run "alb_gives_a_prod_and_a_dev_url" {
   }
 }
 
+run "ecr_has_a_repository_for_each_image" {
+  command = apply
+
+  assert {
+    condition     = keys(output.ecr_repository_urls) == ["catalog-api", "order-worker", "web"]
+    error_message = "The root configuration must create the three image repositories."
+  }
+}
+
 run "budget_alarm_at_20_usd" {
   command = plan
 

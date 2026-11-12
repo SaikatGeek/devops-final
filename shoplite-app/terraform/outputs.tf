@@ -27,3 +27,13 @@ output "app_urls" {
   description = "ShopLite in the browser: prod on port 80, dev on port 8080 of the ALB."
   value       = module.alb.urls
 }
+
+output "ecr_repository_urls" {
+  description = "Where CI pushes each image (web, catalog-api, order-worker)."
+  value       = module.ecr.repository_urls
+}
+
+output "ecr_registry" {
+  description = "Registry host for docker login."
+  value       = module.ecr.registry
+}

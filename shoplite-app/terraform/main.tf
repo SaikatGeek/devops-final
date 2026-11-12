@@ -50,6 +50,12 @@ module "alb" {
   target_instance_ids    = module.compute.worker_instance_ids
 }
 
+# Question 4e: one ECR repository per application image (shoplite/web, ...).
+module "ecr" {
+  source = "./modules/ecr"
+  name   = "shoplite"
+}
+
 # Cost guard: an e-mail as soon as this month's actual cost passes USD 20.
 resource "aws_budgets_budget" "monthly" {
   name         = "shoplite-monthly"
