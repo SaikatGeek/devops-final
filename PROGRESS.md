@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-14, Q5 step 5.1-এর পরে (বাসার PC)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-14, Q5 step 5.2-এর পরে (বাসার PC)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -18,7 +18,7 @@
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
-| Q5 | Kubernetes, Helm | 15 | 🟡 5.1 শেষ: chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap; local k3s-এ order `COMPLETED`। বাকি 5.2 (PDB, HPA, Traefik, Ingress), 5.3 (NetworkPolicy), 5.4 (lab-এর পদ্ধতি) |
+| Q5 | Kubernetes, Helm | 15 | 🟡 5.1 আর 5.2 শেষ: chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। বাকি 5.3 (NetworkPolicy), 5.4 (lab-এর পদ্ধতি) |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
@@ -413,8 +413,8 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | Step | কাজ | প্রশ্নের অংশ | অবস্থা |
 |---|---|---|---|
 | 5.1 | Chart-এর কাঠামো, পাঁচটা workload, Secret আর ConfigMap, local রিহার্সাল | (a), (b), (e) | ✅ `9fa4aeb` |
-| 5.2 | catalog-api-র PDB, order-worker-এর HPA, ALB-র পেছনে Traefik, Ingress `/` আর `/api` | (a), (d) | ⬜ পরের কাজ |
-| 5.3 | NetworkPolicy: Postgres আর Redis-এ শুধু catalog-api আর order-worker | (c) | ⬜ |
+| 5.2 | catalog-api-র PDB, order-worker-এর HPA, ALB-র পেছনে Traefik, Ingress `/` আর `/api` | (a), (d) | ✅ `14e4bd0` |
+| 5.3 | NetworkPolicy: Postgres আর Redis-এ শুধু catalog-api আর order-worker | (c) | ⬜ পরের কাজ |
 | 5.4 | Lab-এ চালানোর পদ্ধতি (`docs/evidence/q5/commands.md`), checkpoint | সব | ⬜ |
 
 **Step 5.1-এ কী হলো** (`helm/shoplite/`)
@@ -448,6 +448,27 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 
 **Lab-এ বাকি:** ECR-এর image দিয়ে চালানো, আর ALB-র URL-এ browser থেকে order (checkpoint, ভিডিও V2)।
 
+**Step 5.2-এ কী হলো** (`14e4bd0`; সিদ্ধান্ত দুটো user-এর, 14 Nov: Traefik-এর setting PLAN অনুযায়ী shoplite-gitops-এ, আর worker-এর HPA প্রশ্নের মতো ১ থেকে ৪, dev-এও)
+- **PodDisruptionBudget (catalog-api):** `minAvailable: 1`। Node drain বা upgrade-এর মতো স্বেচ্ছায় বাধার সময় একবারে একটার বেশি catalog-api pod সরানো যায় না, তাই অন্তত একটা সবসময় চলে।
+- **HorizontalPodAutoscaler (order-worker):** `autoscaling/v2`, CPU-ভিত্তিক, ১ থেকে ৪ replica। লক্ষ্য CPU request-এর 70%; প্রতিটা order worker-এর প্রায় 0.2 s CPU খায়।
+- **Traefik** (`shoplite-gitops/apps/traefik.yaml`): ArgoCD-র একটা Application, যাতে আছে Traefik-এর নিজের chart (42.2.0, Traefik v3.7.16) আর তার সব setting।
+  - Service `NodePort`, কারণ ALB নির্দিষ্ট NodePort-এ পাঠায়। `LoadBalancer` হলে k3s-এর servicelb node-এর 80 আর 443 দখল করত।
+  - দুইটা entrypoint: `web` → NodePort 30080 (prod, ALB-র port 80), `dev` → 30081 (dev, ALB-র port 8080)। HTTPS নেই, কারণ domain নেই।
+  - ALB-র health check-এর জন্য `/ping` দুই entrypoint-এই, chart-এর নিজের `ingressRoute.healthcheck` দিয়ে। Traefik-এর নিজের probe ভেতরের entrypoint-এই থাকে।
+  - requests আর limits।
+- **Ingress** (`templates/ingress.yaml`): দুইটা Ingress, `ingressClassName: traefik`।
+  - web: path `/`।
+  - catalog-api: path `/api`, Traefik-এর `StripPrefix` middleware দিয়ে, কারণ catalog-api `/products` চেনে, `/api/products` নয়। Middleware পুরো Ingress-এ বসে, তাই দুইটা আলাদা Ingress।
+  - Domain নেই, তাই environment আলাদা হয় Traefik-এর entrypoint দিয়ে: prod `web`, dev `dev` (values থেকে)।
+
+**যাচাই** (`bash helm/tests/run.sh`, এখন প্রায় ১০ মিনিট):
+- Traefik বসে gitops-এর ফাইল থেকেই: chart, version আর values `yq` দিয়ে পড়া হয়। Lab-এ ArgoCD যা বসাবে, রিহার্সালে হুবহু সেটাই চলে।
+- dev (`shoplite-dev`) আর prod (`shoplite`) দুটোই বসে। 5.1-এর সব check দুই namespace-এই pass।
+- দুই NodePort-এই `/ping` 200, `/`-এ page, `/api`-তে catalog-api।
+- NodePort 30080-এ দেওয়া order `COMPLETED` হয়েছে আর গেছে শুধু prod-এর database-এ। 30081-এরটা গেছে dev-এ।
+- একসাথে ৪০০টা order দিলে worker-এর CPU 138%/70%, HPA worker ১ থেকে ২-তে নিয়েছে।
+- `kubectl drain` প্রতিটা environment থেকে একটা catalog-api pod সরিয়েছে, দ্বিতীয়টা PDB আটকেছে (`Cannot evict pod as it would violate the pod's disruption budget`)। এই সময়েও prod-এর API সাড়া দিয়েছে।
+
 ## 7. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -473,6 +494,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | `135b8ea` | 2026-11-14 | Q4 step 4.7c: ECR থেকে image টানতে kubelet-এর credential provider |
 | `5cc1286` | 2026-11-14 | Q4 step 4.8: lab-এ Q4 চালানোর পদ্ধতি আর প্রমাণের তালিকা |
 | `9fa4aeb` | 2026-11-14 | Q5 step 5.1: Helm chart-এ পাঁচটা workload, Secret আর ConfigMap, local রিহার্সাল |
+| `14e4bd0` | 2026-11-14 | Q5 step 5.2: PDB, HPA, Ingress; Traefik-এর ArgoCD Application (shoplite-gitops) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -488,7 +510,7 @@ devops-final/
 │   ├── .env.example                      local-এর setting (WEB_PORT সহ); আসল .env Git-এ যায় না
 │   ├── helm/shoplite/                    Q5-এর chart: Chart.yaml, values.yaml, values-dev.yaml, values-prod.yaml
 │   │   ├── files/init.sql                table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
-│   │   └── templates/                    web, catalog-api, order-worker, postgres, redis, configmap, _helpers
+│   │   └── templates/                    web, catalog-api (+ PDB), order-worker (+ HPA), postgres, redis, ingress, configmap, _helpers
 │   ├── helm/tests/run.sh                 chart-এর রিহার্সাল: local k3s-এ install, যাচাই, শেষে সব মোছে
 │   ├── docs/evidence/q4/commands.md      Q4 lab-এ চালানোর পদ্ধতি, প্রমাণ আর screenshot-এর তালিকা (screenshot-ও এখানে)
 │   ├── linux/                            Q3
@@ -603,7 +625,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 
 `bootstrap`-এর জন্য একই command, শুধু `-chdir=bootstrap` যোগ করে। সব ফাইলের format দেখতে: `fmt -check -recursive`।
 
-Helm chart-এর রিহার্সাল (শুধু Docker লাগে; local k3s-এ chart install করে যাচাই, শেষে সব মোছে; প্রায় ৫ মিনিট), `shoplite-app` থেকে:
+Helm chart-এর রিহার্সাল (Docker আর internet লাগে; local k3s-এ gitops-এর Traefik আর chart-এর dev ও prod বসিয়ে যাচাই, শেষে সব মোছে; প্রায় ১০ মিনিট), `shoplite-app` থেকে:
 
 ```bash
 bash helm/tests/run.sh
@@ -697,6 +719,11 @@ bash ansible/tests/run.sh
 - **Postgres আর Redis-এর official image, Bitnami নয়** (PLAN)। Non-root-এ চলে image-এর নিজের user দিয়ে: Postgres 70, Redis 999।
 - **Probe শুধু catalog-api-তে নয়:** web আর worker-এর liveness/readiness-ও আছে, কারণ Docker-এর `HEALTHCHECK` Kubernetes মানে না; এগুলো সেই একই পরীক্ষা। Postgres আর Redis-এরও probe আছে, যাতে তারা সত্যিই সাড়া দিলে তবেই ready হয়।
 - **Chart-এর রিহার্সাল repo-তে (`helm/tests/run.sh`),** Ansible-এর `tests/`-এর মতো। Local k3s-এর version lab-এর সাথে মেলে (v1.37.2), Helm 4.3.1 (Docker image `alpine/helm`)।
+- **Traefik-এর setting shoplite-gitops-এ** (`apps/traefik.yaml`; user-এর সিদ্ধান্ত, 14 Nov, PLAN অনুযায়ী)। ArgoCD-র Application-এর ভেতরেই values (`valuesObject`), তাই অন্য কোনো repo-র ওপর নির্ভর নেই। Chart 42.2.0 নেওয়া হয়েছে, কারণ সর্বশেষ 42.4.0 তখন মাত্র দুই দিনের পুরনো। Shoplite-app-এর রিহার্সাল পাশের `../shoplite-gitops` থেকে ফাইলটা পড়ে (`SHOPLITE_GITOPS_DIR` দিয়ে বদলানো যায়)।
+- **Worker-এর HPA দুই environment-এই ১ থেকে ৪** (user-এর সিদ্ধান্ত, 14 Nov: প্রশ্ন যা বলে)। লক্ষ্য CPU request-এর 70%।
+- **Environment আলাদা হয় Traefik-এর entrypoint দিয়ে, host দিয়ে নয়।** Domain নেই; ALB-র port 80 যায় `web` entrypoint-এ (prod), 8080 যায় `dev`-এ।
+- **ALB-র health check Traefik-এর `/ping`, কোনো app-এর নয়।** Chart-এর নিজের `ingressRoute.healthcheck` দিয়ে `web` আর `dev` entrypoint-এ খোলা। Traefik-এর নিজের probe ভেতরের entrypoint-এই থাকে।
+- **PDB-র প্রমাণ `kubectl drain` দিয়ে।** Node cordon হয়, তাই সরানো pod-এর বদলি Pending থাকে, আর দ্বিতীয় eviction PDB আটকায়। Lab-এর পদ্ধতিতেও এই পরীক্ষাই থাকবে।
 - **ECR-এর credential আসে kubelet-এর credential provider থেকে, pull secret থেকে নয়।** ECR-এর token ১২ ঘণ্টায় শেষ হয়, তাই secret বারবার বদলাতে হতো। Plugin প্রতিবার node-এর role দিয়ে নতুন token নেয়, আর কিছু কোথাও জমা থাকে না।
 - **`k3s_kubelet_args` lab-এ ফাঁকা।** শুধু রিহার্সাল এতে `fail-cgroupv1=false` দেয়, যখন Docker host cgroup v1-এ চলে।
 
@@ -743,7 +770,8 @@ bash ansible/tests/run.sh
 - **Claude Code-এর safety check একটা command আটকায়, যদি তাতে `sh -c` script আর `rm` একসাথে থাকে।** Test-এর container মোছার কাজ (`docker rm` নাম ধরে) আলাদা command-এ রাখো।
 - **AWS CLI v1 `AWS_REGION` পড়ে না, শুধু `AWS_DEFAULT_REGION`।** v2 দুটোই পড়ে। Lab-এর document দুটোই export করে।
 - **Local k3s-এ registry ছাড়াই নিজের image চালানো যায়:** `docker save --platform linux/amd64 ... | docker exec -i <k3s> ctr --namespace k8s.io images import -`। Chart-এ `imagePullPolicy: IfNotPresent` থাকায় k3s নিজের ভেতরের image-ই নেয়।
-- **Helm-কে k3s container-এর network-এ চালালে kubeconfig যেমন আছে তেমনই চলে** (`docker run --network container:<k3s>`): `127.0.0.1:6443` তখন k3s-এরই।
+- **Helm-কে k3s container-এর network-এ চালালে kubeconfig যেমন আছে তেমনই চলে** (`docker run --network container:<k3s>`): `127.0.0.1:6443` তখন k3s-এরই। একই উপায়ে `curl` দিয়ে NodePort-এ যাওয়া যায়, ALB যেমন যায়।
+- **Traefik-এর Middleware CRD Traefik বসানোর পরেই আসে।** তাই chart-এর server-side dry run আর install, দুটোই Traefik-এর পরে। Lab-এ ArgoCD-তেও Traefik-কে shoplite-এর আগে sync করতে হবে (Q7)।
 - **AWS-এর command lab ছাড়াই অনেকটা যাচাই করা যায়।**
   - `--query`: `jmespath` দিয়ে, API-র আকারের নমুনা data-য়।
   - Argument-এর syntax: credential ছাড়া চালিয়ে। শুধু `Unable to locate credentials`-এ থামলে syntax ঠিক।
@@ -751,21 +779,23 @@ bash ansible/tests/run.sh
 
 ## 12. পরের কাজ
 
-Q5-এর 5.1 শেষ (section 6)। এরপর:
+Q5-এর 5.1 আর 5.2 শেষ (section 6)। এরপর:
 
-1. **Q5 step 5.2: PDB, HPA, Traefik আর Ingress** (project.md 5.1, 5.2a, 5.2d)।
-   - catalog-api-র PodDisruptionBudget, `minAvailable: 1`।
-   - order-worker-এর CPU-ভিত্তিক HPA (`autoscaling/v2`): prod-এ ১ থেকে ৪। Dev-এর সর্বোচ্চ কত হবে, ঠিক করতে হবে।
-   - Traefik, আলাদা Helm chart, pin করা version:
-     - Service `NodePort`: prod-এর entrypoint 30080, dev-এর 30081 (ALB-র listener-এর সাথে মেলে)। k3s-এর `servicelb` যেন node-এর port না নেয়।
-     - `/ping` প্রতিটা entrypoint-এ, ALB-র health check-এর জন্য।
-     - এর values কোথায় থাকবে (PLAN: shoplite-gitops-এর `apps/traefik.yaml`), শুরুতে ঠিক করতে হবে।
-   - Chart-এ দুইটা Ingress:
-     - web `/`;
-     - catalog-api `/api`, Traefik-এর `StripPrefix` middleware দিয়ে।
-     - কোন entrypoint-এ বসবে, values থেকে (prod বনাম dev)।
-   - **যাচাই:** রিহার্সালে Traefik বসিয়ে NodePort দিয়ে page আর `/api` খোলে; `/ping` 200 দেয়। HPA load-এ worker বাড়ায় (metrics-server আছে)। PDB থাকলে একটা catalog-api pod সরানো (eviction) যায়, দুটো একসাথে নয়।
-2. তারপর 5.3 (NetworkPolicy), 5.4 (lab-এর পদ্ধতি, `docs/evidence/q5/commands.md`)। তারপর Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
+1. **Q5 step 5.3: NetworkPolicy** (project.md 5.2c, 2 মার্ক)। PLAN বলে দুইটা NetworkPolicy:
+   - Postgres-এ (5432) ঢুকতে পারবে শুধু catalog-api আর order-worker।
+   - Redis-এ (6379) ঢুকতে পারবে শুধু catalog-api আর order-worker।
+   - Pod বাছাই হবে `app.kubernetes.io/name` label দিয়ে। k3s-এর নিজের NetworkPolicy controller আছে, তাই local রিহার্সালেও নিয়মটা সত্যিই কার্যকর হয়।
+   - **যাচাই:**
+     - web pod (আর অন্য কোনো pod) থেকে `postgres:5432` আর `redis:6379`-এ সংযোগ আটকে যায়।
+     - catalog-api আর order-worker থেকে যায়।
+     - Order আগের মতোই `COMPLETED` হয়।
+     - Q6-এর monitoring (Prometheus) app-এর `/metrics` পড়ে, Postgres বা Redis নয়; তাই এই নিয়মে আটকাবে না।
+2. তারপর 5.4: lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`):
+   - namespace আর Secret বানানো;
+   - Traefik আর chart বসানো (ArgoCD আসার আগে `helm` দিয়ে, নাকি ArgoCD দিয়ে, সেটা তখন ঠিক করতে হবে, কারণ ArgoCD Q7-এর অংশ);
+   - প্রমাণ: pod, HPA, PDB-র drain, NetworkPolicy;
+   - checkpoint: ALB-র URL-এ browser থেকে order `COMPLETED`।
+3. তারপর Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
 3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
    - Q4: `docs/evidence/q4/commands.md`।
