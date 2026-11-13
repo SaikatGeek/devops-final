@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-14, Q4 step 4.7c-এর পরে (বাসার PC)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-14, Q4 step 4.8-এর পরে (বাসার PC)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -17,7 +17,7 @@
 | Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
-| Q4 | Terraform, Ansible | 17 | 🟡 Code-এর সব step (4.1–4.7c) শেষ: Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR); বাকি 4.8 (lab-এ চালানোর পদ্ধতি) আর lab-এ চালানো |
+| Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
 | Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
@@ -198,7 +198,7 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 | 4.7a | Ansible-এর ভিত আর `hardening` role (Q3-এর 3.1, 3.2, 3.4 প্রতিটা node-এ) | (g) | ✅ `4f4a286` |
 | 4.7b | `container_runtime`, `k3s_server`, `k3s_agent`, `kubeconfig` role | (g) | ✅ `f862f1d` |
 | 4.7c | Lab-এর সংযোগ: SSM-এর ভেতর দিয়ে SSH (node-এ key), inventory, ECR থেকে image টানা | (c), (g) | ✅ `d85bb48`, `135b8ea` |
-| 4.8 | Lab-এ চালানোর পদ্ধতি | সব | ⬜ পরের কাজ |
+| 4.8 | Lab-এ চালানোর পদ্ধতি (`docs/evidence/q4/commands.md`) | সব | ✅ `5cc1286` |
 
 **Step 4.1-এ কী হলো**
 - `terraform/bootstrap/`: state রাখার S3 bucket, নাম `shoplite-tfstate-<account id>-<region>`। এর versioning চালু, যাতে state নষ্ট হলে আগেরটা ফেরানো যায়। `force_destroy` দেওয়া, যাতে শেষে `terraform destroy` ভরা bucket-ও মুছতে পারে। এর নিজের ছোট state local-এ থাকে; যে bucket এখনো তৈরিই হয়নি, তাতে তার নিজের state রাখা যায় না।
@@ -383,7 +383,28 @@ Q3-এর server-ও Terraform দিয়ে বানানো হবে, ক
 - Ansible-এর রিহার্সাল pass: প্রথম run সফল, দ্বিতীয় run-এ `changed=0`। `verify.yml` plugin-এর version আর k3s-এর setting দেখে।
 - ECR-এর মতো নামের image দিয়ে worker1-এ pod চালালে kubelet `ecr-credential-provider` চালায়। Log-এ আসে: `error execing credential provider plugin ecr-credential-provider for image 123456789012.dkr.ecr...`। Test-এ AWS role নেই, তাই fail করাই প্রত্যাশিত। Lab-এ node-এর role থাকায় এখানে token পাওয়া যাবে।
 
-**Lab-এ যা লাগবে (4.8-এ লেখা হবে):** Lab-এর machine-এ AWS CLI v2 আর Session Manager plugin, ansible-core 2.21.6 আর দুইটা collection, আর `~/.ssh/shoplite` key। Apply-এর পরে `ansible/lab.ini` লিখতে হবে, `site.yml` চালাতে হবে, আর আলাদা terminal-এ `kubectl_tunnel` চালু রেখে `kubectl get nodes`।
+**Lab-এ যা লাগবে:** 4.8-এর document-এ লেখা আছে (নিচে)।
+
+**Step 4.8-এ কী হলো** (`docs/evidence/q4/commands.md`, `5cc1286`)
+
+Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরেজিতে (grader পড়বেন), Q3-এর `linux/evidence/commands.md`-এর ধরনে। Screenshot-গুলো এই folder-এই রাখা হবে।
+- **0.1–0.4, প্রস্তুতি:**
+  - clone;
+  - lab-এর machine-এ tool: Terraform 1.17.2, AWS CLI v2, Session Manager plugin, kubectl 1.37.2, pin করা Ansible আলাদা venv-এ। প্রতিটা download-এর SHA-256 মেলানো হয়।
+  - region, budget-এর email আর SSH key, শুধু `TF_VAR_` দিয়ে;
+  - lab-এ `t3.medium`/`t3.large` পাওয়া যায় কিনা দেখা, আর না পেলে PLAN-এর বিকল্প।
+- **1–3, চালানো:** bootstrap → backend সহ `init` → `apply` → `ansible_inventory` থেকে `ansible/lab.ini` → SSM-এ তিনটা node `Online` হওয়া পর্যন্ত অপেক্ষা → `site.yml` দুইবার → দ্বিতীয় terminal-এ `kubectl_tunnel` → `kubectl get nodes`।
+- **4, প্রমাণ:** 4a থেকে 4g আর cost guard-এর প্রতিটার জন্য command, কী দেখা উচিত, আর screenshot-এর নাম (`01-...png` থেকে `21-...png`)। দুটো জিনিস আলাদা করে বলা:
+  - **State lock দেখানো:** এক terminal-এ `apply` approval-এর প্রশ্নে অপেক্ষা করে, অন্য terminal-এ S3-এ `terraform.tfstate.tflock` দেখা যায় আর `plan` থামে `Error acquiring the state lock`-এ।
+  - **ALB-র target `healthy` হয় Q5-এর Traefik বসার পরে,** তাই ওই screenshot Q5-এর পরে।
+- **After grading:** আগে q3-server (একই state bucket), তারপর মূল configuration, শেষে bucket।
+
+**যাচাই** (lab ছাড়া যতটুকু সম্ভব):
+- Tool-এর পুরো ধাপ হুবহু একটা নতুন `ubuntu:24.04` container-এ চালানো হয়েছে। সব বসেছে, checksum মিলেছে: Terraform 1.17.2, aws-cli 2.40.2, Session Manager plugin 1.2.896.0, kubectl 1.37.2, ansible-core 2.21.6, ansible.posix 2.2.2, community.general 14.0.1।
+- ১৮টা `--query` AWS-এর API-র আকারের নমুনা data-য় চালানো হয়েছে (jmespath 1.0.1, AWS CLI এটাই ব্যবহার করে)। সব ঠিক ফল দিয়েছে। একটা ভুল ধরা পড়ে ঠিক হয়েছে: `join`-এর লেখায় বৈধ JSON ছিল না।
+- ২২টা `aws` command credential ছাড়া চালানো হয়েছে। প্রতিটা শুধু `Unable to locate credentials`-এ থেমেছে, মানে argument-এর syntax ঠিক।
+- এই পরীক্ষাতেই ধরা পড়েছে, AWS CLI v1 `AWS_REGION` পড়ে না। তাই document `AWS_DEFAULT_REGION`-ও export করে।
+- যা যাচাই করা যায়নি: আসল AWS-এর উত্তর, আর lab-এর machine সত্যিই Ubuntu কিনা।
 
 ## 6. Commit-এর তালিকা
 
@@ -408,6 +429,7 @@ Q3-এর server-ও Terraform দিয়ে বানানো হবে, ক
 | `f862f1d` | 2026-11-13 | Q4 step 4.7b: k3s-এর role (container runtime, server, agent, kubeconfig) |
 | `d85bb48` | 2026-11-14 | Q4 step 4.7c: node-এ SSH key, lab-এর inventory আর kubectl-এর tunnel (Terraform output) |
 | `135b8ea` | 2026-11-14 | Q4 step 4.7c: ECR থেকে image টানতে kubelet-এর credential provider |
+| `5cc1286` | 2026-11-14 | Q4 step 4.8: lab-এ Q4 চালানোর পদ্ধতি আর প্রমাণের তালিকা |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -422,6 +444,7 @@ devops-final/
 │   ├── scripts/smoke-test.sh             stack চালু → readyz → order → COMPLETED
 │   ├── .env.example                      local-এর setting (WEB_PORT সহ); আসল .env Git-এ যায় না
 │   ├── helm/shoplite/files/init.sql      table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
+│   ├── docs/evidence/q4/commands.md      Q4 lab-এ চালানোর পদ্ধতি, প্রমাণ আর screenshot-এর তালিকা (screenshot-ও এখানে)
 │   ├── linux/                            Q3
 │   │   ├── sshd_config                   root আর password login বন্ধ
 │   │   ├── systemd/                      shoplite-backup.service, .timer, .sh (রাতে pg_dump)
@@ -614,6 +637,8 @@ bash ansible/tests/run.sh
 - **kubeconfig-এর API ঠিকানা `https://127.0.0.1:6443`।** Node-এর public IP নেই; kubectl চলবে SSM port-forward দিয়ে, আর k3s-এর certificate 127.0.0.1-এর জন্য বৈধ।
 - **Ansible node-এ পৌঁছায় SSM-এর ভেতর দিয়ে চলা SSH-এ, bastion দিয়ে নয়।** প্রশ্নই বলে "SSM preferred"। Node-এ key থাকে শুধু login-এর জন্য; port 22 কোথাও খোলা নয়।
 - **Inventory আসে Terraform-এর output থেকে, dynamic inventory plugin থেকে নয়।** `amazon.aws.aws_ec2` plugin-এর জন্য controller-এ boto3 আর আরেকটা collection লাগত। Output-এর inventory সাধারণ লেখা ফাইল, আর তার আকার `terraform test`-এ যাচাই করা যায়।
+- **Lab-এর জন্য এক-command-এর script নেই, শুধু লেখা পদ্ধতি (14 Nov)।** প্রশ্ন script চায় না, আর নিয়ম হলো প্রশ্নে যা চাওয়া শুধু সেটুকু। Document-এর প্রতিটা ধাপ grader পড়ে মেলাতে পারেন। PLAN-এর `make lab-up` user চাইলে পরে যোগ হতে পারে।
+- **প্রতিটা প্রশ্নের lab-এর পদ্ধতি থাকবে `docs/evidence/qN/commands.md`-এ, screenshot-ও সেখানে।** ব্যতিক্রম Q3: সেটা `linux/evidence/`-এ, কারণ প্রশ্নের tree-তে ওই folder-এর নাম দেওয়া।
 - **ECR-এর credential আসে kubelet-এর credential provider থেকে, pull secret থেকে নয়।** ECR-এর token ১২ ঘণ্টায় শেষ হয়, তাই secret বারবার বদলাতে হতো। Plugin প্রতিবার node-এর role দিয়ে নতুন token নেয়, আর কিছু কোথাও জমা থাকে না।
 - **`k3s_kubelet_args` lab-এ ফাঁকা।** শুধু রিহার্সাল এতে `fail-cgroupv1=false` দেয়, যখন Docker host cgroup v1-এ চলে।
 
@@ -658,13 +683,24 @@ bash ansible/tests/run.sh
 - **বাসার PC-র network মাঝে মাঝে download মাঝপথে কেটে দেয়** (curl exit 18, partial file)। Ansible-এর download-এ retry আছে; হাতে curl চালালে `--retry 5 --retry-all-errors` দাও।
 - **Root folder-এ `terraform console` backend-এর `init` চায়।** Template render করে দেখতে console চালাও `terraform/templates` folder থেকে, যেখানে backend নেই।
 - **Claude Code-এর safety check একটা command আটকায়, যদি তাতে `sh -c` script আর `rm` একসাথে থাকে।** Test-এর container মোছার কাজ (`docker rm` নাম ধরে) আলাদা command-এ রাখো।
+- **AWS CLI v1 `AWS_REGION` পড়ে না, শুধু `AWS_DEFAULT_REGION`।** v2 দুটোই পড়ে। Lab-এর document দুটোই export করে।
+- **AWS-এর command lab ছাড়াই অনেকটা যাচাই করা যায়।**
+  - `--query`: `jmespath` দিয়ে, API-র আকারের নমুনা data-য়।
+  - Argument-এর syntax: credential ছাড়া চালিয়ে। শুধু `Unable to locate credentials`-এ থামলে syntax ঠিক।
+  - Script দুটো scratchpad-এ ছিল; দরকার হলে আবার লেখা সহজ।
 
 ## 11. পরের কাজ
 
-1. **Q4 step 4.8: lab-এ Q4 চালানোর পদ্ধতি** (`linux/evidence/commands.md`-এর মতো, ইংরেজিতে, কারণ grader পড়বেন)। থাকবে:
-   - Lab-এর machine-এ যা লাগে: Terraform 1.17.2, AWS CLI v2 আর Session Manager plugin, ansible-core 2.21.6 আর দুইটা collection, kubectl। Key বানানো: `ssh-keygen -t ed25519 -f ~/.ssh/shoplite`।
-   - ক্রম: bootstrap (state bucket) → `init` (backend) → `apply` → `terraform output -raw ansible_inventory > ansible/lab.ini` → node SSM-এ আসা পর্যন্ত অপেক্ষা → `ansible-galaxy` → `site.yml` দুইবার (দ্বিতীয়বার `changed=0`) → আলাদা terminal-এ `kubectl_tunnel` → `kubectl get nodes`।
-   - Section 5-এর table-এর প্রতিটা অংশের প্রমাণ: কোন command, কী দেখা উচিত, কোন screenshot। শেষে `terraform destroy`।
-   - PLAN-এর `make lab-up`-এর মতো এক-command script লাগবে কিনা user ঠিক করবে; প্রশ্নে চাওয়া হয়নি।
-2. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে। Q5-এ section 5-এর "Q5-এর জন্য মনে রাখতে হবে" দেখো (Traefik `/ping`, NodePort, servicelb)।
-3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
+Q4-এর code আর lab-এর পদ্ধতি শেষ। এরপর নিজের PC-তে Q5।
+
+1. **Q5: Helm chart** (project.md Q5, PLAN Phase 6)। শুরুতে ছোট step-এ ভাঙা হবে; মোটামুটি:
+   - **5.1** chart-এর কাঠামো (`helm/shoplite`: `Chart.yaml`, `values.yaml`, `values-dev.yaml`, `values-prod.yaml`)। web, catalog-api আর order-worker-এর Deployment আর Service: non-root, প্রতিটা pod-এ requests আর limits, catalog-api-র probe `/healthz` আর `/readyz`। ConfigMap-এর checksum annotation, যাতে setting বদলালে pod নতুন হয় (Q8-এর chaos flag এর ওপর নির্ভর করে)।
+   - **5.2** Postgres-এর StatefulSet আর PVC, seed `files/init.sql` থেকে; Redis-এর Deployment, শুধু ClusterIP। DB-র password Secret-এ, যা cluster-এ বানানো হয়, Git-এ কখনো নয়।
+   - **5.3** catalog-api-র PDB (`minAvailable: 1`), order-worker-এর CPU-ভিত্তিক HPA (১ থেকে ৪), Ingress: web `/`, catalog-api `/api` (Traefik-এর `StripPrefix`)।
+   - **5.4** NetworkPolicy: Postgres আর Redis-এ শুধু catalog-api আর order-worker।
+   - **5.5** Traefik ALB-র পেছনে: Service `NodePort` (prod 30080, dev 30081), web entrypoint-এ `/ping`, k3s-এর `servicelb` যেন port না নেয়। Section 5-এর "Q5-এর জন্য মনে রাখতে হবে" দেখো।
+   - **যাচাই:** `helm lint`, `helm template`, আর local-এ একটা k3s cluster-এ dev-এর values দিয়ে বসিয়ে order `COMPLETED` পর্যন্ত। Compose-এর image local cluster-এ import করে।
+2. তারপর Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
+3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
+   - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
+   - Q4: `docs/evidence/q4/commands.md`।
