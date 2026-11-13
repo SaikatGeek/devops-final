@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-14, Q4 step 4.8-এর পরে (বাসার PC)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-14, Q5 step 5.1-এর পরে (বাসার PC)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -18,7 +18,7 @@
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
-| Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
+| Q5 | Kubernetes, Helm | 15 | 🟡 5.1 শেষ: chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap; local k3s-এ order `COMPLETED`। বাকি 5.2 (PDB, HPA, Traefik, Ingress), 5.3 (NetworkPolicy), 5.4 (lab-এর পদ্ধতি) |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
@@ -352,7 +352,7 @@ Q3-এর server-ও Terraform দিয়ে বানানো হবে, ক
 - রিহার্সালে ধরা পড়ে ঠিক হওয়া সমস্যা:
   - GitHub download-এর 10 সেকেন্ডের timeout।
   - cp1 fail করার পরেও worker-রা join করতে এগোচ্ছিল।
-  - এই PC-র Docker-এর cgroup v1 (section 10)।
+  - এই PC-র Docker-এর cgroup v1 (section 11)।
   - `.gitignore` role লুকাচ্ছিল।
 - নতুন cluster check-গুলো ইচ্ছা করে ভাঙিয়ে দেখা হয়নি, কারণ প্রতিটা run-এ ১০ মিনিট লাগে। তবে development-এর সময় সেগুলো সত্যিকারের ভুল ধরেছে: node register না হওয়া, version না পাওয়া।
 
@@ -406,7 +406,49 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 - এই পরীক্ষাতেই ধরা পড়েছে, AWS CLI v1 `AWS_REGION` পড়ে না। তাই document `AWS_DEFAULT_REGION`-ও export করে।
 - যা যাচাই করা যায়নি: আসল AWS-এর উত্তর, আর lab-এর machine সত্যিই Ubuntu কিনা।
 
-## 6. Commit-এর তালিকা
+## 6. Q5: Kubernetes আর Helm
+
+একটা chart (`helm/shoplite`), environment প্রতি একটা release আর namespace: prod `shoplite`, dev `shoplite-dev` (PLAN)। Code নিজের PC-তে লেখা হয়, যাচাই হয় local-এর একটা k3s-এ (`helm/tests/run.sh`); lab-এ চলবে ArgoCD দিয়ে (Q7)।
+
+| Step | কাজ | প্রশ্নের অংশ | অবস্থা |
+|---|---|---|---|
+| 5.1 | Chart-এর কাঠামো, পাঁচটা workload, Secret আর ConfigMap, local রিহার্সাল | (a), (b), (e) | ✅ `9fa4aeb` |
+| 5.2 | catalog-api-র PDB, order-worker-এর HPA, ALB-র পেছনে Traefik, Ingress `/` আর `/api` | (a), (d) | ⬜ পরের কাজ |
+| 5.3 | NetworkPolicy: Postgres আর Redis-এ শুধু catalog-api আর order-worker | (c) | ⬜ |
+| 5.4 | Lab-এ চালানোর পদ্ধতি (`docs/evidence/q5/commands.md`), checkpoint | সব | ⬜ |
+
+**Step 5.1-এ কী হলো** (`helm/shoplite/`)
+- **পাঁচটা workload, প্রশ্নের table মেনে:**
+  - **web:** Deployment, ২টা replica, Service। Nginx-এর `/api/` proxy-র ঠিকানা পুরো নামে (`catalog-api.<namespace>.svc.cluster.local:8000`), কারণ nginx-এর resolver search domain মানে না।
+  - **catalog-api:** Deployment, ২টা replica, liveness `/healthz`, readiness `/readyz` (DB আর Redis-এ পৌঁছায় কিনা), Service।
+  - **order-worker:** Deployment, `replicas` লেখা নেই, কারণ 5.2-এর HPA সংখ্যাটা ঠিক করবে। Git-এ সংখ্যা থাকলে ArgoCD আর HPA টানাটানি করত। `terminationGracePeriodSeconds: 30`, liveness `/healthz` (8001)।
+  - **postgres:** StatefulSet, PVC (`volumeClaimTemplates`, 1Gi), headless Service। Seed হয় `files/init.sql` থেকে, Compose-এর সেই একই ফাইল, ConfigMap দিয়ে। `PGDATA` একটা subfolder-এ, কারণ নতুন disk-এর root খালি থাকে না (EBS-এ `lost+found`)।
+  - **redis:** Deployment, শুধু ClusterIP Service।
+- **Security (5a):** প্রতিটা pod image-এর নিজের non-root user-এ চলে: app দুটো 10001, web 101, Postgres 70, Redis 999। সাথে `runAsNonRoot`, seccomp `RuntimeDefault`, privilege escalation বন্ধ, সব capability বাদ।
+- **Resources (5a):** প্রতিটা container-এ CPU আর memory-র requests আর limits। Dev-এর মান prod-এর চেয়ে হালকা, কারণ dev একই cluster-এ prod আর monitoring-এর সাথে চলে।
+- **Secret আর ConfigMap (5b):**
+  - DB-র user আর password থাকে Secret `shoplite-db`-এ। Chart Secret বানায় না, শুধু নাম ধরে পড়ে (`database.existingSecret`)। Secret বানানো হয় cluster-এ, chart বসানোর আগে, তাই Git-এ কখনো plain-text secret থাকে না।
+  - App-এর setting থাকে ConfigMap `shoplite-config`-এ: log level, DB আর Redis-এর ঠিকানা, worker-এর concurrency, OTLP endpoint (Q6-এর জন্য ফাঁকা), environment, chaos flag।
+  - catalog-api আর order-worker-এর pod template-এ ConfigMap-এর checksum থাকে। তাই কোনো setting বদলালে pod নতুন হয়; Q8-এর chaos flag এর ওপর নির্ভর করে।
+- **Values (5e):** `values.yaml` (default), `values-dev.yaml`, `values-prod.yaml`। Image হয় `<registry>/shoplite/<service>:<tag>`; registry আর tag lab-এ আসবে shoplite-gitops থেকে (Q7)।
+- **`helm/tests/run.sh`:** local রিহার্সাল (নিচে)।
+
+**যাচাই** (`bash helm/tests/run.sh`, প্রায় ৫ মিনিট):
+- k3s v1.37.2 (lab-এর version) Docker-এ চালু হয়। তিনটা image build করে সরাসরি cluster-এ ঢোকানো হয়, registry লাগে না।
+- `helm lint --strict`, dev আর prod দুই values-এ। Render করা prod-এর প্রতিটা manifest আসল API server-এ server-side dry run-এ গৃহীত।
+- Secret আগে বানিয়ে dev-এর values দিয়ে install করার পর:
+  - সব pod `Ready`।
+  - প্রতিটা container uid 0 নয়: 10001, 101, 70, 999।
+  - প্রতিটা container-এ requests আর limits আছে।
+  - Postgres-এ ১২টা product।
+  - web-এর ভেতর দিয়ে দেওয়া order (web → catalog-api → Postgres + Redis → order-worker) `COMPLETED` হয়।
+  - একটা setting বদলালে catalog-api আর order-worker নতুন pod পায়, web পায় না (web ConfigMap পড়ে না)।
+- দুইবার চালানো হয়েছে, দুইবারই pass। প্রথমবারের পর শেষ check-টা শক্ত করা হয়েছে: আগে প্রথম pod-এর hash দেখত, যেটা তখনো বন্ধ হতে থাকা পুরনো pod-ও হতে পারত। এখন Deployment-এর `generation` দেখে।
+- "requests বা limits নেই" ধরার regex আলাদা করে নমুনা লাইনে পরীক্ষা করা হয়েছে: শুধু অসম্পূর্ণ লাইনগুলো ধরে।
+
+**Lab-এ বাকি:** ECR-এর image দিয়ে চালানো, আর ALB-র URL-এ browser থেকে order (checkpoint, ভিডিও V2)।
+
+## 7. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
 |---|---|---|
@@ -430,10 +472,11 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | `d85bb48` | 2026-11-14 | Q4 step 4.7c: node-এ SSH key, lab-এর inventory আর kubectl-এর tunnel (Terraform output) |
 | `135b8ea` | 2026-11-14 | Q4 step 4.7c: ECR থেকে image টানতে kubelet-এর credential provider |
 | `5cc1286` | 2026-11-14 | Q4 step 4.8: lab-এ Q4 চালানোর পদ্ধতি আর প্রমাণের তালিকা |
+| `9fa4aeb` | 2026-11-14 | Q5 step 5.1: Helm chart-এ পাঁচটা workload, Secret আর ConfigMap, local রিহার্সাল |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
-## 7. কোথায় কী আছে
+## 8. কোথায় কী আছে
 
 ```text
 devops-final/
@@ -443,7 +486,10 @@ devops-final/
 │   ├── Makefile                          build, up, down, test, smoke
 │   ├── scripts/smoke-test.sh             stack চালু → readyz → order → COMPLETED
 │   ├── .env.example                      local-এর setting (WEB_PORT সহ); আসল .env Git-এ যায় না
-│   ├── helm/shoplite/files/init.sql      table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
+│   ├── helm/shoplite/                    Q5-এর chart: Chart.yaml, values.yaml, values-dev.yaml, values-prod.yaml
+│   │   ├── files/init.sql                table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
+│   │   └── templates/                    web, catalog-api, order-worker, postgres, redis, configmap, _helpers
+│   ├── helm/tests/run.sh                 chart-এর রিহার্সাল: local k3s-এ install, যাচাই, শেষে সব মোছে
 │   ├── docs/evidence/q4/commands.md      Q4 lab-এ চালানোর পদ্ধতি, প্রমাণ আর screenshot-এর তালিকা (screenshot-ও এখানে)
 │   ├── linux/                            Q3
 │   │   ├── sshd_config                   root আর password login বন্ধ
@@ -498,7 +544,7 @@ devops-final/
 └── shoplite-gitops/                      এখন শুধু README; কাজ Q5, Q7-এ
 ```
 
-## 8. Local-এ চালানো আর দেখা
+## 9. Local-এ চালানো আর দেখা
 
 Linux-এ, `shoplite-app` folder থেকে (প্রশ্নের checkpoint):
 
@@ -557,13 +603,19 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 
 `bootstrap`-এর জন্য একই command, শুধু `-chdir=bootstrap` যোগ করে। সব ফাইলের format দেখতে: `fmt -check -recursive`।
 
+Helm chart-এর রিহার্সাল (শুধু Docker লাগে; local k3s-এ chart install করে যাচাই, শেষে সব মোছে; প্রায় ৫ মিনিট), `shoplite-app` থেকে:
+
+```bash
+bash helm/tests/run.sh
+```
+
 Ansible-এর রিহার্সাল (Docker আর internet লাগে; ৩টা node-এ hardening আর k3s, দুইবার run, যাচাই, শেষে সব মোছে; ৫–১০ মিনিট), `shoplite-app` থেকে:
 
 ```bash
 bash ansible/tests/run.sh
 ```
 
-## 9. পথে নেওয়া সিদ্ধান্ত (demo আর README-র deviation log-এ লাগবে)
+## 10. পথে নেওয়া সিদ্ধান্ত (demo আর README-র deviation log-এ লাগবে)
 
 - **শুধু প্রশ্নে যা চাওয়া, সেটুকুই (12 Nov, user-এর সিদ্ধান্ত)।** সুবিধার জন্য বাড়তি tool বা feature যোগ হবে না, সময় লাগলেও কাটছাঁট নয়। প্রকল্প reproducible করতে যে ফাইল লাগে, সেগুলো রাখা যায়, কারণ প্রশ্নই তার অনুমতি দেয়। এই নিয়মে Q2-তে সরানো হয়েছে: Jaeger, compose-এর OTEL endpoint, catalog-api-র host port, web-এর version footer আর heading-এ `<title>` copy করা।
 - **Worker product-এর stock কমায় না।** কমালে Q8-এর ১৫ মিনিটের load test-এ stock শেষ হয়ে সব order `FAILED` হতো, আর তদন্ত গুলিয়ে যেত।
@@ -639,10 +691,16 @@ bash ansible/tests/run.sh
 - **Inventory আসে Terraform-এর output থেকে, dynamic inventory plugin থেকে নয়।** `amazon.aws.aws_ec2` plugin-এর জন্য controller-এ boto3 আর আরেকটা collection লাগত। Output-এর inventory সাধারণ লেখা ফাইল, আর তার আকার `terraform test`-এ যাচাই করা যায়।
 - **Lab-এর জন্য এক-command-এর script নেই, শুধু লেখা পদ্ধতি (14 Nov)।** প্রশ্ন script চায় না, আর নিয়ম হলো প্রশ্নে যা চাওয়া শুধু সেটুকু। Document-এর প্রতিটা ধাপ grader পড়ে মেলাতে পারেন। PLAN-এর `make lab-up` user চাইলে পরে যোগ হতে পারে।
 - **প্রতিটা প্রশ্নের lab-এর পদ্ধতি থাকবে `docs/evidence/qN/commands.md`-এ, screenshot-ও সেখানে।** ব্যতিক্রম Q3: সেটা `linux/evidence/`-এ, কারণ প্রশ্নের tree-তে ওই folder-এর নাম দেওয়া।
+- **Chart-এর object-গুলোর নাম স্থির** (`web`, `catalog-api`, `postgres`, ...), release-এর নামে নয়। প্রতিটা environment নিজের namespace-এ একটাই release, তাই নাম মিলে যাওয়ার ভয় নেই। App-এর setting-এও (`POSTGRES_HOST=postgres`, `redis://redis:6379/0`) সেই সহজ নামই থাকে, Compose-এর মতো।
+- **DB-র Secret chart বানায় না।** ArgoCD Git থেকে values পড়ে, তাই chart যা বানায় তার মান Git-এ থাকতে হতো। বদলে Secret cluster-এ আগে বানানো হয় (lab-এর পদ্ধতিতে থাকবে), chart শুধু নাম ধরে পড়ে।
+- **Pod-এর security "restricted" ধরনের:** non-root, seccomp `RuntimeDefault`, privilege escalation বন্ধ, সব capability বাদ। Root filesystem read-only করা হয়নি: প্রশ্নে চাওয়া হয়নি, আর web-এর nginx চালু হওয়ার সময় নিজের config লেখে।
+- **Postgres আর Redis-এর official image, Bitnami নয়** (PLAN)। Non-root-এ চলে image-এর নিজের user দিয়ে: Postgres 70, Redis 999।
+- **Probe শুধু catalog-api-তে নয়:** web আর worker-এর liveness/readiness-ও আছে, কারণ Docker-এর `HEALTHCHECK` Kubernetes মানে না; এগুলো সেই একই পরীক্ষা। Postgres আর Redis-এরও probe আছে, যাতে তারা সত্যিই সাড়া দিলে তবেই ready হয়।
+- **Chart-এর রিহার্সাল repo-তে (`helm/tests/run.sh`),** Ansible-এর `tests/`-এর মতো। Local k3s-এর version lab-এর সাথে মেলে (v1.37.2), Helm 4.3.1 (Docker image `alpine/helm`)।
 - **ECR-এর credential আসে kubelet-এর credential provider থেকে, pull secret থেকে নয়।** ECR-এর token ১২ ঘণ্টায় শেষ হয়, তাই secret বারবার বদলাতে হতো। Plugin প্রতিবার node-এর role দিয়ে নতুন token নেয়, আর কিছু কোথাও জমা থাকে না।
 - **`k3s_kubelet_args` lab-এ ফাঁকা।** শুধু রিহার্সাল এতে `fail-cgroupv1=false` দেয়, যখন Docker host cgroup v1-এ চলে।
 
-## 10. জানা বিষয়
+## 11. জানা বিষয়
 
 - **Docker 29-এ image-এর size দুইভাবে দেখায়।** PC-01-এ (যেখানে repo আছে `E:\devops-final`-এ) Docker containerd image store ব্যবহার করে। `docker images`-এ দুইটা সংখ্যা আসে:
   - DISK USAGE: unpack করা layer আর compressed blob মিলিয়ে। Q2-তে pip সরানোর পর web 90 MB, API 142 MB, worker 114 MB; আগে API ছিল 159 MB।
@@ -684,23 +742,30 @@ bash ansible/tests/run.sh
 - **Root folder-এ `terraform console` backend-এর `init` চায়।** Template render করে দেখতে console চালাও `terraform/templates` folder থেকে, যেখানে backend নেই।
 - **Claude Code-এর safety check একটা command আটকায়, যদি তাতে `sh -c` script আর `rm` একসাথে থাকে।** Test-এর container মোছার কাজ (`docker rm` নাম ধরে) আলাদা command-এ রাখো।
 - **AWS CLI v1 `AWS_REGION` পড়ে না, শুধু `AWS_DEFAULT_REGION`।** v2 দুটোই পড়ে। Lab-এর document দুটোই export করে।
+- **Local k3s-এ registry ছাড়াই নিজের image চালানো যায়:** `docker save --platform linux/amd64 ... | docker exec -i <k3s> ctr --namespace k8s.io images import -`। Chart-এ `imagePullPolicy: IfNotPresent` থাকায় k3s নিজের ভেতরের image-ই নেয়।
+- **Helm-কে k3s container-এর network-এ চালালে kubeconfig যেমন আছে তেমনই চলে** (`docker run --network container:<k3s>`): `127.0.0.1:6443` তখন k3s-এরই।
 - **AWS-এর command lab ছাড়াই অনেকটা যাচাই করা যায়।**
   - `--query`: `jmespath` দিয়ে, API-র আকারের নমুনা data-য়।
   - Argument-এর syntax: credential ছাড়া চালিয়ে। শুধু `Unable to locate credentials`-এ থামলে syntax ঠিক।
   - Script দুটো scratchpad-এ ছিল; দরকার হলে আবার লেখা সহজ।
 
-## 11. পরের কাজ
+## 12. পরের কাজ
 
-Q4-এর code আর lab-এর পদ্ধতি শেষ। এরপর নিজের PC-তে Q5।
+Q5-এর 5.1 শেষ (section 6)। এরপর:
 
-1. **Q5: Helm chart** (project.md Q5, PLAN Phase 6)। শুরুতে ছোট step-এ ভাঙা হবে; মোটামুটি:
-   - **5.1** chart-এর কাঠামো (`helm/shoplite`: `Chart.yaml`, `values.yaml`, `values-dev.yaml`, `values-prod.yaml`)। web, catalog-api আর order-worker-এর Deployment আর Service: non-root, প্রতিটা pod-এ requests আর limits, catalog-api-র probe `/healthz` আর `/readyz`। ConfigMap-এর checksum annotation, যাতে setting বদলালে pod নতুন হয় (Q8-এর chaos flag এর ওপর নির্ভর করে)।
-   - **5.2** Postgres-এর StatefulSet আর PVC, seed `files/init.sql` থেকে; Redis-এর Deployment, শুধু ClusterIP। DB-র password Secret-এ, যা cluster-এ বানানো হয়, Git-এ কখনো নয়।
-   - **5.3** catalog-api-র PDB (`minAvailable: 1`), order-worker-এর CPU-ভিত্তিক HPA (১ থেকে ৪), Ingress: web `/`, catalog-api `/api` (Traefik-এর `StripPrefix`)।
-   - **5.4** NetworkPolicy: Postgres আর Redis-এ শুধু catalog-api আর order-worker।
-   - **5.5** Traefik ALB-র পেছনে: Service `NodePort` (prod 30080, dev 30081), web entrypoint-এ `/ping`, k3s-এর `servicelb` যেন port না নেয়। Section 5-এর "Q5-এর জন্য মনে রাখতে হবে" দেখো।
-   - **যাচাই:** `helm lint`, `helm template`, আর local-এ একটা k3s cluster-এ dev-এর values দিয়ে বসিয়ে order `COMPLETED` পর্যন্ত। Compose-এর image local cluster-এ import করে।
-2. তারপর Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
+1. **Q5 step 5.2: PDB, HPA, Traefik আর Ingress** (project.md 5.1, 5.2a, 5.2d)।
+   - catalog-api-র PodDisruptionBudget, `minAvailable: 1`।
+   - order-worker-এর CPU-ভিত্তিক HPA (`autoscaling/v2`): prod-এ ১ থেকে ৪। Dev-এর সর্বোচ্চ কত হবে, ঠিক করতে হবে।
+   - Traefik, আলাদা Helm chart, pin করা version:
+     - Service `NodePort`: prod-এর entrypoint 30080, dev-এর 30081 (ALB-র listener-এর সাথে মেলে)। k3s-এর `servicelb` যেন node-এর port না নেয়।
+     - `/ping` প্রতিটা entrypoint-এ, ALB-র health check-এর জন্য।
+     - এর values কোথায় থাকবে (PLAN: shoplite-gitops-এর `apps/traefik.yaml`), শুরুতে ঠিক করতে হবে।
+   - Chart-এ দুইটা Ingress:
+     - web `/`;
+     - catalog-api `/api`, Traefik-এর `StripPrefix` middleware দিয়ে।
+     - কোন entrypoint-এ বসবে, values থেকে (prod বনাম dev)।
+   - **যাচাই:** রিহার্সালে Traefik বসিয়ে NodePort দিয়ে page আর `/api` খোলে; `/ping` 200 দেয়। HPA load-এ worker বাড়ায় (metrics-server আছে)। PDB থাকলে একটা catalog-api pod সরানো (eviction) যায়, দুটো একসাথে নয়।
+2. তারপর 5.3 (NetworkPolicy), 5.4 (lab-এর পদ্ধতি, `docs/evidence/q5/commands.md`)। তারপর Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
 3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
    - Q4: `docs/evidence/q4/commands.md`।
