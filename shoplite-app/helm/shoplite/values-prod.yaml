@@ -2,3 +2,7 @@
 # (question 7). The Q8 exercise turns one fault-injection flag on through the prod values
 # in shoplite-gitops, not here.
 environment: prod
+
+# Traefik's web entrypoint: ALB port 80 -> NodePort 30080.
+ingress:
+  entrypoint: web

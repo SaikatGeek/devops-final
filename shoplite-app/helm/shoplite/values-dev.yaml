@@ -2,6 +2,10 @@
 # (question 7). Lighter than prod: it shares the cluster with prod and the monitoring stack.
 environment: dev
 
+# Traefik's dev entrypoint: ALB port 8080 -> NodePort 30081.
+ingress:
+  entrypoint: dev
+
 web:
   resources:
     requests: { cpu: 10m, memory: 32Mi }

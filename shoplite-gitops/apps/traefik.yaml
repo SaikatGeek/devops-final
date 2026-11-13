@@ -1,0 +1,59 @@
+# Traefik, the ingress controller behind the ALB (question 5d), from Traefik's own Helm
+# chart. ArgoCD installs it from this Application (question 7). shoplite-app's
+# helm/tests/run.sh reads the chart, its version and the values below from this file, so
+# the local rehearsal runs exactly this setup.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik
+  source:
+    repoURL: https://traefik.github.io/charts
+    chart: traefik
+    targetRevision: 42.2.0 # Traefik v3.7.16
+    helm:
+      valuesObject:
+        # The ALB forwards to fixed NodePorts on the workers (terraform/modules/alb), so the
+        # Service is a NodePort. A LoadBalancer Service would make k3s's servicelb take
+        # ports 80 and 443 on every node.
+        service:
+          spec:
+            type: NodePort
+        ports:
+          # prod: ALB port 80 -> NodePort 30080
+          web:
+            nodePort: 30080
+          # dev: ALB port 8080 -> NodePort 30081 (namespace shoplite-dev)
+          dev:
+            port: 8001
+            expose:
+              default: true
+            exposedPort: 8080
+            protocol: TCP
+            nodePort: 30081
+          # No HTTPS: there is no domain and so no certificate.
+          websecure:
+            expose:
+              default: false
+        # The ALB's health check asks for /ping on both NodePorts (Traefik itself, not an
+        # application behind it). The pod's own probes keep using the internal entrypoint.
+        ingressRoute:
+          healthcheck:
+            enabled: true
+            entryPoints: ["web", "dev"]
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+          limits: { cpu: 300m, memory: 256Mi }
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Traefik's CRDs are too large for the annotation a client-side apply writes.
+      - ServerSideApply=true

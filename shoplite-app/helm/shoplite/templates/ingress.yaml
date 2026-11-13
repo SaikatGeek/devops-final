@@ -1,0 +1,57 @@
+# Ingress through Traefik (question 5.1: web on path /, catalog-api on path /api).
+# Two Ingresses, because the /api one needs a middleware that removes the prefix
+# (catalog-api serves /products, not /api/products), and a Traefik middleware applies to a
+# whole Ingress. Each environment listens on its own Traefik entrypoint (values).
+{{- $annotations := dict "traefik.ingress.kubernetes.io/router.entrypoints" .Values.ingress.entrypoint }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-api
+  labels:
+    {{- include "shoplite.labels" (dict "component" "catalog-api" "root" .) | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes: ["/api"]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  labels:
+    {{- include "shoplite.labels" (dict "component" "web" "root" .) | nindent 4 }}
+  annotations:
+    {{- toYaml $annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: catalog-api
+  labels:
+    {{- include "shoplite.labels" (dict "component" "catalog-api" "root" .) | nindent 4 }}
+  annotations:
+    {{- toYaml $annotations | nindent 4 }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-strip-api@kubernetescrd
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: catalog-api
+                port:
+                  name: http

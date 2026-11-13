@@ -32,6 +32,14 @@ config:
 database:
   existingSecret: shoplite-db
 
+# Ingress through Traefik behind the ALB (question 5d; Traefik is installed from
+# shoplite-gitops/apps/traefik.yaml). Path / goes to web, /api to catalog-api with the
+# prefix stripped. There is no domain, so the environments are told apart by Traefik
+# entrypoint: web (prod; ALB port 80 -> NodePort 30080) and dev (ALB port 8080 -> 30081).
+ingress:
+  className: traefik
+  entrypoint: web
+
 web:
   replicas: 2
   resources:
@@ -47,6 +55,12 @@ catalogApi:
 orderWorker:
   # Orders one worker pod processes at the same time.
   concurrency: 4
+  # CPU-based HorizontalPodAutoscaler, 1 to 4 replicas (question 5.1). The target is a
+  # share of the CPU request; each order burns about 0.2 s of real CPU.
+  autoscaling:
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
   # Long enough to finish the orders in hand after SIGTERM (each takes 1-2 s, or about
   # 6 s with the slow-database fault on).
   terminationGracePeriodSeconds: 30

@@ -64,3 +64,17 @@ spec:
     - name: http
       port: 8000
       targetPort: http
+---
+# A voluntary disruption (node drain, cluster upgrade) may take only one catalog-api pod
+# at a time: at least one keeps serving.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: catalog-api
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "shoplite.selectorLabels" $c | nindent 6 }}

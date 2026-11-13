@@ -48,3 +48,25 @@ spec:
             timeoutSeconds: 3
           resources:
             {{- toYaml .Values.orderWorker.resources | nindent 12 }}
+---
+# More workers while the queue keeps them busy: scaled on CPU (metrics-server, part of k3s).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: order-worker
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: order-worker
+  minReplicas: {{ .Values.orderWorker.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.orderWorker.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.orderWorker.autoscaling.targetCPUUtilizationPercentage }}

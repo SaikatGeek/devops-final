@@ -8,6 +8,7 @@ Planned layout (filled in during Q5 and Q7):
 shoplite-gitops/
 ├── bootstrap/root-app.yaml   app of apps
 ├── apps/                     ArgoCD Applications (dev auto-sync, prod manual sync)
+│   └── traefik.yaml          the ingress controller behind the ALB (Q5): chart, version, values
 └── envs/
     ├── dev/values.yaml       image registry and tag, written by CI
     └── prod/values.yaml      image tag and chaos flags (Q8)
