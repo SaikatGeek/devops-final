@@ -49,11 +49,21 @@ resource "aws_iam_instance_profile" "nodes" {
   role = aws_iam_role.nodes.name
 }
 
+# Ansible (question 4g) logs in with SSH tunnelled through SSM Session Manager
+# (AWS-StartSSHSession): the SSM agent connects to port 22 on the instance itself, so no
+# security group opens 22 and the nodes keep no public IP. The key pair only puts this
+# public key into the ubuntu user's authorized_keys.
+resource "aws_key_pair" "nodes" {
+  key_name   = "${var.name}-nodes"
+  public_key = var.ssh_public_key
+}
+
 locals {
   # The same for every node.
   node = {
     ami                  = data.aws_ami.ubuntu.id
     iam_instance_profile = aws_iam_instance_profile.nodes.name
+    key_name             = aws_key_pair.nodes.key_name
   }
 }
 
@@ -63,6 +73,7 @@ resource "aws_instance" "control_plane" {
   subnet_id                   = var.private_subnet_ids[0]
   vpc_security_group_ids      = [aws_security_group.nodes.id, aws_security_group.control_plane.id]
   iam_instance_profile        = local.node.iam_instance_profile
+  key_name                    = local.node.key_name
   associate_public_ip_address = false
 
   # IMDSv2 only, one hop: containers cannot read the node's AWS credentials.
@@ -90,6 +101,7 @@ resource "aws_instance" "worker" {
   subnet_id                   = var.private_subnet_ids[count.index % length(var.private_subnet_ids)]
   vpc_security_group_ids      = [aws_security_group.nodes.id]
   iam_instance_profile        = local.node.iam_instance_profile
+  key_name                    = local.node.key_name
   associate_public_ip_address = false
 
   metadata_options {

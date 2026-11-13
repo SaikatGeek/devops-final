@@ -33,6 +33,10 @@ kubeconfig*
 *.pem
 *.key
 
+# The lab's Ansible inventory, written from `terraform output -raw ansible_inventory`;
+# its instance ids change with every lab session.
+/ansible/lab.ini
+
 # Helm
 helm/**/charts/*.tgz
 

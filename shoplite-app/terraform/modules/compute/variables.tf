@@ -18,6 +18,16 @@ variable "private_subnet_ids" {
   }
 }
 
+variable "ssh_public_key" {
+  description = "Public SSH key for the ubuntu user on every node; Ansible logs in with it through SSM (port 22 stays closed). Pass it as TF_VAR_ssh_public_key."
+  type        = string
+
+  validation {
+    condition     = can(regex("^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) ", var.ssh_public_key))
+    error_message = "ssh_public_key must be an OpenSSH public key (ssh-ed25519 ..., ssh-rsa ... or ecdsa-sha2-...)."
+  }
+}
+
 variable "control_plane_instance_type" {
   description = "EC2 type of the k3s server (control plane)."
   type        = string

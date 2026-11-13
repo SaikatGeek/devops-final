@@ -26,6 +26,7 @@ mock_provider "aws" {
 
 variables {
   budget_alert_email = "alerts@example.com"
+  ssh_public_key     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test"
 }
 
 run "network_module_gives_two_public_and_two_private_subnets" {
@@ -49,6 +50,51 @@ run "compute_module_puts_the_nodes_in_the_private_subnets" {
     condition     = module.compute.control_plane_private_ip != null
     error_message = "The control plane must have a private IP for the agents to join."
   }
+}
+
+run "ansible_inventory_reaches_every_node_through_ssm" {
+  command = apply
+
+  assert {
+    condition = alltrue([
+      strcontains(output.ansible_inventory, "[control_plane]\ncontrol-plane ansible_host=${module.compute.control_plane_instance_id}\n"),
+      strcontains(output.ansible_inventory, "[workers]\nworker-1 ansible_host=${module.compute.worker_instance_ids[0]}\nworker-2 ansible_host=${module.compute.worker_instance_ids[1]}\n"),
+      strcontains(output.ansible_inventory, "[k3s_cluster:children]\ncontrol_plane\nworkers\n"),
+    ])
+    error_message = "The inventory must put the control plane and both workers, by instance id, into the groups site.yml uses."
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(output.ansible_inventory, "ansible_user=ubuntu\n"),
+      strcontains(output.ansible_inventory, "ansible_ssh_private_key_file=~/.ssh/shoplite\n"),
+      strcontains(output.ansible_inventory, "ProxyCommand=\"aws ssm start-session --region ap-southeast-1 --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p\""),
+    ])
+    error_message = "Ansible must log in as ubuntu with the key, through an SSM session to the node's port 22."
+  }
+}
+
+run "kubectl_tunnel_forwards_the_api_port_of_the_control_plane" {
+  command = apply
+
+  assert {
+    condition = alltrue([
+      strcontains(output.kubectl_tunnel, "--target ${module.compute.control_plane_instance_id} "),
+      strcontains(output.kubectl_tunnel, "--document-name AWS-StartPortForwardingSession"),
+      strcontains(output.kubectl_tunnel, "{\"portNumber\":[\"6443\"],\"localPortNumber\":[\"6443\"]}"),
+    ])
+    error_message = "The tunnel must forward local port 6443 to port 6443 of the control plane."
+  }
+}
+
+run "rejects_a_value_that_is_not_an_ssh_public_key" {
+  command = plan
+
+  variables {
+    ssh_public_key = "my-secret-password"
+  }
+
+  expect_failures = [var.ssh_public_key]
 }
 
 run "alb_gives_a_prod_and_a_dev_url" {

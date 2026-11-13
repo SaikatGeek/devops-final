@@ -13,6 +13,7 @@ variables {
   name               = "shoplite"
   vpc_id             = "vpc-0123456789abcdef0"
   private_subnet_ids = ["subnet-aaaa", "subnet-bbbb"]
+  ssh_public_key     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test"
 }
 
 run "one_control_plane_and_two_workers_in_the_private_subnets" {
@@ -132,6 +133,30 @@ run "imdsv2_only_and_encrypted_disks" {
     ])
     error_message = "Every node must have an encrypted 30 GiB gp3 root disk."
   }
+}
+
+run "every_node_gets_the_key_for_ssh_over_ssm" {
+  command = apply
+
+  assert {
+    condition     = aws_key_pair.nodes.key_name == "shoplite-nodes" && aws_key_pair.nodes.public_key == var.ssh_public_key
+    error_message = "The key pair must hold ssh_public_key."
+  }
+
+  assert {
+    condition     = alltrue([for i in concat([aws_instance.control_plane], aws_instance.worker) : i.key_name == aws_key_pair.nodes.key_name])
+    error_message = "Every node must get the key pair, so Ansible can log in through SSM."
+  }
+}
+
+run "rejects_a_value_that_is_not_an_ssh_public_key" {
+  command = plan
+
+  variables {
+    ssh_public_key = "my-secret-password"
+  }
+
+  expect_failures = [var.ssh_public_key]
 }
 
 run "worker_count_and_type_can_change" {
