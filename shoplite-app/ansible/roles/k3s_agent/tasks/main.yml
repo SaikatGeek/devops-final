@@ -30,6 +30,13 @@
     mode: "0644"
   notify: Restart k3s-agent
 
+- name: Restart k3s-agent for a new binary or image credential provider (role container_runtime)
+  ansible.builtin.debug:
+    msg: the k3s binary or kubelet's image credential provider changed, k3s-agent restarts
+  when: container_runtime_restart_k3s | default(false)
+  changed_when: true
+  notify: Restart k3s-agent
+
 - name: Apply configuration changes
   ansible.builtin.meta: flush_handlers
 

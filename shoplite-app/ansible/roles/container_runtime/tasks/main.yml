@@ -58,3 +58,52 @@
     dest: "/usr/local/bin/{{ item }}"
     state: link
   loop: [kubectl, crictl, ctr]
+
+# The ShopLite images live in private ECR repositories. kubelet asks this plugin for a
+# registry token whenever it pulls an ECR image; the plugin gets it with the node's IAM
+# role, so no pull secret or access key is stored on the node or in the cluster.
+- name: Create the folders of kubelet's image credential provider
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ container_runtime_credential_provider_dir }}"
+    - "{{ container_runtime_credential_provider_dir }}/bin"
+
+- name: Install the ECR credential provider (pinned, checksum verified)
+  ansible.builtin.get_url:
+    url: "{{ container_runtime_ecr_provider_url }}"
+    checksum: "sha256:{{ container_runtime_ecr_provider_url }}.sha256"
+    dest: "{{ container_runtime_credential_provider_dir }}/bin/ecr-credential-provider"
+    mode: "0755"
+    timeout: 60
+  vars:
+    container_runtime_go: "{{ container_runtime_go_arch[ansible_architecture] }}"
+    container_runtime_ecr_provider_url: "https://artifacts.k8s.io/binaries/cloud-provider-aws/{{ container_runtime_ecr_provider_version }}/linux/{{ container_runtime_go }}/ecr-credential-provider-linux-{{ container_runtime_go }}"
+  register: container_runtime_ecr_provider_download
+  until: container_runtime_ecr_provider_download is succeeded
+  retries: 3
+  delay: 10
+
+- name: Tell kubelet to use the plugin for every ECR registry
+  ansible.builtin.copy:
+    dest: "{{ container_runtime_credential_provider_dir }}/config.yaml"
+    mode: "0644"
+    content: |
+      # Managed by Ansible (role container_runtime). Read by kubelet (k3s config.yaml points here).
+      apiVersion: kubelet.config.k8s.io/v1
+      kind: CredentialProviderConfig
+      providers:
+        - name: ecr-credential-provider
+          matchImages:
+            - "*.dkr.ecr.*.amazonaws.com"
+          defaultCacheDuration: 12h
+          apiVersion: credentialprovider.kubelet.k8s.io/v1
+  register: container_runtime_ecr_provider_config
+
+# k3s_server / k3s_agent restart k3s when this is true, so an already running node picks
+# up a new binary or credential provider (on a new node the first start does it anyway).
+- name: Remember whether k3s must restart to use what changed here
+  ansible.builtin.set_fact:
+    container_runtime_restart_k3s: "{{ container_runtime_k3s_download is changed or container_runtime_ecr_provider_download is changed or container_runtime_ecr_provider_config is changed }}"

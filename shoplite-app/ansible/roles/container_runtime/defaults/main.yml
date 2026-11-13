@@ -1,7 +1,8 @@
 # Question 4g "install the container runtime". k3s ships its own containerd inside the k3s
 # binary (PLAN decision: k3s), so this role prepares the kernel for containerd and the pod
-# network and installs the pinned k3s binary. k3s_server and k3s_agent then start it, and
-# tasks/verify.yml checks afterwards that containerd runs and prints its version.
+# network and installs the pinned k3s binary. It also installs kubelet's image credential
+# provider for ECR, so the runtime can pull the ShopLite images. k3s_server and k3s_agent
+# then start k3s, and tasks/verify.yml checks afterwards that containerd runs.
 
 container_runtime_k3s_version: "{{ k3s_version }}"
 
@@ -22,3 +23,11 @@ container_runtime_sysctls:
 container_runtime_k3s_assets:
   x86_64: { binary: k3s, checksums: sha256sum-amd64.txt }
   aarch64: { binary: k3s-arm64, checksums: sha256sum-arm64.txt }
+
+# The ECR credential provider (kubernetes/cloud-provider-aws); its file names use Go's
+# architecture names.
+container_runtime_ecr_provider_version: "{{ ecr_credential_provider_version }}"
+container_runtime_go_arch:
+  x86_64: amd64
+  aarch64: arm64
+container_runtime_credential_provider_dir: "{{ k3s_credential_provider_dir }}"

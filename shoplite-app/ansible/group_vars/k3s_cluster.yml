@@ -4,6 +4,12 @@
 # https://update.k3s.io on 13 Nov 2026 (released 3 Nov 2026, Kubernetes 1.37).
 k3s_version: v1.37.2+k3s1
 
+# kubelet gets ECR credentials for the ShopLite images from this plugin, with the node's IAM
+# role (AmazonEC2ContainerRegistryPullOnly): no pull secret is stored anywhere. The
+# cloud-provider-aws release that matches k3s's Kubernetes minor version (1.37).
+ecr_credential_provider_version: v1.37.0
+k3s_credential_provider_dir: /var/lib/rancher/credentialprovider
+
 # Extra kubelet settings on every node (k3s `kubelet-arg`). Empty for the EC2 nodes, whose
 # Ubuntu 24.04 uses cgroup v2. Kubernetes 1.35+ refuses to start on cgroup v1, so the local
 # rehearsal (tests/run.sh) adds fail-cgroupv1=false when Docker Desktop runs cgroup v1.

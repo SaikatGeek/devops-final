@@ -140,6 +140,22 @@ kubectl_cp top nodes || true
 [ "$(nodes_with_metrics)" -eq "$(echo $NODES | wc -w)" ] || fail "metrics-server could not read every node"
 echo "ok    metrics-server reads CPU and memory of every node"
 
+step "kubelet asks the ECR credential provider for ECR images (worker1)"
+# The test has no AWS role, so the plugin cannot get a token and the pull fails; what
+# matters is that kubelet runs the plugin for an ECR image name at all.
+ECR_IMAGE=123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/shoplite/web:rehearsal
+kubectl_cp run ecr-probe --image="$ECR_IMAGE" --restart=Never \
+  --overrides='{"apiVersion": "v1", "spec": {"nodeName": "worker1"}}' >/dev/null
+provider_ran() {
+  docker exec shoplite-test-worker1 journalctl -u k3s-agent --no-pager -o cat |
+    grep -i 'credential provider' | grep -F "${ECR_IMAGE%%/*}"
+}
+for _ in $(seq 24); do provider_ran >/dev/null && break; sleep 5; done
+kubectl_cp delete pod ecr-probe --wait=false >/dev/null 2>&1 || true
+provider_ran | head -n 1 | cut -c1-240
+provider_ran >/dev/null || fail "kubelet did not run the ECR credential provider for an ECR image"
+echo "ok    kubelet runs ecr-credential-provider for ECR images (no AWS role here, so it fails as expected)"
+
 step "the fetched kubeconfig works (used from worker1)"
 controller cat /keys/kubeconfig | docker exec -i shoplite-test-worker1 sh -c 'cat > /tmp/kubeconfig'
 docker exec shoplite-test-worker1 k3s kubectl --kubeconfig /tmp/kubeconfig get nodes --no-headers |

@@ -12,6 +12,9 @@ tls-san:
   - {{ name }}
 {% endfor %}
 {% endif %}
+# kubelet pulls ECR images with the node's IAM role (installed by role container_runtime).
+image-credential-provider-bin-dir: {{ k3s_credential_provider_dir }}/bin
+image-credential-provider-config: {{ k3s_credential_provider_dir }}/config.yaml
 {% if k3s_kubelet_args %}
 kubelet-arg:
 {% for arg in k3s_kubelet_args %}
