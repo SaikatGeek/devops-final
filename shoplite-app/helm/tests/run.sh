@@ -9,7 +9,8 @@
 #   5. check: every pod ready, no container runs as root, every container has requests and
 #      limits, the products are seeded, an order reaches COMPLETED (through web's own /api
 #      proxy, and through Traefik's NodePorts like the ALB), /ping answers on both
-#      NodePorts, each NodePort reaches its own environment, a changed setting rolls the
+#      NodePorts, each NodePort reaches its own environment, only catalog-api and
+#      order-worker reach PostgreSQL and Redis (NetworkPolicy), a changed setting rolls the
 #      pods that read it, the HPA adds workers under load, and the PDB lets a drain take
 #      only one catalog-api pod per environment
 #   6. remove everything again
@@ -122,7 +123,7 @@ for env in dev prod; do
     fail "the $env release did not become ready"
   fi
 done
-kubectl -n "$PROD" get statefulsets,deployments,services,ingresses,pdb,hpa
+kubectl -n "$PROD" get statefulsets,deployments,services,ingresses,pdb,hpa,networkpolicies
 
 step "every pod ready, none as root, every container with requests and limits"
 for ns in $DEV $PROD; do
@@ -189,6 +190,25 @@ echo "ok    order $id through NodePort 30080 (the ALB's port 80) is COMPLETED, i
 id=$(place_order node_curl http://127.0.0.1:30081)
 echo "ok    order $id through NodePort 30081 (the ALB's port 8080) is COMPLETED in dev"
 
+step "NetworkPolicy: only catalog-api and order-worker reach PostgreSQL and Redis"
+# can_connect <namespace> <deployment> <host> <port>: a TCP connection from that pod.
+can_connect() { kubectl -n "$1" exec "deploy/$2" -- nc -z -w 3 "$3" "$4" >/dev/null 2>&1; }
+for target in postgres:5432 redis:6379; do
+  host=${target%:*}
+  port=${target#*:}
+  for allowed in catalog-api order-worker; do
+    can_connect "$DEV" "$allowed" "$host" "$port" || fail "$allowed cannot reach $host:$port"
+  done
+  if can_connect "$DEV" web "$host" "$port"; then
+    fail "web reaches $host:$port"
+  fi
+  # Not even dev's catalog-api may reach prod's database or queue.
+  if can_connect "$DEV" catalog-api "$host.$PROD.svc.cluster.local" "$port"; then
+    fail "dev's catalog-api reaches prod's $host"
+  fi
+  echo "ok    $host:$port: catalog-api and order-worker connect; web and the other environment are blocked"
+done
+
 step "a changed setting rolls the pods that read it (ConfigMap checksum)"
 # A Deployment's generation goes up when its pod template changes, i.e. when it rolls.
 generation() { kubectl -n "$DEV" get deployment "$1" -o jsonpath='{.metadata.generation}'; }
@@ -238,4 +258,4 @@ for ns in $DEV $PROD; do
 done
 
 echo
-echo "PASS: Traefik and both environments install; non-root, limits, Ingress, PDB and HPA work"
+echo "PASS: Traefik and both environments install; non-root, limits, Ingress, NetworkPolicy, PDB and HPA work"

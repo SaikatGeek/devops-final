@@ -1,0 +1,32 @@
+# Only catalog-api and order-worker may reach PostgreSQL and Redis (question 5c). Once a
+# NetworkPolicy selects a pod, all inbound traffic not allowed by a policy is dropped, so
+# web, any other pod and other namespaces (e.g. dev reaching prod's database) are shut out.
+# The kubelet's probes run inside the pod (exec), so they are not affected.
+{{- range $i, $target := list (dict "component" "postgres" "port" "postgres") (dict "component" "redis" "port" "redis") }}
+{{- if $i }}
+---
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $target.component }}
+  labels:
+    {{- include "shoplite.labels" (dict "component" $target.component "root" $) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "shoplite.selectorLabels" (dict "component" $target.component "root" $) | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        # No namespaceSelector: only pods of this release's own namespace.
+        - podSelector:
+            matchLabels:
+              {{- include "shoplite.selectorLabels" (dict "component" "catalog-api" "root" $) | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "shoplite.selectorLabels" (dict "component" "order-worker" "root" $) | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ $target.port }}
+{{- end }}
