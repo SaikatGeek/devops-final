@@ -7,6 +7,9 @@ kind: Application
 metadata:
   name: traefik
   namespace: argocd
+  annotations:
+    # First (wave 0): the ShopLite releases (wave 1) use Traefik's Middleware CRD.
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   destination:

@@ -1,0 +1,15 @@
+# Production's images (question 7): a tag that already ran in dev, promoted here by
+# shoplite-app's promote workflow, then synced by hand in ArgoCD. Empty until the first
+# promotion: the chart then stops with "image.tag is required".
+image:
+  registry: ""
+  tag: ""
+
+# Fault injection of question 1.5, all off. In the Q8 exercise a peer turns exactly one on
+# here, with an innocuous commit message, and the RCA starts from the observability tools.
+config:
+  chaos:
+    latencyMs: 0
+    errorRate: 0
+    memoryLeak: false
+    slowDb: false

@@ -1,0 +1,7 @@
+# Development's images (question 7a). shoplite-app's CI writes both lines on every push to
+# main: the ECR registry and the tag of the images it has just built and pushed (the short
+# Git SHA). ArgoCD then syncs dev on its own. Empty until the first CI run: the chart then
+# stops with "image.tag is required" instead of starting pods without images.
+image:
+  registry: ""
+  tag: ""

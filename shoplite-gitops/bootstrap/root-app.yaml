@@ -1,0 +1,21 @@
+# The root Application ("app of apps"). The cluster's bootstrap applies this one file by
+# hand, once; from then on ArgoCD creates and updates every Application in apps/ from Git:
+# Traefik, the dev and prod releases of ShopLite (and later the monitoring stack).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/SaikatGeek/shoplite-gitops.git
+    targetRevision: main
+    path: apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

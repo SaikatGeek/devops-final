@@ -1,0 +1,42 @@
+# ShopLite's production environment (question 7c): namespace shoplite, reached through the
+# ALB's port 80. Synced only when someone asks for it (manual sync): a new image tag or a
+# changed value in envs/prod/values.yaml waits, shown as OutOfSync, until it is synced.
+# ArgoCD's self-healing belongs to automated sync, so it is shown in dev (question 7d).
+#
+# The chart comes from shoplite-app; its values are layered, later files winning:
+#   values.yaml            the chart's defaults
+#   values-prod.yaml       what is different in prod (shoplite-app)
+#   envs/prod/values.yaml  the promoted image tag, and the Q8 fault-injection flags
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shoplite-prod
+  namespace: argocd
+  annotations:
+    # After Traefik (wave 0): the chart's Middleware needs Traefik's CRDs.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/SaikatGeek/shoplite-app.git
+      targetRevision: main
+      path: helm/shoplite
+      helm:
+        releaseName: shoplite
+        valueFiles:
+          - values-prod.yaml
+          - $gitops/envs/prod/values.yaml
+    - repoURL: https://github.com/SaikatGeek/shoplite-gitops.git
+      targetRevision: main
+      ref: gitops
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shoplite
+  # No "automated": manual synchronization for production.
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

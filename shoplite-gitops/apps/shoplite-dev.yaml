@@ -1,0 +1,45 @@
+# ShopLite's development environment (question 7c): namespace shoplite-dev, reached through
+# the ALB's port 8080. Synced automatically, with self-healing: a change made by hand in the
+# cluster (kubectl edit) is put back to what Git says (question 7d).
+#
+# The chart comes from shoplite-app; its values are layered, later files winning:
+#   values.yaml           the chart's defaults
+#   values-dev.yaml       what is different in dev (shoplite-app)
+#   envs/dev/values.yaml  the image registry and tag CI just built (this repository)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shoplite-dev
+  namespace: argocd
+  annotations:
+    # After Traefik (wave 0): the chart's Middleware needs Traefik's CRDs.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/SaikatGeek/shoplite-app.git
+      targetRevision: main
+      path: helm/shoplite
+      helm:
+        releaseName: shoplite
+        valueFiles:
+          - values-dev.yaml
+          - $gitops/envs/dev/values.yaml
+    - repoURL: https://github.com/SaikatGeek/shoplite-gitops.git
+      targetRevision: main
+      ref: gitops
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shoplite-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # A sync that fails because something it needs is not there yet (e.g. Traefik's CRDs
+    # right after the cluster is built) is tried again.
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
