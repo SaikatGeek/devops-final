@@ -65,3 +65,67 @@
           - (ufw.stdout is search('^6443/tcp\s+ALLOW IN\s+' ~ vpc_cidr, multiline=True)) == (inventory_hostname in groups['control_plane'])
           - ufw.stdout is search('Anywhere\s+ALLOW IN\s+10\.42\.0\.0/16', multiline=True)
           - ufw.stdout is search('Anywhere\s+ALLOW IN\s+10\.43\.0\.0/16', multiline=True)
+
+- name: Check the container runtime and k3s on every node
+  hosts: k3s_cluster
+  become: true
+  gather_facts: false
+  # This playbook sits in tests/, so Ansible does not load ../group_vars by itself; the
+  # pinned k3s_version must come from the same file site.yml uses.
+  vars_files:
+    - ../group_vars/k3s_cluster.yml
+  tasks:
+    - name: Read the kernel settings for the pod network
+      ansible.builtin.command: sysctl -n net.ipv4.ip_forward net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables
+      register: pod_sysctls
+      changed_when: false
+
+    - name: Read the k3s version
+      ansible.builtin.command: k3s --version
+      register: k3s_installed
+      changed_when: false
+
+    - name: Read the k3s configuration file
+      ansible.builtin.stat:
+        path: /etc/rancher/k3s/config.yaml
+      register: k3s_config
+
+    - name: Read the state of the k3s service
+      ansible.builtin.command: systemctl is-active {{ 'k3s' if inventory_hostname in groups['control_plane'] else 'k3s-agent' }}
+      register: k3s_service
+      changed_when: false
+
+    - name: Kernel settings on, pinned k3s, config root-only (it holds the join token), service running
+      ansible.builtin.assert:
+        that:
+          - pod_sysctls.stdout_lines == ['1', '1', '1']
+          - k3s_installed.stdout is search('k3s version ' ~ (k3s_version | regex_escape) ~ ' ')
+          - k3s_config.stat.mode == '0600'
+          - k3s_service.stdout == 'active'
+
+- name: Check the cluster from the control plane
+  hosts: control_plane
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read the nodes
+      ansible.builtin.command: k3s kubectl get nodes -o json
+      register: nodes_json
+      changed_when: false
+
+    - name: Read the deployments k3s installed
+      ansible.builtin.command: k3s kubectl get deployments -n kube-system -o name
+      register: system_deployments
+      changed_when: false
+
+    - name: Every node joined and is Ready; k3s's own Traefik is not installed
+      vars:
+        nodes: "{{ (nodes_json.stdout | from_json)['items'] }}"
+        ready: "{{ nodes | map(attribute='status.conditions') | map('selectattr', 'type', 'equalto', 'Ready') | map('first') | selectattr('status', 'equalto', 'True') | list }}"
+      ansible.builtin.assert:
+        that:
+          - nodes | length == groups['k3s_cluster'] | length
+          - ready | length == groups['k3s_cluster'] | length
+          - "'deployment.apps/traefik' not in system_deployments.stdout_lines"
+          - "'deployment.apps/coredns' in system_deployments.stdout_lines"
+          - "'deployment.apps/metrics-server' in system_deployments.stdout_lines"

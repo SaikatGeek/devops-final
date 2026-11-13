@@ -1,0 +1,20 @@
+# Managed by Ansible (role k3s_server). Read by `k3s server` at start.
+write-kubeconfig-mode: "0600"
+cluster-cidr: {{ k3s_pod_cidr }}
+service-cidr: {{ k3s_service_cidr }}
+disable:
+{% for component in k3s_server_disable %}
+  - {{ component }}
+{% endfor %}
+{% if k3s_server_tls_sans %}
+tls-san:
+{% for name in k3s_server_tls_sans %}
+  - {{ name }}
+{% endfor %}
+{% endif %}
+{% if k3s_kubelet_args %}
+kubelet-arg:
+{% for arg in k3s_kubelet_args %}
+  - {{ arg }}
+{% endfor %}
+{% endif %}

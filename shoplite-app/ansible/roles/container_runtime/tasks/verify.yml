@@ -1,0 +1,19 @@
+# Runs after k3s_server / k3s_agent have started k3s (site.yml): containerd must answer.
+
+- name: Ask containerd for its version through the CRI
+  ansible.builtin.command: k3s crictl version
+  register: container_runtime_version
+  changed_when: false
+  until: container_runtime_version.rc == 0
+  retries: 12
+  delay: 5
+
+- name: The container runtime is containerd
+  ansible.builtin.assert:
+    that:
+      - container_runtime_version.stdout is search('RuntimeName:\s+containerd')
+    quiet: true
+
+- name: Show the container runtime and its version
+  ansible.builtin.debug:
+    msg: "{{ container_runtime_version.stdout_lines | select('search', '^Runtime(Name|Version)') | list }}"

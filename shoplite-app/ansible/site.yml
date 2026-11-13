@@ -1,12 +1,59 @@
-# Configures the Kubernetes nodes (question 4g). Roles are added step by step:
+# Configures the Kubernetes nodes (question 4g), in this order:
 #   hardening          question 3's 3.1, 3.2 and 3.4 on every node
-#   (next) container_runtime, k3s_server, k3s_agent, kubeconfig
+#   container_runtime  kernel modules and settings, the pinned k3s binary (contains containerd)
+#   k3s_server         the control plane
+#   k3s_agent          the workers join it
+#   (check)            containerd answers on every node
+#   kubeconfig         the admin kubeconfig is copied to the machine that runs Ansible
 #
 # Inventory groups: control_plane (the k3s server) and workers (the k3s agents), both in
-# k3s_cluster.
+# k3s_cluster. Run the whole playbook: later plays use facts gathered by earlier ones.
+# One failing node stops the whole run (any_errors_fatal): a half-built cluster, such as
+# workers trying to join a control plane that never started, only hides the real error.
 
 - name: Harden every node with question 3's rules
   hosts: k3s_cluster
   become: true
+  any_errors_fatal: true
   roles:
     - hardening
+
+- name: Install the container runtime on every node
+  hosts: k3s_cluster
+  become: true
+  any_errors_fatal: true
+  roles:
+    - container_runtime
+
+- name: Start the k3s server on the control plane
+  hosts: control_plane
+  become: true
+  any_errors_fatal: true
+  roles:
+    - k3s_server
+
+- name: Join the workers to the cluster
+  hosts: workers
+  become: true
+  any_errors_fatal: true
+  roles:
+    - k3s_agent
+
+- name: Check the container runtime on every node
+  hosts: k3s_cluster
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Check containerd
+      ansible.builtin.include_role:
+        name: container_runtime
+        tasks_from: verify
+
+- name: Retrieve the kubeconfig
+  hosts: control_plane
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  roles:
+    - kubeconfig

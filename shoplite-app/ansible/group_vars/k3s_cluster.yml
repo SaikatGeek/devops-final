@@ -1,5 +1,14 @@
 # Settings for every Kubernetes node.
 
+# The k3s release on every node (server and agents must match). The "stable" channel of
+# https://update.k3s.io on 13 Nov 2026 (released 3 Nov 2026, Kubernetes 1.37).
+k3s_version: v1.37.2+k3s1
+
+# Extra kubelet settings on every node (k3s `kubelet-arg`). Empty for the EC2 nodes, whose
+# Ubuntu 24.04 uses cgroup v2. Kubernetes 1.35+ refuses to start on cgroup v1, so the local
+# rehearsal (tests/run.sh) adds fail-cgroupv1=false when Docker Desktop runs cgroup v1.
+k3s_kubelet_args: []
+
 # The VPC's address range (terraform output: module.network.vpc_cidr). Only addresses in it
 # may use the cluster ports; the security groups already keep everything else out.
 vpc_cidr: 10.0.0.0/16

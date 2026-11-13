@@ -1,0 +1,50 @@
+# The join token is never stored in Git: it is read from the running server each time.
+- name: Read the join token from the control plane
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  delegate_to: "{{ k3s_agent_server_host }}"
+  run_once: true
+  register: k3s_agent_token_file
+  no_log: true
+
+- name: Create the k3s configuration folder
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: "0755"
+
+- name: Write the k3s agent configuration (server address and join token)
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    mode: "0600"
+  vars:
+    k3s_agent_token: "{{ k3s_agent_token_file.content | b64decode | trim }}"
+  no_log: true
+  notify: Restart k3s-agent
+
+- name: Install the k3s-agent systemd unit
+  ansible.builtin.template:
+    src: k3s-agent.service.j2
+    dest: /etc/systemd/system/k3s-agent.service
+    mode: "0644"
+  notify: Restart k3s-agent
+
+- name: Apply configuration changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Start k3s-agent, also on every boot
+  ansible.builtin.systemd_service:
+    name: k3s-agent
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Wait until this worker has joined and is Ready
+  ansible.builtin.command: k3s kubectl wait --for=condition=Ready node/{{ ansible_nodename | lower }} --timeout=10s
+  delegate_to: "{{ k3s_agent_server_host }}"
+  register: k3s_agent_node
+  changed_when: false
+  until: k3s_agent_node.rc == 0
+  retries: 30
+  delay: 5

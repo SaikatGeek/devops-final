@@ -28,6 +28,8 @@ override.tf.json
 # Kubernetes / cloud credentials
 kubeconfig*
 *.kubeconfig
+# ...but not the Ansible role that fetches the kubeconfig (code, no credentials)
+!/ansible/roles/kubeconfig/
 *.pem
 *.key
 

@@ -1,0 +1,10 @@
+# Question 4g "retrieve the kubeconfig": copies k3s's admin kubeconfig from the control
+# plane to the machine that runs Ansible.
+
+# Where it is written there. `kubeconfig*` is git-ignored: it holds the cluster admin's key.
+kubeconfig_dest: "{{ playbook_dir }}/kubeconfig"
+
+# The API address kubectl should use. The nodes have no public address; kubectl reaches the
+# API through an SSM port forward from local port 6443 to the control plane's 6443, and the
+# k3s certificate is valid for 127.0.0.1. Change it only for another way in.
+kubeconfig_server: https://127.0.0.1:6443

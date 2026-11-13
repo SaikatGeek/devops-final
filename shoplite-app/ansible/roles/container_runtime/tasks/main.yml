@@ -1,0 +1,60 @@
+- name: Check which kernel features are already available
+  ansible.builtin.stat:
+    path: "{{ item.present_if }}"
+  loop: "{{ container_runtime_kernel_modules }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: container_runtime_module_state
+
+- name: Load the kernel modules that are missing
+  community.general.modprobe:
+    name: "{{ item.item.name }}"
+    state: present
+  loop: "{{ container_runtime_module_state.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not item.stat.exists
+
+- name: Load the modules again on every boot
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k3s.conf
+    content: |
+      # Managed by Ansible (role container_runtime).
+      {% for module in container_runtime_kernel_modules %}
+      {{ module.name }}
+      {% endfor %}
+    mode: "0644"
+
+- name: Kernel settings for the pod network
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/90-k3s.conf
+    reload: true
+  loop: "{{ container_runtime_sysctls | dict2items }}"
+  loop_control:
+    label: "{{ item.key }} = {{ item.value }}"
+
+# About 70 MB from GitHub; a slow moment on the way (NAT, home line) is retried instead of
+# failing the run. get_url's default 10-second read timeout was hit in the rehearsal.
+- name: Install the pinned k3s binary, which contains containerd (checksum verified)
+  ansible.builtin.get_url:
+    url: "{{ container_runtime_release_url }}/{{ container_runtime_asset.binary }}"
+    checksum: "sha256:{{ container_runtime_release_url }}/{{ container_runtime_asset.checksums }}"
+    dest: /usr/local/bin/k3s
+    mode: "0755"
+    timeout: 60
+  vars:
+    container_runtime_release_url: "https://github.com/k3s-io/k3s/releases/download/{{ container_runtime_k3s_version | replace('+', '%2B') }}"
+    container_runtime_asset: "{{ container_runtime_k3s_assets[ansible_architecture] }}"
+  register: container_runtime_k3s_download
+  until: container_runtime_k3s_download is succeeded
+  retries: 3
+  delay: 10
+
+- name: Make kubectl, crictl and ctr available (they are part of the k3s binary)
+  ansible.builtin.file:
+    src: /usr/local/bin/k3s
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+  loop: [kubectl, crictl, ctr]

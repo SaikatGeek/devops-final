@@ -3,9 +3,11 @@
 #   1. build a node image and the Ansible controller image
 #   2. start the "nodes" (cp1, worker1, worker2) on a test network that plays the VPC
 #   3. run site.yml twice; the second run must change nothing (idempotency)
-#   4. check the result with tests/verify.yml and with real connections through UFW
+#   4. check the result with tests/verify.yml, with real connections through UFW, and in
+#      the k3s cluster the playbook built (nodes, system pods, the fetched kubeconfig)
 #   5. remove everything again
-# Needs only Docker. Run it from shoplite-app/: bash ansible/tests/run.sh
+# Needs only Docker and internet access (k3s binary, system images). About 5 minutes.
+# Run it from shoplite-app/: bash ansible/tests/run.sh
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -18,7 +20,7 @@ KEYS=shoplite-ansible-test-keys # docker volume with the test SSH key
 LOGS=$(mktemp -d)
 
 remove_containers() {
-  for n in $NODES; do docker rm -f "shoplite-test-$n" >/dev/null 2>&1 || true; done
+  for n in $NODES; do docker rm -f -v "shoplite-test-$n" >/dev/null 2>&1 || true; done
   docker network rm "$NET" >/dev/null 2>&1 || true
   docker volume rm "$KEYS" >/dev/null 2>&1 || true
 }
@@ -41,10 +43,16 @@ controller() {
 step "starting the nodes on $SUBNET"
 docker network create --subnet "$SUBNET" "$NET" >/dev/null
 docker volume create "$KEYS" >/dev/null
+# containerd's overlayfs snapshotter cannot sit on the container's own overlay filesystem,
+# so k3s's data folders are (anonymous) volumes, like in k3s's own container image.
+# A private cgroup namespace makes systemd and the kubelet inside see the same cgroup paths
+# (Docker's default on cgroup v2 hosts; on cgroup v1 the kubelet fails without it).
 for n in $NODES; do
-  docker run -d --name "shoplite-test-$n" --hostname "$n" --privileged --network "$NET" \
+  docker run -d --name "shoplite-test-$n" --hostname "$n" --privileged --cgroupns=private \
+    --network "$NET" -v /var/lib/rancher/k3s -v /var/lib/kubelet \
     shoplite/ansible-test-node >/dev/null
 done
+CP_IP=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$NET\").IPAddress}}" shoplite-test-cp1)
 controller ssh-keygen -q -t ed25519 -N '' -f /keys/id_ed25519
 PUBKEY=$(controller cat /keys/id_ed25519.pub)
 for n in $NODES; do
@@ -58,8 +66,18 @@ for n in $NODES; do
      chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys && chmod 600 /home/ubuntu/.ssh/authorized_keys'
 done
 
-# The test network plays the VPC; deploy gets the same test key.
-EXTRA=$(printf '{"vpc_cidr": "%s", "hardening_deploy_public_key": "%s"}' "$SUBNET" "$PUBKEY")
+# The test network plays the VPC; deploy gets the same test key. The kubeconfig goes to the
+# keys volume (it must survive between the two runs for the idempotency check) and points
+# at cp1 directly, because the test has no SSM port forward.
+# Docker Desktop on WSL2's default kernel runs cgroup v1, which Kubernetes 1.35+ refuses
+# unless told otherwise; the EC2 nodes run cgroup v2 and need nothing (group_vars).
+KUBELET_ARGS='[]'
+if [ "$(docker info --format '{{.CgroupVersion}}')" = "1" ]; then
+  KUBELET_ARGS='["fail-cgroupv1=false"]'
+  echo "note: this Docker host runs cgroup v1; the test nodes' kubelets get fail-cgroupv1=false"
+fi
+EXTRA=$(printf '{"vpc_cidr": "%s", "hardening_deploy_public_key": "%s", "kubeconfig_dest": "/keys/kubeconfig", "kubeconfig_server": "https://%s:6443", "k3s_kubelet_args": %s}' \
+  "$SUBNET" "$PUBKEY" "$CP_IP" "$KUBELET_ARGS")
 
 step "first run of site.yml"
 controller ansible-playbook -i tests/inventory.ini site.yml -e "$EXTRA" >"$LOGS/run1.log" 2>&1 ||
@@ -82,11 +100,11 @@ grep -E '^(cp1|worker1|worker2) +:' "$LOGS/verify.log"
 
 step "real connections through UFW (worker1 -> cp1)"
 docker exec -d shoplite-test-cp1 nc -lk 7777
-docker exec -d shoplite-test-cp1 nc -lk 10250
 sleep 1
+# cp1's kubelet listens on 10250.
 docker exec shoplite-test-worker1 nc -z -w 3 shoplite-test-cp1 10250 ||
   fail "10250 from inside the VPC should be open"
-echo "ok    10250/tcp from inside the VPC reaches cp1"
+echo "ok    10250/tcp (kubelet) from inside the VPC reaches cp1"
 if docker exec shoplite-test-worker1 nc -z -w 3 shoplite-test-cp1 7777; then
   fail "7777 is not allowed and should be blocked"
 fi
@@ -105,5 +123,28 @@ if controller ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o PubkeyAuthenti
 fi
 echo "ok    a login without a key is refused"
 
+step "the k3s cluster, behind UFW"
+kubectl_cp() { docker exec shoplite-test-cp1 k3s kubectl "$@"; }
+kubectl_cp get nodes -o wide
+kubectl_cp -n kube-system rollout status deployment/coredns --timeout=300s >/dev/null ||
+  fail "CoreDNS did not start: pods cannot run or pull images"
+echo "ok    CoreDNS runs (pods start, images are pulled)"
+# metrics-server (a pod) reads every node's kubelet on 10250: pod network and UFW rules
+# across nodes work. The HPA of question 5 needs exactly this.
+nodes_with_metrics() { kubectl_cp top nodes --no-headers 2>/dev/null | grep -vc '<unknown>' || true; }
+for _ in $(seq 36); do
+  [ "$(nodes_with_metrics)" -eq "$(echo $NODES | wc -w)" ] && break
+  sleep 5
+done
+kubectl_cp top nodes || true
+[ "$(nodes_with_metrics)" -eq "$(echo $NODES | wc -w)" ] || fail "metrics-server could not read every node"
+echo "ok    metrics-server reads CPU and memory of every node"
+
+step "the fetched kubeconfig works (used from worker1)"
+controller cat /keys/kubeconfig | docker exec -i shoplite-test-worker1 sh -c 'cat > /tmp/kubeconfig'
+docker exec shoplite-test-worker1 k3s kubectl --kubeconfig /tmp/kubeconfig get nodes --no-headers |
+  grep -c ' Ready ' | grep -qx "$(echo $NODES | wc -w)" || fail "the fetched kubeconfig does not reach the cluster"
+echo "ok    the kubeconfig from the kubeconfig role reaches the API at $CP_IP:6443"
+
 echo
-echo "PASS: hardening applied, idempotent and verified on $(echo $NODES | wc -w) nodes"
+echo "PASS: hardening and k3s applied, idempotent and verified on $(echo $NODES | wc -w) nodes"

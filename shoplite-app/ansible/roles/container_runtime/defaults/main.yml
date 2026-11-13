@@ -1,0 +1,24 @@
+# Question 4g "install the container runtime". k3s ships its own containerd inside the k3s
+# binary (PLAN decision: k3s), so this role prepares the kernel for containerd and the pod
+# network and installs the pinned k3s binary. k3s_server and k3s_agent then start it, and
+# tasks/verify.yml checks afterwards that containerd runs and prints its version.
+
+container_runtime_k3s_version: "{{ k3s_version }}"
+
+# Kernel modules, and the path that exists once the module's feature is available. Built-in
+# features (no module to load) are detected by that path, so modprobe only runs when needed.
+container_runtime_kernel_modules:
+  - name: overlay # containerd's overlayfs snapshotter
+    present_if: /sys/module/overlay
+  - name: br_netfilter # lets iptables see traffic between pods on the same bridge
+    present_if: /proc/sys/net/bridge
+
+container_runtime_sysctls:
+  net.ipv4.ip_forward: 1 # nodes route pod traffic
+  net.bridge.bridge-nf-call-iptables: 1
+  net.bridge.bridge-nf-call-ip6tables: 1
+
+# Release assets per CPU architecture (EC2 t3 is x86_64).
+container_runtime_k3s_assets:
+  x86_64: { binary: k3s, checksums: sha256sum-amd64.txt }
+  aarch64: { binary: k3s-arm64, checksums: sha256sum-arm64.txt }

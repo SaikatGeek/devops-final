@@ -1,0 +1,5 @@
+# The k3s agents (workers) of question 4g join the server of the control_plane group.
+
+k3s_agent_server_host: "{{ groups['control_plane'][0] }}"
+# The server's private address; Ansible gathered it in an earlier play of site.yml.
+k3s_agent_server_url: "https://{{ hostvars[k3s_agent_server_host].ansible_default_ipv4.address }}:6443"

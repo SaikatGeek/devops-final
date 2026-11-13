@@ -1,0 +1,10 @@
+# The k3s server (control plane) of question 4g. The binary comes from container_runtime.
+
+# Packaged components k3s should not install. Traefik comes from its own Helm chart in
+# question 5d (PLAN decision), so the same Traefik setup runs on k3s and on EKS.
+k3s_server_disable:
+  - traefik
+
+# Extra names or addresses the API certificate must be valid for. 127.0.0.1 (the SSM port
+# forward, see the kubeconfig role) and the node's own address are always included by k3s.
+k3s_server_tls_sans: []

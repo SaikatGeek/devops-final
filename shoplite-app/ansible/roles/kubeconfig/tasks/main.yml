@@ -1,0 +1,18 @@
+- name: Read k3s's admin kubeconfig on the control plane
+  ansible.builtin.slurp:
+    src: /etc/rancher/k3s/k3s.yaml
+  register: kubeconfig_file
+  no_log: true # contains the admin's client key
+
+- name: Write it on the Ansible machine with the API address kubectl will use
+  ansible.builtin.copy:
+    content: "{{ kubeconfig_file.content | b64decode | replace('https://127.0.0.1:6443', kubeconfig_server) }}"
+    dest: "{{ kubeconfig_dest }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Show where the kubeconfig is
+  ansible.builtin.debug:
+    msg: "export KUBECONFIG={{ kubeconfig_dest }}   (API: {{ kubeconfig_server }})"

@@ -1,0 +1,9 @@
+# Managed by Ansible (role k3s_agent). Read by `k3s agent` at start.
+server: {{ k3s_agent_server_url }}
+token: {{ k3s_agent_token }}
+{% if k3s_kubelet_args %}
+kubelet-arg:
+{% for arg in k3s_kubelet_args %}
+  - {{ arg }}
+{% endfor %}
+{% endif %}
