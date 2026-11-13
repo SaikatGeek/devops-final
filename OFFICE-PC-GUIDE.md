@@ -181,12 +181,12 @@ docker compose down --remove-orphans
 docker compose up -d --build --wait && sh scripts/smoke-test.sh
 ```
 
-শেষে `[smoke] PASS` দেখা গেলে সব ঠিক। Port 80 ব্যস্ত থাকলে আগে `.env`-এ `WEB_PORT=127.0.0.1:8088` যোগ করো (`.env.example` দেখে)।
+শেষে `[smoke] PASS` দেখা গেলে সব ঠিক। Port 80 ব্যস্ত থাকলে আগে `.env`-এ `WEB_PORT=127.0.0.1:8088` যোগ করো (`.env.example` দেখে)। দুই PC-তেই port 80 ব্যস্ত (অফিসে Apache, বাসায় Laravel Herd), তাই দুই জায়গার `.env`-এই এই লাইন আছে।
 
 4. `devops-final` folder-এ Claude Code খোলো আর বলো:
 
 ```text
-CLAUDE.md আর PROGRESS.md পড়ো। তারপর 4.7b শুরু করো।
+CLAUDE.md আর PROGRESS.md পড়ো। তারপর PROGRESS.md-এর "পরের কাজ"-এর প্রথম step শুরু করো।
 ```
 
 Claude-এর memory এক PC থেকে আরেক PC-তে যায় না। কাজের জন্য দরকারি সব কিছু `CLAUDE.md` আর `PROGRESS.md`-তে লেখা থাকে, তাই এতে কিছু হারায় না।

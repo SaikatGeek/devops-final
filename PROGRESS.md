@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-12, Q4 step 4.7a-এর পরে। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-13, Q4 step 4.7b-এর পরে (বাসার PC)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -17,7 +17,7 @@
 | Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
-| Q4 | Terraform, Ansible | 17 | 🟡 Terraform-এর সব step (4.1–4.6) শেষ; Ansible-এর প্রথম ভাগ (4.7a: hardening) শেষ; বাকি 4.7b (k3s), 4.7c (lab-এর সংযোগ), 4.8; চালানো lab-এ |
+| Q4 | Terraform, Ansible | 17 | 🟡 Terraform-এর সব step (4.1–4.6) শেষ; Ansible-এর 4.7a (hardening) আর 4.7b (k3s cluster) শেষ, local-এ ৩টা node-এ রিহার্সাল করা; বাকি 4.7c (lab-এর সংযোগ), 4.8; চালানো lab-এ |
 | Q5 | Kubernetes, Helm | 15 | ⬜ শুধু `init.sql` chart-এর জায়গায় রাখা আছে |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | ⬜ |
@@ -196,8 +196,8 @@ AWS-এর credential শুধু lab-এ থাকে। তাই এখা�
 | 4.5 | `ecr` module: তিনটা image repo | (e), (f) | ✅ `9e1c75e` |
 | 4.6 | `terraform/q3-server`: Q3-এর EC2 | Q3-এর server | ✅ `5a0b220` |
 | 4.7a | Ansible-এর ভিত আর `hardening` role (Q3-এর 3.1, 3.2, 3.4 প্রতিটা node-এ) | (g) | ✅ `4f4a286` |
-| 4.7b | `container_runtime`, `k3s_server`, `k3s_agent`, `kubeconfig` role | (g) | ⬜ পরের কাজ |
-| 4.7c | Lab-এর সংযোগ: SSM-এর ভেতর দিয়ে SSH (node-এ key), inventory, ECR থেকে image টানা | (c), (g) | ⬜ |
+| 4.7b | `container_runtime`, `k3s_server`, `k3s_agent`, `kubeconfig` role | (g) | ✅ `f862f1d` |
+| 4.7c | Lab-এর সংযোগ: SSM-এর ভেতর দিয়ে SSH (node-এ key), inventory, ECR থেকে image টানা | (c), (g) | ⬜ পরের কাজ |
 | 4.8 | Lab-এ চালানোর পদ্ধতি | সব | ⬜ |
 
 **Step 4.1-এ কী হলো**
@@ -320,6 +320,48 @@ Q3-এর server-ও Terraform দিয়ে বানানো হবে, ক
 - deploy key দিয়ে ঢুকতে পারে; root আর key ছাড়া login প্রত্যাখ্যাত।
 - ইচ্ছা করে প্রতিবার "changed" দেখানো একটা task ঢোকালে `run.sh` fail করে।
 
+**Step 4.7b-এ কী হলো** (`ansible/roles/`, বাসার PC-তে)
+- **`container_runtime`:** k3s-এর containerd থাকে k3s binary-র ভেতরেই (PLAN-এর সিদ্ধান্ত)। তাই প্রশ্নের "install the container runtime" মানে এখানে:
+  - Kernel module `overlay` আর `br_netfilter`। কোনোটা আগে থেকে থাকলে modprobe চলে না। Reboot-এর পরেও load হয় (`/etc/modules-load.d/k3s.conf`)।
+  - Sysctl: `net.ipv4.ip_forward`, `net.bridge.bridge-nf-call-iptables`, `net.bridge.bridge-nf-call-ip6tables`, তিনটাই 1।
+  - Pin করা k3s binary (`v1.37.2+k3s1`), GitHub release থেকে। Release-এর checksum ফাইলের sha256 না মিললে বসে না। Download ধীর হলে 60 সেকেন্ড অপেক্ষা, ৩ বার পর্যন্ত আবার চেষ্টা।
+  - `kubectl`, `crictl`, `ctr` k3s-এর দিকে link।
+  - `tasks/verify.yml`: k3s চালু হওয়ার পরে containerd-কে version জিজ্ঞেস করে ছাপায় (রিহার্সালে `containerd 2.3.7-k3s1`)।
+- **`k3s_server`:**
+  - `/etc/rancher/k3s/config.yaml`: k3s-এর নিজের Traefik বন্ধ, pod আর service network, kubeconfig শুধু root পড়তে পারে। ফাইলটার mode `0600`।
+  - systemd unit, k3s-এর install script যেমন লেখে তেমন।
+  - চালু করে অপেক্ষা করে: API-র `/readyz`, join token তৈরি হওয়া, node `Ready`।
+- **`k3s_agent`:**
+  - Join token প্রতিবার চলমান server থেকে পড়ে; কখনো Git-এ যায় না।
+  - Server-এর private IP আর token config-এ (`0600`)।
+  - Join করে, control-plane থেকে দেখে node `Ready` হওয়া পর্যন্ত অপেক্ষা করে।
+- **`kubeconfig`:** control-plane-এর `/etc/rancher/k3s/k3s.yaml` আনে Ansible চালানো machine-এ, `ansible/kubeconfig`-এ (`0600`, Git-এ যায় না)। API-র ঠিকানা `https://127.0.0.1:6443`, কারণ kubectl চলবে SSM port-forward দিয়ে (4.7c)।
+- **`site.yml`:** hardening → container_runtime → k3s_server → k3s_agent → containerd যাচাই → kubeconfig। একটা node fail করলে পুরো run থামে (`any_errors_fatal`)।
+- **`.gitignore`:** `kubeconfig*` pattern `roles/kubeconfig` folder-কেও লুকিয়ে ফেলছিল; role-টা আলাদা করে ফিরিয়ে আনা হয়েছে।
+
+**যাচাই** (`bash ansible/tests/run.sh`; বাসার PC-তে প্রায় ১০ মিনিট, বেশিটা download):
+- প্রথম run-এ তিন node-ই সফল (cp1-এ `changed=21`, worker-এ `changed=20`)। দ্বিতীয় run-এ তিনটাতেই `changed=0`।
+- `verify.yml` তিন node-এ pass:
+  - kernel setting, k3s-এর version, config ফাইলের mode `0600`, service চালু;
+  - তিনটা node `Ready`;
+  - k3s-এর নিজের Traefik নেই, CoreDNS আর metrics-server আছে।
+- UFW চালু অবস্থাতেই cluster কাজ করে:
+  - CoreDNS চলে, মানে pod চলে আর image নামে।
+  - metrics-server তিন node-এরই CPU আর memory পড়ে। এর জন্য pod থেকে অন্য node-এর kubelet-এ (10250) পৌঁছাতে হয়। Q5-এর HPA এর ওপর নির্ভর করে।
+- আনা kubeconfig দিয়ে অন্য machine থেকে API-তে পৌঁছানো যায় (test-এ worker1 থেকে)।
+- রিহার্সালে ধরা পড়ে ঠিক হওয়া সমস্যা:
+  - GitHub download-এর 10 সেকেন্ডের timeout।
+  - cp1 fail করার পরেও worker-রা join করতে এগোচ্ছিল।
+  - এই PC-র Docker-এর cgroup v1 (section 10)।
+  - `.gitignore` role লুকাচ্ছিল।
+- নতুন cluster check-গুলো ইচ্ছা করে ভাঙিয়ে দেখা হয়নি, কারণ প্রতিটা run-এ ১০ মিনিট লাগে। তবে development-এর সময় সেগুলো সত্যিকারের ভুল ধরেছে: node register না হওয়া, version না পাওয়া।
+
+**Lab-এ বাকি (4.7c, 4.8):** SSM-এর ভেতর দিয়ে SSH, lab-এর inventory, ECR থেকে image টানা; তারপর আসল EC2-তে চালানো, `kubectl get nodes`-এ ৩টা `Ready`-এর screenshot।
+
+**Q5-এর জন্য মনে রাখতে হবে:**
+- k3s-এর `servicelb` চালু আছে। Traefik-এর Service `LoadBalancer` হলে servicelb node-এর 80/443 port দখল করবে, তাই Traefik-এর chart-এ Service type `NodePort` (30080/30081) দিতে হবে।
+- ALB থেকে NodePort-এর traffic UFW-এর ভেতর দিয়ে আসে কিনা lab-এ দেখতে হবে। Forward policy ACCEPT থাকায় আসার কথা।
+
 ## 6. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -340,6 +382,7 @@ Q3-এর server-ও Terraform দিয়ে বানানো হবে, ক
 | `9e1c75e` | 2026-11-12 | Q4 step 4.5: ecr module (তিনটা image repo) |
 | `5a0b220` | 2026-11-12 | Q4 step 4.6: q3-server (Q3-এর EC2, নিজের ছোট VPC-তে) |
 | `4f4a286` | 2026-11-12 | Q4 step 4.7a: Ansible-এর ভিত আর hardening role |
+| `f862f1d` | 2026-11-13 | Q4 step 4.7b: k3s-এর role (container runtime, server, agent, kubeconfig) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -360,10 +403,14 @@ devops-final/
 │   │   ├── firewall/ufw.sh               deny incoming; শুধু 22, 80, 443
 │   │   └── evidence/commands.md          lab-এর command, প্রত্যাশিত output, screenshot-এর তালিকা
 │   ├── ansible/                          Q4 (g)
-│   │   ├── site.yml, ansible.cfg         playbook (এখন: hardening)
+│   │   ├── site.yml, ansible.cfg         playbook: hardening → k3s → kubeconfig
 │   │   ├── requirements.txt, .yml        pin করা ansible-core আর collection
 │   │   ├── group_vars/                   VPC, cluster-এর port, control-plane-এর 6443
 │   │   ├── roles/hardening/              Q3-এর 3.1, 3.2, 3.4 প্রতিটা node-এ
+│   │   ├── roles/container_runtime/      kernel module, sysctl, pin করা k3s binary (containerd সহ)
+│   │   ├── roles/k3s_server/             control-plane: config, systemd unit, Traefik বন্ধ
+│   │   ├── roles/k3s_agent/              worker: server থেকে token নিয়ে join
+│   │   ├── roles/kubeconfig/             admin kubeconfig Ansible-এর machine-এ আনা
 │   │   └── tests/                        ৩টা local node-এ রিহার্সাল (run.sh, verify.yml)
 │   ├── terraform/                        Q4
 │   │   ├── bootstrap/                    state-এর S3 bucket (একবার, account প্রতি)
@@ -461,7 +508,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/terraform:/tf" -w /tf hashicorp
 
 `bootstrap`-এর জন্য একই command, শুধু `-chdir=bootstrap` যোগ করে। সব ফাইলের format দেখতে: `fmt -check -recursive`।
 
-Ansible-এর রিহার্সাল (শুধু Docker লাগে; ৩টা node, দুইবার run, যাচাই, শেষে সব মোছে), `shoplite-app` থেকে:
+Ansible-এর রিহার্সাল (Docker আর internet লাগে; ৩টা node-এ hardening আর k3s, দুইবার run, যাচাই, শেষে সব মোছে; ৫–১০ মিনিট), `shoplite-app` থেকে:
 
 ```bash
 bash ansible/tests/run.sh
@@ -533,6 +580,13 @@ bash ansible/tests/run.sh
 - **Node-এর UFW-এ k3s-এর pod আর service network থেকে সব খোলা।** একই node-এর pod যখন node-এর IP-তে যায় (kubelet, node-exporter, API), তখন source থাকে pod-এর IP, VPC-র নয়। k3s-এর docs-এ UFW-এর জন্য এটাই বলা। NodePort-এর traffic forward হয়, তাই forward policy ACCEPT। এটা README-র deviation log-এ যাবে।
 - **`host_key_checking = False`।** Node প্রতি lab session-এ নতুন, আর পৌঁছানো হয় SSM দিয়ে, যা instance-এর পরিচয় নিজেই যাচাই করে।
 - **Ansible-এর test-এর ব্যবস্থা repo-তে (`ansible/tests/`)।** Product-এর অংশ নয়, তবে service-এর test-এর মতোই code-এর test; পরের role যোগ হলে আবার চালানো যাবে।
+- **k3s বসে সরাসরি release থেকে, install script দিয়ে নয়।** Binary-র checksum মেলানো হয়, আর systemd unit Ansible-এর template। Script প্রতিবার internet থেকে নতুন code চালাত; এখন প্রতিটা ফাইল চেনা, আর দ্বিতীয় run-এ কিছুই বদলায় না।
+- **k3s `v1.37.2+k3s1`** (13 Nov-এর stable channel, Kubernetes 1.37)। Server আর agent-এর version এক জায়গায়, `group_vars/k3s_cluster.yml`-এ।
+- **Container runtime হলো k3s-এর ভেতরের containerd।** আলাদা containerd package নেই। `container_runtime` role kernel প্রস্তুত করে, binary বসায়, আর k3s চালুর পরে containerd-এর version যাচাই করে। README-র deviation log-এ যাবে।
+- **Join token Git-এ নেই।** k3s প্রথম চালুর সময় নিজেই বানায়, agent প্রতিবার চলমান server থেকে পড়ে। যে config ফাইলে token থাকে, সেটা শুধু root পড়তে পারে।
+- **একটা node fail করলে পুরো playbook থামে** (`any_errors_fatal`)। অর্ধেক তৈরি cluster আসল error ঢেকে দেয়; যেমন রিহার্সালে cp1-এর download fail করার পরেও worker-রা join করতে গিয়েছিল।
+- **kubeconfig-এর API ঠিকানা `https://127.0.0.1:6443`।** Node-এর public IP নেই; kubectl চলবে SSM port-forward দিয়ে, আর k3s-এর certificate 127.0.0.1-এর জন্য বৈধ।
+- **`k3s_kubelet_args` lab-এ ফাঁকা।** শুধু রিহার্সাল এতে `fail-cgroupv1=false` দেয়, যখন Docker host cgroup v1-এ চলে।
 
 ## 10. জানা বিষয়
 
@@ -558,18 +612,27 @@ bash ansible/tests/run.sh
 - **Windows থেকে mount করা folder world-writable দেখায়, তখন Ansible সেই folder-এর `ansible.cfg` উপেক্ষা করে।** তাই `run.sh` `ANSIBLE_CONFIG` env দিয়ে ফাইলটা স্পষ্ট করে দেয়।
 - **UFW বন্ধ থাকা অবস্থায় `ufw` module default policy বদলালে প্রথমবার "changed" দেখায়।** UFW চালু হওয়ার পরের run-এ আর দেখায় না, তাই idempotency-র পরীক্ষা হয় দ্বিতীয় run-এ।
 - **Mock হলেও provider ARN-এর আকার যাচাই করে** (যেমন listener-এর `load_balancer_arn`)। তাই test-এ load balancer আর target group-কে `mock_resource` দিয়ে বৈধ আকারের ARN দিতে হয়। প্রতিটা instance-কে আলাদা মান দিতে `override_resource { target = res["key"] }` চলে (Terraform 1.17)।
+- **বাসার PC (repo `E:\Personal\devops-final`-এ):**
+  - Port 80 ধরে আছে Laravel Herd-এর nginx (user-এর নিজের, ছোঁয়া হয় না)। তাই এখানকার `.env`-এও `WEB_PORT=127.0.0.1:8088`, page http://127.0.0.1:8088।
+  - Docker Desktop চলে **cgroup v1**-এ (WSL2 kernel 5.15)।
+- **Kubernetes 1.35 থেকে kubelet cgroup v1-এ চলতে অস্বীকার করে।** Error: `kubelet is configured to not run on a host using cgroup v1`। এর সাথে আরেকটা সমস্যা: host-এর cgroup namespace-এ থাকলে container-এর ভেতরের systemd আর kubelet cgroup-এর আলাদা path দেখে (`cgroup ["kubepods"] has some missing paths`)। তাই রিহার্সালে:
+  - Node container পায় `--cgroupns=private`। cgroup v2 host-এ এটা Docker-এর default।
+  - Host cgroup v1 হলে kubelet পায় `fail-cgroupv1=false`।
+
+  Lab-এর EC2 cgroup v2-তে চলে, সেখানে এর কিছুই লাগে না।
+- **containerd-এর overlayfs container-এর নিজের overlay filesystem-এর ওপর চলে না।** তাই রিহার্সালের node-এ `/var/lib/rancher/k3s` আর `/var/lib/kubelet` Docker volume, k3s-এর নিজের image-এর মতো। `docker rm -v` সেগুলোও মোছে।
+- **`tests/verify.yml` `ansible/group_vars` নিজে থেকে পড়ে না,** কারণ playbook আর inventory দুটোই `tests/`-এ। তাই `vars_files` দিয়ে একই ফাইল পড়ে।
+- **`.gitignore`-এর pattern code-ও লুকাতে পারে।** `kubeconfig*` role-এর folder লুকিয়েছিল, অথচ রিহার্সাল pass করছিল, কারণ রিহার্সাল চলে disk থেকে, Git থেকে নয়। নতুন folder যোগ হলে `git status`-এ সব ফাইল আসছে কিনা দেখতে হয়।
+- **বাসার PC-তে GitHub থেকে download ধীর।** k3s binary (~70 MB) তিন node-এ নামতে কয়েক মিনিট লাগে; `get_url`-এর default 10 সেকেন্ডের timeout এতে ভেঙেছিল।
+- **Windows-এর `python` (Microsoft Store-এর alias) shell থেকে চালালে আটকে থাকে।** JSON বা অন্য কিছু পড়তে Docker-এর `python:3.12-alpine` ব্যবহার করো।
 
 ## 11. পরের কাজ
 
-**পরের session বাসার PC-তে (12 Nov রাত):** আগে [OFFICE-PC-GUIDE.md](OFFICE-PC-GUIDE.md)-এর section ৯ ধরে PC প্রস্তুত করো (`git pull`, পুরনো container সরানো, smoke test), তারপর 4.7b।
-
-1. **Q4 step 4.7b: k3s-এর role** (`ansible/roles/`, project.md 4g)। থাকবে:
-   - **`container_runtime`:** kernel module আর sysctl। k3s-এর ভেতরের containerd চালু আছে কিনা যাচাই, version ছাপানো।
-   - **`k3s_server`:** pin করা k3s version। k3s-এর নিজের Traefik বন্ধ (PLAN: Traefik আসবে আলাদা chart দিয়ে)। Join-এর token।
-   - **`k3s_agent`:** worker token দিয়ে control-plane-এ join করবে।
-   - **`kubeconfig`:** kubeconfig local-এ আনা, server-এর ঠিকানা বদলে, যাতে SSM port-forward দিয়ে চলে।
-   - **রিহার্সাল:** `ansible/tests/run.sh` বাড়িয়ে, local container-এ k3s চালিয়ে; লক্ষ্য `kubectl get nodes`-এ ৩টা Ready আর দ্বিতীয় run-এ `changed=0`।
-2. তারপর **4.7c:** lab-এর সংযোগ। SSM-এর ভেতর দিয়ে SSH; এর জন্য node-এ SSH key লাগবে, তাই Terraform-এ key pair যোগ হবে। সাথে lab-এর inventory, আর ECR থেকে image টানার জন্য kubelet-এর ECR credential provider।
-3. তারপর 4.8: lab-এ চালানোর পদ্ধতি (section 5-এর table)।
-4. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে।
-5. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
+1. **Q4 step 4.7c: lab-এর সংযোগ** (project.md 4c, 4g)। থাকবে:
+   - **SSM-এর ভেতর দিয়ে SSH:** Ansible node-এ পৌঁছাবে `ssh`-এর `ProxyCommand`-এ `aws ssm start-session --document-name AWS-StartSSHSession` দিয়ে। এর জন্য node-এ SSH key লাগবে, তাই Terraform-এর compute module-এ key pair যোগ হবে (public key আসবে `TF_VAR_` দিয়ে)।
+   - **Lab-এর inventory:** Terraform output থেকে (instance id, private IP), group `control_plane` আর `workers`। `vpc_cidr`-ও output থেকে।
+   - **kubectl-এর পথ:** SSM port-forward (`AWS-StartPortForwardingSession`), local 6443 → control-plane-এর 6443। এটা kubeconfig-এর `127.0.0.1:6443`-এর সাথে মেলে।
+   - **ECR থেকে image টানা:** kubelet-এর ECR credential provider, node-এর IAM role দিয়ে (role-এ `AmazonEC2ContainerRegistryPullOnly` আগেই আছে)।
+2. তারপর 4.8: lab-এ চালানোর পদ্ধতি (section 5-এর table)।
+3. তারপর Q5-এর Helm chart, Q6-এর dashboard, alert আর runbook, Q7-এর workflow, সবই নিজের PC-তে। Q5-এ section 5-এর "Q5-এর জন্য মনে রাখতে হবে" দেখো (Traefik `/ping`, NodePort, servicelb)।
+4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)। Q3-এর জন্য `linux/evidence/commands.md` ধরে চালাতে হবে, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
