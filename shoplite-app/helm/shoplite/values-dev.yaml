@@ -1,0 +1,18 @@
+# Development (namespace shoplite-dev; ALB port 8080). ArgoCD syncs it automatically
+# (question 7). Lighter than prod: it shares the cluster with prod and the monitoring stack.
+environment: dev
+
+web:
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 64Mi }
+
+catalogApi:
+  resources:
+    requests: { cpu: 25m, memory: 96Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+
+orderWorker:
+  resources:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits: { cpu: 250m, memory: 256Mi }

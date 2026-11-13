@@ -1,0 +1,50 @@
+# order-worker: processes the queued orders (question 5.1: Deployment with a CPU-based HPA
+# of 1 to 4 replicas, and a termination grace period long enough to finish an order).
+# No `replicas` here: the HPA owns the replica count, and a fixed number in Git would make
+# ArgoCD and the HPA fight over it.
+{{- $c := dict "component" "order-worker" "root" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-worker
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "shoplite.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shoplite.labels" $c | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      # SIGTERM stops taking new orders; the ones in hand are finished first.
+      terminationGracePeriodSeconds: {{ .Values.orderWorker.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "shoplite.podSecurityContext" (dict "uid" 10001 "gid" 10001) | nindent 8 }}
+      containers:
+        - name: order-worker
+          image: {{ include "shoplite.image" $c }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "shoplite.containerSecurityContext" . | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: shoplite-config
+          env:
+            - name: SERVICE_NAME
+              value: order-worker
+            {{- include "shoplite.databaseCredentials" . | nindent 12 }}
+          ports:
+            # /healthz and /metrics (question 6)
+            - name: metrics
+              containerPort: 8001
+          livenessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.orderWorker.resources | nindent 12 }}

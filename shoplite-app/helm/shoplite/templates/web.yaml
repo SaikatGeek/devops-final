@@ -1,0 +1,56 @@
+# web: the static page on nginx (question 5.1: Deployment, two replicas, Ingress path /).
+{{- $c := dict "component" "web" "root" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      {{- include "shoplite.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shoplite.labels" $c | nindent 8 }}
+    spec:
+      securityContext:
+        {{- include "shoplite.podSecurityContext" (dict "uid" 101 "gid" 101) | nindent 8 }}
+      containers:
+        - name: web
+          image: {{ include "shoplite.image" $c }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "shoplite.containerSecurityContext" . | nindent 12 }}
+          env:
+            # web's own /api/ proxy. nginx's resolver ignores DNS search domains, so the
+            # name must be complete.
+            - name: API_UPSTREAM
+              value: "catalog-api.{{ .Release.Namespace }}.svc.cluster.local:8000"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  selector:
+    {{- include "shoplite.selectorLabels" $c | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

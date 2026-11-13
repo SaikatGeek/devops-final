@@ -1,0 +1,71 @@
+# Defaults of the ShopLite chart. values-dev.yaml and values-prod.yaml change what differs
+# per environment; shoplite-gitops (envs/<env>/values.yaml) sets the image tag CI built.
+
+# Name of the environment (dev, prod); goes into the traces as deployment.environment.
+environment: dev
+
+# Images of the three ShopLite services: <registry>/shoplite/<service>:<tag>.
+# The defaults fit images built locally (docker compose build); in the lab the registry
+# is the ECR registry (terraform output ecr_registry) and the tag is CI's short Git SHA.
+image:
+  registry: ""
+  tag: local
+  pullPolicy: IfNotPresent
+
+# Settings of catalog-api and order-worker (ConfigMap shoplite-config).
+config:
+  logLevel: INFO
+  postgresDb: shoplite
+  # Tempo's OTLP/HTTP address (question 6). Empty: spans are created (trace_id in every
+  # log line) but not exported.
+  otlpEndpoint: ""
+  # Fault injection of question 1.5, for the Q8 exercise. All off.
+  chaos:
+    latencyMs: 0
+    errorRate: 0
+    memoryLeak: false
+    slowDb: false
+
+# Database credentials (question 5b). The chart never contains them: this Secret, with the
+# keys POSTGRES_USER and POSTGRES_PASSWORD, is created in the namespace before the chart is
+# installed (docs/evidence/q5/commands.md), so no plain-text secret is ever in Git.
+database:
+  existingSecret: shoplite-db
+
+web:
+  replicas: 2
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { cpu: 200m, memory: 64Mi }
+
+catalogApi:
+  replicas: 2
+  resources:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+orderWorker:
+  # Orders one worker pod processes at the same time.
+  concurrency: 4
+  # Long enough to finish the orders in hand after SIGTERM (each takes 1-2 s, or about
+  # 6 s with the slow-database fault on).
+  terminationGracePeriodSeconds: 30
+  resources:
+    requests: { cpu: 100m, memory: 96Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+postgres:
+  image: postgres:16-alpine
+  # PersistentVolumeClaim of the StatefulSet. Empty storageClassName: the cluster's
+  # default class (k3s: local-path).
+  storage: 1Gi
+  storageClassName: ""
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+redis:
+  image: redis:7.4-alpine
+  resources:
+    requests: { cpu: 25m, memory: 32Mi }
+    limits: { cpu: 200m, memory: 128Mi }

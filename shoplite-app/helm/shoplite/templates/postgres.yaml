@@ -1,0 +1,104 @@
+# postgres (question 5.1: StatefulSet with a PersistentVolumeClaim, and an initialization
+# script that seeds the products). The script is files/init.sql, the same file Docker
+# Compose uses; PostgreSQL runs it on the first start with an empty data folder.
+{{- $c := dict "component" "postgres" "root" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+data:
+  01-init.sql: |-
+    {{- .Files.Get "files/init.sql" | nindent 4 }}
+---
+# Headless: gives the StatefulSet's pod a stable DNS name; clients connect to "postgres".
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "shoplite.selectorLabels" $c | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "shoplite.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shoplite.labels" $c | nindent 8 }}
+    spec:
+      # The image's own postgres user (uid/gid 70 in the alpine image), not root.
+      securityContext:
+        {{- include "shoplite.podSecurityContext" (dict "uid" 70 "gid" 70 "fsGroup" 70) | nindent 8 }}
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "shoplite.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: shoplite-config
+                  key: POSTGRES_DB
+            {{- include "shoplite.databaseCredentials" . | nindent 12 }}
+            # A subfolder: the root of a new volume is not empty (e.g. lost+found on EBS),
+            # and initdb only starts in an empty folder.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "shoplite.labels" $c | nindent 10 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.postgres.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage }}

@@ -1,0 +1,8 @@
+apiVersion: v2
+name: shoplite
+description: >-
+  ShopLite on Kubernetes (question 5): web, catalog-api, order-worker, PostgreSQL and
+  Redis in one chart. One release per environment and namespace (shoplite, shoplite-dev).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

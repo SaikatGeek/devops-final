@@ -1,0 +1,22 @@
+# Application settings of catalog-api and order-worker (question 5b). Both read them as
+# environment variables. Their pod templates carry this file's checksum, so a changed
+# setting (e.g. a fault-injection flag in Q8) rolls the pods.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shoplite-config
+  labels:
+    {{- include "shoplite.labels" (dict "component" "config" "root" .) | nindent 4 }}
+data:
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: {{ .Values.config.postgresDb | quote }}
+  REDIS_URL: redis://redis:6379/0
+  WORKER_CONCURRENCY: {{ .Values.orderWorker.concurrency | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otlpEndpoint | quote }}
+  OTEL_RESOURCE_ATTRIBUTES: {{ printf "deployment.environment=%s" .Values.environment | quote }}
+  CHAOS_LATENCY_MS: {{ .Values.config.chaos.latencyMs | quote }}
+  CHAOS_ERROR_RATE: {{ .Values.config.chaos.errorRate | quote }}
+  CHAOS_MEMORY_LEAK: {{ .Values.config.chaos.memoryLeak | quote }}
+  CHAOS_SLOW_DB: {{ .Values.config.chaos.slowDb | quote }}

@@ -1,0 +1,66 @@
+# catalog-api: the REST API (question 5.1: Deployment, at least two replicas, liveness
+# /healthz, readiness /readyz, PodDisruptionBudget, Ingress path /api).
+{{- $c := dict "component" "catalog-api" "root" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-api
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  replicas: {{ .Values.catalogApi.replicas }}
+  selector:
+    matchLabels:
+      {{- include "shoplite.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shoplite.labels" $c | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        {{- include "shoplite.podSecurityContext" (dict "uid" 10001 "gid" 10001) | nindent 8 }}
+      containers:
+        - name: catalog-api
+          image: {{ include "shoplite.image" $c }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "shoplite.containerSecurityContext" . | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: shoplite-config
+          env:
+            - name: SERVICE_NAME
+              value: catalog-api
+            {{- include "shoplite.databaseCredentials" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8000
+          # Liveness: the process answers. Readiness: PostgreSQL and Redis answer too, so
+          # traffic only goes to pods that can serve it.
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.catalogApi.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-api
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  selector:
+    {{- include "shoplite.selectorLabels" $c | nindent 4 }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

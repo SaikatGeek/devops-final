@@ -1,0 +1,56 @@
+# redis: the queue orders:pending (question 5.1: Deployment, ClusterIP Service only).
+{{- $c := dict "component" "redis" "root" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "shoplite.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shoplite.labels" $c | nindent 8 }}
+    spec:
+      # The image's own redis user (uid 999, gid 1000 in the alpine image), not root.
+      securityContext:
+        {{- include "shoplite.podSecurityContext" (dict "uid" 999 "gid" 1000) | nindent 8 }}
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "shoplite.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "shoplite.selectorLabels" $c | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
