@@ -1,0 +1,83 @@
+# Values for ArgoCD's own Helm chart (argo-cd 10.11.6, ArgoCD v3.5.6). shoplite-app's
+# scripts/bootstrap-cluster.sh installs ArgoCD with them, once per new cluster; ArgoCD then
+# builds everything else from Git (bootstrap/root-app.yaml).
+
+# No domain: the ALB's DNS name changes with every lab session, so the Ingress below has no
+# host rule and answers on any name.
+global:
+  domain: ""
+
+configs:
+  params:
+    # Plain HTTP behind Traefik and the ALB (no domain, so no certificate), under the
+    # ALB's /argocd path (PLAN). Still password protected: the admin user's password is
+    # in the cluster (Secret argocd-initial-admin-secret), never in Git.
+    server.insecure: true
+    server.basehref: /argocd
+    server.rootpath: /argocd
+  cm:
+    # Look at Git every 60 s (PLAN), without the default extra random delay.
+    timeout.reconciliation: 60s
+    timeout.reconciliation.jitter: 0s
+    # Health of Applications, so the root app's sync waves really wait: Traefik (wave 0)
+    # must be Healthy before ShopLite (wave 1) is synced. ArgoCD's documented snippet.
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil then
+        if obj.status.health ~= nil then
+          hs.status = obj.status.health.status
+          if obj.status.health.message ~= nil then
+            hs.message = obj.status.health.message
+          end
+        end
+      end
+      return hs
+    # Health of Ingresses. ArgoCD calls an Ingress healthy only when its controller writes a
+    # load balancer address into it. Traefik sits behind a NodePort and the ALB comes from
+    # Terraform, so that address never appears and every app would stay "Progressing".
+    resource.customizations.health.networking.k8s.io_Ingress: |
+      hs = {}
+      hs.status = "Healthy"
+      hs.message = "Routed by Traefik; the ALB in front comes from Terraform, so no load balancer status is set"
+      return hs
+
+# Not used: single sign-on (the admin user logs in) and notifications.
+dex:
+  enabled: false
+notifications:
+  enabled: false
+
+server:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      # Traefik's web entrypoint: the ALB's port 80 (NodePort 30080).
+      traefik.ingress.kubernetes.io/router.entrypoints: web
+    path: /argocd
+    pathType: Prefix
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+controller:
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 1000m, memory: 768Mi }
+
+repoServer:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 1000m, memory: 512Mi }
+
+applicationSet:
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+
+redis:
+  resources:
+    requests: { cpu: 25m, memory: 32Mi }
+    limits: { cpu: 250m, memory: 128Mi }
