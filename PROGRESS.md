@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-14, Q7 step 7.1-এর পরে (বাসার PC)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-15 ভোর, Q7 step 7.2-এর মাঝখানে (বাসার PC থেকে অফিসের PC-তে হস্তান্তর)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -20,7 +20,7 @@
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। বাকি 5.4 (lab-এর পদ্ধতি) আর lab-এ চালানো |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
-| Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 শেষ (root app, dev আর prod-এর Application, `envs` values); বাকি 7.2 (bootstrap, ArgoCD), 7.3 (GitHub OIDC), 7.4 (pipeline-এর প্রথম সংস্করণ), তারপর Q7-এর বাকি অংশ |
+| Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 শেষ (root app, dev আর prod-এর Application, `envs` values); 7.2 (bootstrap, ArgoCD)-এর code push করা, রিহার্সাল একবার পুরো pass করা বাকি (section 7, 13); তারপর 7.3 (GitHub OIDC), 7.4 (pipeline-এর প্রথম সংস্করণ), তারপর Q7-এর বাকি অংশ |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
 
@@ -494,7 +494,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | Step | কাজ | প্রশ্নের অংশ | অবস্থা |
 |---|---|---|---|
 | 7.1 | shoplite-gitops-এর কাঠামো: root app, dev আর prod-এর Application, `envs` values | (c) | ✅ `b3b00a0` |
-| 7.2 | Cluster-এর bootstrap: namespace, DB-র Secret, pin করা ArgoCD, root app; ArgoCD ALB-র `/argocd`-এ; local রিহার্সাল (ArgoCD Git থেকে sync করে) | (c), (d) | ⬜ পরের কাজ |
+| 7.2 | Cluster-এর bootstrap: namespace, DB-র Secret, pin করা ArgoCD, root app; ArgoCD ALB-র `/argocd`-এ; local রিহার্সাল (ArgoCD Git থেকে sync করে) | (c), (d) | 🟡 code `7adece6`; রিহার্সাল একবার পুরো pass করা বাকি (section 13) |
 | 7.3 | Terraform-এ GitHub OIDC: CI-এর IAM role, শুধু তিনটা ECR repo-তে push | (a) | ⬜ |
 | 7.4 | Pipeline-এর প্রথম সংস্করণ: build → OIDC দিয়ে ECR-এ push → gitops-এ tag commit | (a) | ⬜ |
 | পরে | Q7-এর বাকি: lint (Hadolint, `helm lint`), test, Trivy, PR pipeline, Terraform plan-এর comment, prod-এ তোলার workflow, self-heal-এর প্রমাণ | (a), (b), (d) | ⬜ |
@@ -519,6 +519,44 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
   - dev বসে `dev` entrypoint-এ, prod বসে `web`-এ।
   - Prod-এ একটা chaos flag চালু করলে ConfigMap-এর checksum বদলায়, তাই sync-এ pod নতুন হয়।
 - kubeconform v0.8.0 `-strict` দিয়ে চারটা Application (root, traefik, dev, prod) ArgoCD-র Application CRD-এর schema-য় বৈধ। ইচ্ছা করে একটা field-এর বানান ভুল করলে বাতিল করে।
+
+**Step 7.2-এ কী হলো** (এখন পর্যন্ত; code `7adece6`, রিহার্সাল একবার পুরো pass করা বাকি)
+- **`shoplite-app/scripts/bootstrap-cluster.sh`:** নতুন cluster-এ একবার চলে, lab-এর machine থেকে। `kubectl` আর `helm` লাগে; kubeconfig চলে SSM tunnel দিয়ে; shoplite-gitops পাশে থাকতে হবে (নইলে `SHOPLITE_GITOPS_DIR`)। ক্রমে:
+  1. namespace `shoplite` (prod) আর `shoplite-dev`;
+  2. প্রতিটায় Secret `shoplite-db` (`POSTGRES_USER=shoplite`, random password)। Secret আগে থাকলে রেখে দেয়, কারণ Postgres প্রথম চালুর password-ই রাখে; তাই আবার চালানো নিরাপদ।
+  3. ArgoCD, তার নিজের Helm chart থেকে, pin করা (chart 10.11.6 = ArgoCD v3.5.6), values shoplite-gitops থেকে;
+  4. root app। এরপর বাকি সব ArgoCD Git থেকে বসায়।
+
+  কোনো secret Git-এ বা screen-এ যায় না। Admin-এর password থাকে cluster-এর Secret `argocd-initial-admin-secret`-এ; কীভাবে পড়তে হয়, script শেষে বলে দেয়।
+- **`shoplite-gitops/bootstrap/argocd-values.yaml`:** ArgoCD-র setting (PLAN অনুযায়ী):
+  - ALB-র `/argocd` path-এ, Traefik-এর `web` entrypoint দিয়ে (port 80)। Host-এর নিয়ম নেই, কারণ ALB-র DNS নাম প্রতি session-এ বদলায়। Domain নেই বলে certificate নেই, তাই ArgoCD চলে plain HTTP-তে (`server.insecure`); login ছাড়া কিছু দেখা যায় না।
+  - Git দেখে প্রতি 60 সেকেন্ডে।
+  - Application-এর health check (ArgoCD-র docs-এর Lua): root app Traefik (wave 0) Healthy হওয়া পর্যন্ত অপেক্ষা করে, তারপর ShopLite (wave 1)।
+  - Ingress-এর health check: রিহার্সালে পাওয়া সমস্যার সমাধান (নিচে)।
+  - Dex (SSO) আর notifications বন্ধ; প্রতিটা অংশে requests আর limits।
+- **রিহার্সাল `shoplite-app/scripts/tests/bootstrap-cluster.sh`**, সাথে তিনটা ফাইল:
+  - `gitserver.Dockerfile` আর `gitserver-nginx.conf`: test-এর Git server (nginx + `git http-backend`), যা দুই folder-কে দুটো repo হিসেবে HTTP-তে দেখায়, GitHub-এর মতো।
+  - `tools.Dockerfile`: lab-এর machine-এ যা লাগে (bash, kubectl, helm)।
+
+  Test-এর gitops copy-তে শুধু GitHub-এর URL test server-এর দিকে ঘোরানো হয়, আর `envs`-এ image tag `local` লেখা হয়, CI যেমন লিখবে।
+
+**যাচাই, এখন পর্যন্ত** (বাসার PC, 15 Nov ভোর, রিহার্সালের তৃতীয় run):
+- ✅ Test-এর Git server-এ clone আর `ls-remote` চলে; k3s-এর network থেকেও পৌঁছায়।
+- ✅ ArgoCD-র Ingress render হয় host ছাড়া, `/argocd` Prefix, port 80।
+- ✅ `bootstrap-cluster.sh` চলে: namespace, দুই Secret, ArgoCD-র সব pod, root app। দ্বিতীয়বার চালালে দুই Secret অপরিবর্তিত থাকে।
+- ✅ ArgoCD test server থেকে root পড়ে, Traefik নিজে থেকে Synced Healthy হয়।
+- ✅ Sync wave সত্যিই অপেক্ষা করে। Traefik available হয় 20:02:23Z-এ, তার Application Healthy হয় 20:02:56Z-এ, আর ঠিক তখনই dev আর prod-এর Application তৈরি হয়।
+- ✅ dev নিজে থেকে Synced হয় (automated), সব pod Running।
+- ✅ prod OutOfSync থাকা অবস্থাতেই root-এর sync শেষ হয় ("successfully synced (all tasks run)")। শেষ wave-এর health-এর জন্য root অপেক্ষা করে না।
+- ✅ prod OutOfSync Missing, namespace `shoplite`-এ কিছু বসেনি।
+- ✅ `/argocd` দিয়ে admin login চলে (API token পাওয়া গেছে)।
+- 🐞 রিহার্সালে পাওয়া তিনটা সমস্যা আর তাদের সমাধান:
+  1. **Ingress-এর health।** ArgoCD Ingress-কে Healthy বলে শুধু তখন, যখন controller তাতে load balancer-এর ঠিকানা লেখে। Traefik NodePort-এর পেছনে আর ALB Terraform-এর, তাই ঠিকানা কখনো আসে না। ফলে dev, prod আর root চিরকাল "Progressing" থাকত, lab-এও। সমাধান: `argocd-values.yaml`-এ Ingress-এর health check। চলমান cluster-এ একই Lua বসিয়ে দেখা হয়েছে: dev আর root সাথে সাথে Synced Healthy।
+  2. **রিহার্সালের repo %TEMP%-এ ছিল।** বাসার PC-তে 02:05:10-এ কিছু একটা %TEMP%-এর সব খালি folder মুছে দেয়, তার মধ্যে bare repo-র `refs/`-ও। তখন ArgoCD পায় `repository not found`। সমাধান: repo এখন Git server-এর container-এর ভেতরে তৈরি হয়।
+  3. **`/argocd` page-এর পরীক্ষা ভুল ছিল।** ArgoCD `<base href="/argocd/">` লেখে শুধু browser-এর request-এ (`Accept: text/html`)। curl পেয়েছিল আসল ফাইল (`<base href="/">`), তাই পরীক্ষা ভুল করে fail করেছিল। সমাধান: পরীক্ষা এখন `Accept: text/html` পাঠায়।
+
+  আর wave-এর পরীক্ষা এখন Middleware CRD তৈরির সময়ের সাথে মেলায়, Traefik-এর pod-এর সাথে নয় (কারণ section 12-এ)।
+- ⏳ এখনো একবারও চলেনি (পরের রিহার্সালে দেখতে হবে): তিন সমাধানসহ পুরো run; `/argocd`-এর page আর login ছাড়া 401; API দিয়ে prod-এর manual sync; দুই NodePort-এ order `COMPLETED`; dev-এ self-heal আর prod-এ বদল থেকে যাওয়া।
 
 ## 8. Commit-এর তালিকা
 
@@ -548,6 +586,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | `14e4bd0` | 2026-11-14 | Q5 step 5.2: PDB, HPA, Ingress; Traefik-এর ArgoCD Application (shoplite-gitops) |
 | `f367f76` | 2026-11-14 | Q5 step 5.3: Postgres আর Redis-এর NetworkPolicy |
 | `b3b00a0` | 2026-11-14 | Q7 step 7.1: shoplite-gitops-এর root app, dev আর prod-এর Application, `envs` values |
+| `7adece6` | 2026-11-15 | Q7 step 7.2 (চলমান): bootstrap script, ArgoCD-র values, GitOps-এর রিহার্সাল |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -560,6 +599,8 @@ devops-final/
 │   ├── docker-compose.yml                ৫টা component: web, catalog-api, order-worker, postgres, redis
 │   ├── Makefile                          build, up, down, test, smoke
 │   ├── scripts/smoke-test.sh             stack চালু → readyz → order → COMPLETED
+│   ├── scripts/bootstrap-cluster.sh      নতুন cluster-এ একবার: namespace, DB-র Secret, ArgoCD, root app (Q7, 7.2)
+│   ├── scripts/tests/                    bootstrap-এর রিহার্সাল: local k3s, test-এর Git server, lab machine-এর tools
 │   ├── .env.example                      local-এর setting (WEB_PORT সহ); আসল .env Git-এ যায় না
 │   ├── helm/shoplite/                    Q5-এর chart: Chart.yaml, values.yaml, values-dev.yaml, values-prod.yaml
 │   │   ├── files/init.sql                table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
@@ -617,7 +658,8 @@ devops-final/
 │           ├── http_server.py            :8001 /healthz, /metrics
 │           └── tracing.py, logging_setup.py, config.py, order_queue.py
 └── shoplite-gitops/                      ArgoCD-র desired state (শেষে আলাদা repo)
-    ├── bootstrap/root-app.yaml           root Application ("app of apps"), একবার হাতে বসে
+    ├── bootstrap/argocd-values.yaml      ArgoCD-র setting: /argocd, Git দেখা ৬০ সেকেন্ডে, Application-এর health
+    ├── bootstrap/root-app.yaml           root Application ("app of apps"), bootstrap একবার বসায়
     ├── apps/                             traefik (wave 0), shoplite-dev (auto-sync, self-heal), shoplite-prod (manual)
     └── envs/                             dev/values.yaml (CI লেখে image tag), prod/values.yaml (tag, Q8-এর flag)
 ```
@@ -685,6 +727,12 @@ Helm chart-এর রিহার্সাল (Docker আর internet লাগ�
 
 ```bash
 bash helm/tests/run.sh
+```
+
+GitOps-এর রিহার্সাল (Docker আর internet লাগে; local k3s-এ `scripts/bootstrap-cluster.sh` চালায়, তারপর ArgoCD নিজে Traefik, dev আর prod বসায়; যাচাই করে, শেষে সব মোছে; প্রায় ১৫ মিনিট), `shoplite-app` থেকে:
+
+```bash
+bash scripts/tests/bootstrap-cluster.sh
 ```
 
 Ansible-এর রিহার্সাল (Docker আর internet লাগে; ৩টা node-এ hardening আর k3s, দুইবার run, যাচাই, শেষে সব মোছে; ৫–১০ মিনিট), `shoplite-app` থেকে:
@@ -790,6 +838,14 @@ bash ansible/tests/run.sh
 - **অনুমতি শুধু একই namespace-এর pod-কে** (`namespaceSelector` নেই)। তাই dev আর prod একই cluster-এ থাকলেও একে অপরের database-এ পৌঁছাতে পারে না।
 - **ECR-এর credential আসে kubelet-এর credential provider থেকে, pull secret থেকে নয়।** ECR-এর token ১২ ঘণ্টায় শেষ হয়, তাই secret বারবার বদলাতে হতো। Plugin প্রতিবার node-এর role দিয়ে নতুন token নেয়, আর কিছু কোথাও জমা থাকে না।
 - **`k3s_kubelet_args` lab-এ ফাঁকা।** শুধু রিহার্সাল এতে `fail-cgroupv1=false` দেয়, যখন Docker host cgroup v1-এ চলে।
+- **ArgoCD-র values shoplite-gitops-এর `bootstrap/argocd-values.yaml`-এ।** PLAN-এর উদাহরণ ধরে এটা Claude-এর প্রস্তাব; user চাইলে অন্য জায়গায় নেওয়া যায়। এতে cluster-এর সব desired state এক repo-তে থাকে, bootstrap script শুধু ফাইলটা পড়ে।
+- **ArgoCD chart 10.11.6 (ArgoCD v3.5.6), pin করা।** তখনকার release-গুলোর মধ্যে দুই সপ্তাহের বেশি পুরনো সর্বশেষটা।
+- **DB-র Secret bootstrap বানায়, আগে থাকলে রেখে দেয়।** Postgres প্রথম চালুর password data-তে রেখে দেয়; নতুন password দিলে app আর ঢুকতে পারত না।
+- **ArgoCD `/argocd`-এ, host ছাড়া, plain HTTP-তে।** ALB-র DNS নাম প্রতি session-এ বদলায়, আর domain বা certificate নেই। Login ছাড়া API 401 দেয়; admin-এর password শুধু cluster-এ থাকে।
+- **Application-এর health check চালু (PLAN)।** ArgoCD 1.8 থেকে Application-এর health নিজে দেখে না; তখন wave শুধু ক্রম ঠিক করত, অপেক্ষা করত না। শেষ wave-এর জন্য root অপেক্ষা করে না, তাই prod OutOfSync থাকলেও root-এর sync শেষ হয় (রিহার্সালে দেখা)।
+- **Ingress-এর health check ArgoCD-তে, সবসময় Healthy।** Traefik NodePort-এর পেছনে, ALB Terraform-এর, তাই Ingress-এ load balancer-এর ঠিকানা কখনো আসে না। এটা ছাড়া প্রতিটা app চিরকাল "Progressing" দেখাত। README-র deviation log-এ যাবে।
+- **রিহার্সালে prod-এর manual sync ArgoCD-র API দিয়ে** (`POST /argocd/api/v1/applications/shoplite-prod/sync`, admin-এর token দিয়ে)। UI-র Sync button ঠিক এটাই পাঠায়; lab-এ sync হবে UI থেকে।
+- **রিহার্সালের Git server-এর IP স্থির (172.30.0.10), আর repo থাকে তার container-এর ভেতরে।** k3s-এর CoreDNS Docker-এর container-এর নাম চেনে না। আর host-এর %TEMP%-এ রাখা repo বাসার PC-র কোনো cleaner ভেঙে দিয়েছিল (section 12)।
 
 ## 12. জানা বিষয়
 
@@ -840,27 +896,35 @@ bash ansible/tests/run.sh
   - `--query`: `jmespath` দিয়ে, API-র আকারের নমুনা data-য়।
   - Argument-এর syntax: credential ছাড়া চালিয়ে। শুধু `Unable to locate credentials`-এ থামলে syntax ঠিক।
   - Script দুটো scratchpad-এ ছিল; দরকার হলে আবার লেখা সহজ।
+- **Script-এ `export MSYS_NO_PATHCONV=1` থাকলে Windows-এর `git.exe` `/tmp/...` path বোঝে না** (`fatal: cannot change to '/tmp/...'`)। Docker-এর জন্য এই variable দরকার, তাই git চালাও folder-এ ঢুকে, relative path দিয়ে, অথবা container-এর ভেতরে।
+- **Docker Desktop বন্ধ থাকলে** (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`) PowerShell থেকে চালু করা যায়: `Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"`। তারপর `docker info` সাড়া দেওয়া পর্যন্ত অপেক্ষা করো (প্রায় এক মিনিট)। Bash-এর background process দিয়ে চালু হয়নি।
+- **বাসার PC-তে কিছু একটা %TEMP%-এর খালি folder মুছে দেয়** (15 Nov 02:05:10-এ দেখা)। Git repo-র খালি `refs/` folder চলে গেলে git সেটাকে আর repo মানে না। তাই রিহার্সালের repo container-এর ভেতরে।
+- **Traefik-এর প্রথম sync-এর পরে ArgoCD ৩০–৪৫ সেকেন্ড ComparisonError দেখায়:** `unable to resolve parseableType for GroupVersionKind: traefik.io/v1alpha1, Kind=IngressRoute`। ServerSideApply-এর diff নতুন CRD-এর schema চায়, যা ArgoCD-র cache-এ তখনো আসেনি; নিজে থেকেই চলে যায়। ওই সময় app দেখায় "Unknown Healthy", তাই root তখন wave 1-এ চলে যেতে পারে। CRD তখন থাকেই, তাই ক্ষতি নেই; কিন্তু রিহার্সালের wave-এর পরীক্ষা এজন্য Traefik-এর pod-এর বদলে CRD তৈরির সময় দেখে।
+- **ArgoCD 3-এ resource-এর health Application-এর CR-এ থাকে না** (`.status.resources[*].health` ফাঁকা)। কোন resource Healthy নয়, দেখতে API লাগে: `/argocd/api/v1/applications/<name>/resource-tree`, admin-এর token দিয়ে (`POST /argocd/api/v1/session`)। অথবা UI।
+- **ArgoCD-র page curl দিয়ে চাইলে `<base href="/">` আসে।** `/argocd` base বসে শুধু browser-এর request-এ (`Accept: text/html`)।
 
 ## 13. পরের কাজ
 
-Q5-এর code শেষ (section 6); GitOps-এর ভিতের 7.1 শেষ (section 7)। এরপর:
+Q5-এর code শেষ (section 6); GitOps-এর ভিতের 7.1 শেষ, 7.2-এর code push করা (section 7)। এরপর:
 
-1. **Q7 step 7.2: cluster-এর bootstrap আর ArgoCD** (PLAN Phase 6-এর ধাপ ২ আর ৪)।
-   - `scripts/bootstrap-cluster.sh` (shoplite-app), lab-এর machine থেকে kubeconfig আর tunnel দিয়ে চলবে:
-     - namespace `shoplite` আর `shoplite-dev`;
-     - প্রতিটায় DB-র Secret `shoplite-db`, random password, Git-এ কখনো নয়;
-     - ArgoCD, pin করা version, তার নিজের Helm chart দিয়ে। Values কোথায় থাকবে (যেমন shoplite-gitops-এর `bootstrap/`), শুরুতে ঠিক করতে হবে।
-     - শেষে root app।
-   - ArgoCD-র setting:
-     - ALB-র `/argocd` path-এ (Traefik-এর `web` entrypoint), password সহ।
-     - Reconciliation 60 সেকেন্ড।
-     - Application-এর health check চালু, যাতে sync wave সত্যিই Traefik-এর জন্য অপেক্ষা করে।
-   - **যাচাই, local রিহার্সাল** (k3s, Docker-এ):
-     - একটা local git server এই দুই folder-কে দুটো repo হিসেবে দেখাবে। Application-গুলোর URL test-এ সেদিকে ঘোরানো হবে।
-     - bootstrap চালালে root → Traefik → dev নিজে থেকে Synced আর Healthy হয়।
-     - prod OutOfSync থাকে, যতক্ষণ না হাতে sync করা হয়।
-     - dev-এ `kubectl` দিয়ে কিছু বদলালে ArgoCD সেটা ফিরিয়ে আনে (self-heal, Q7d)।
-     - `/argocd` NodePort-এ খোলে।
+1. **Q7 step 7.2 শেষ করা** (অফিসের PC-তে প্রথম কাজ)।
+   1. Docker Desktop চালু করো, `devops-final` থেকে `git pull`।
+   2. রিহার্সাল চালাও, `shoplite-app` থেকে, background-এ, output একটা ফাইলে। প্রায় ১৫ মিনিট লাগে, প্রথমবার ArgoCD-র image নামাতে আরও বেশি:
+
+      ```bash
+      bash scripts/tests/bootstrap-cluster.sh
+      ```
+
+      শেষে `PASS` দেখতে হবে।
+   3. যা এখনো একবারও চলেনি, সেগুলোয় বিশেষ নজর দাও:
+      - 15 Nov-এর শেষ চারটা বদল: repo container-এর ভেতরে, CRD দিয়ে wave-এর পরীক্ষা, `Accept: text/html`, values-এ Ingress-এর health check;
+      - `/argocd`-এর page আর login ছাড়া 401;
+      - API দিয়ে prod-এর manual sync;
+      - দুই NodePort-এ order `COMPLETED`;
+      - dev-এ self-heal, আর prod-এ বদল থেকে যাওয়া।
+
+      Fail করলে কারণ খুঁজে ঠিক করো, তারপর আবার চালাও।
+   4. Pass হলে: PROGRESS-এর 7.2 ✅, commit hash, যাচাইয়ের ফল (section 7), CLAUDE.md-র next work; তারপর commit আর push।
 2. তারপর 7.3 (GitHub OIDC-এর Terraform), 7.4 (pipeline-এর প্রথম সংস্করণ), 5.4 (lab-এ Q5-এর পদ্ধতি, ArgoCD দিয়ে)।
 3. তারপর Q6-এর dashboard, alert আর runbook, আর Q7-এর বাকি অংশ, সবই নিজের PC-তে।
 4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।

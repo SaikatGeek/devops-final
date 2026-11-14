@@ -136,8 +136,10 @@ docker compose down
 | ✅ | Q1: application, ৯টা step | হয়ে গেছে |
 | ✅ | Q2: Dockerfile, compose, smoke test, Makefile (`6c68826`) | হয়ে গেছে |
 | ✅ | Q3-এর code: `linux/` folder (`3019a9a`), local-এ রিহার্সাল করা | হয়ে গেছে |
-| 🟡 | Q4: Terraform-এর সব step শেষ (4.1–4.6); Ansible-এর 4.7a (hardening, `4f4a286`) শেষ; পরের step 4.7b (k3s) | যেকোনো PC, Docker |
-| 1 | Q4-এর বাকি step, তারপর Q5 থেকে Q7-এর code (Helm, monitoring, workflow) | যেকোনো PC |
+| ✅ | Q4-এর code: Terraform (4.1–4.6), Ansible (4.7), lab-এর পদ্ধতি (4.8) | হয়ে গেছে |
+| ✅ | Q5-এর code: Helm chart আর Traefik (5.1–5.3) | হয়ে গেছে |
+| 🟡 | Q7-এর GitOps-এর ভিত: 7.1 শেষ; 7.2-এর code push করা, রিহার্সাল আবার চালানো বাকি (PROGRESS section 13) | যেকোনো PC, Docker |
+| 1 | 7.3 (GitHub OIDC), 7.4 (pipeline), 5.4 (Q5-এর lab পদ্ধতি), তারপর Q6 আর Q7-এর বাকি code | যেকোনো PC |
 | 2 | Q3 থেকে Q8 চালানো আর প্রমাণ (Q3: `linux/evidence/commands.md` ধরে) | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
 
 ## ৮. সমস্যা হলে
