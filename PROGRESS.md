@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-15, Q7 step 7.5 শেষ (prod-এ তোলার `promote` workflow)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-15, Q5 step 5.4 শেষ (lab-এ Q5 চালানোর পদ্ধতি); তার আগে Q7 step 7.5 (prod-এ তোলার `promote` workflow)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -18,7 +18,7 @@
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
-| Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। বাকি 5.4 (lab-এর পদ্ধতি) আর lab-এ চালানো |
+| Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। বাকি শুধু lab-এ চালানো |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
 | Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 (root app, dev আর prod-এর Application, `envs` values), 7.2 (cluster-এর bootstrap, ArgoCD; local k3s-এ পুরো রিহার্সাল pass) 7.3 (GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push), 7.4 (main pipeline v1: build → OIDC দিয়ে ECR → gitops-এ tag; local-এ রিহার্সাল, আসল run repo ভাগের পরে) আর 7.5 (`promote`: dev-এর image Git দিয়ে prod-এ) শেষ; এরপর 5.4, তারপর Q7-এর বাকি অংশ |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
@@ -415,7 +415,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | 5.1 | Chart-এর কাঠামো, পাঁচটা workload, Secret আর ConfigMap, local রিহার্সাল | (a), (b), (e) | ✅ `9fa4aeb` |
 | 5.2 | catalog-api-র PDB, order-worker-এর HPA, ALB-র পেছনে Traefik, Ingress `/` আর `/api` | (a), (d) | ✅ `14e4bd0` |
 | 5.3 | NetworkPolicy: Postgres আর Redis-এ শুধু catalog-api আর order-worker | (c) | ✅ `f367f76` |
-| 5.4 | Lab-এ চালানোর পদ্ধতি (`docs/evidence/q5/commands.md`), checkpoint | সব | ⬜ পরের কাজ |
+| 5.4 | Lab-এ চালানোর পদ্ধতি (`docs/evidence/q5/commands.md`), checkpoint | সব | ✅ `04305e8` (lab-এ চালানো বাকি) |
 
 **Step 5.1-এ কী হলো** (`helm/shoplite/`)
 - **পাঁচটা workload, প্রশ্নের table মেনে:**
@@ -481,6 +481,45 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
   - dev-এর catalog-api → prod-এর `postgres.shoplite...` আর `redis.shoplite...`: আটকায়।
 - Order আগের মতোই `COMPLETED`; 5.1 আর 5.2-এর সব check আবার pass (এবার HPA worker ১ থেকে ৩-এ নিয়েছে)।
 - একই `nc` allowed pod থেকে সংযোগ পায় আর web থেকে পায় না। তাই আটকানোটা নিয়মের কারণেই, `nc` বা DNS-এর সমস্যায় নয়।
+
+**Step 5.4-এ কী হলো** (`04305e8`): lab-এ Q5 চালানোর পদ্ধতি, `shoplite-app/docs/evidence/q5/commands.md`, grader-এর জন্য ইংরেজিতে। আগে 7.5 (`promote`) বানানো হয়েছে, যাতে prod Git দিয়েই image পায় (section 7)।
+- **একবারই, প্রথম session-এর আগে (section 0):**
+  - **দুই repo:** `git subtree split` দিয়ে history সহ ভাগ।
+    - shoplite-app-এ force push হবে, তাতে `test.md` বদলে যাবে (user-এর সিদ্ধান্ত)। shoplite-gitops নতুন বানাতে হবে।
+    - দুটোই public, কারণ ArgoCD credential ছাড়া পড়ে।
+    - পরে shoplite-app-এর বদল আবার split করে `--force` ছাড়া push করা যায়। shoplite-gitops বদলাতে হবে তার নিজের clone-এ।
+  - **GitHub-এর setting:**
+    - deploy key, write access সহ, shoplite-gitops-এ;
+    - তার private key shoplite-app-এর secret `GITOPS_DEPLOY_KEY`-এ, তারপর ফাইল দুটো মুছে ফেলা;
+    - `AWS_REGION`, শুধু region আলাদা হলে।
+- **প্রতি session-এ:**
+  1. দুই repo পাশাপাশি clone, তারপর Q4-এর পদ্ধতি 0.2 থেকে 3।
+  2. Helm 4.3.1 (checksum দেখে); GitHub-এ `AWS_ROLE_ARN` আর `LAB_ACTIVE=true`।
+  3. main-এর "Run workflow": ECR-এ image, gitops-এ dev-এর tag। এটা চলতে চলতেই পরের ধাপ।
+  4. `scripts/bootstrap-cluster.sh`: ArgoCD, তারপর ArgoCD নিজে Traefik আর dev বসায়।
+  5. promote-এর "Run workflow", তারপর ArgoCD-র UI-তে shoplite-prod-এ REFRESH → SYNC → SYNCHRONIZE।
+  6. প্রমাণ (a)–(e) আর checkpoint: browser-এ ALB-র URL-এ order `COMPLETED` (ভিডিও V2), আর prod-এর database-এ তার row। মোট ১৯টা screenshot।
+  7. শেষে `LAB_ACTIVE=false`, তারপর Q4-এর destroy।
+- **Q4-এর পদ্ধতি:** clone-এর ধাপ এখন দুই repo clone করে। ভাগের আগে devops-final।
+
+**যাচাই** (AWS আর GitHub ছাড়া):
+- ✅ নতুন `ubuntu:24.04`-এ Helm-এর block: checksum `OK`, `helm version` v4.3.1। নষ্ট ফাইলে checksum fail করে।
+- ✅ দুটো `aws` command credential ছাড়া থামে শুধু `Unable to locate credentials`-এ (AWS CLI 2.40.3)। দুটো `--query` jmespath 1.0.1-এ নমুনা ডেটায় ঠিক ফল দেয়।
+- ✅ **Repo ভাগ**, একটা container-এ monorepo-র clone আর দুটো bare repo নিয়ে ("GitHub"; shoplite-app-এ placeholder `test.md`):
+  - ৬৩টা commit থেকে shoplite-app পায় ২৮টা (12 Nov থেকে), shoplite-gitops পায় ৬টা, এক সেকেন্ডে।
+  - force push-এর পরে `test.md` আর তার commit নেই। দুই repo-র main split branch-এর সাথে মেলে।
+  - একই split আবার করলে একই commit আসে। পরের একটা বদল `--force` ছাড়াই push হয় (fast-forward)।
+- ✅ **kubectl-এর command:** GitOps রিহার্সালের একটা copy (cleanup বন্ধ, self-heal-এর ধাপ বাদ) local k3s-এ ArgoCD বসিয়েছে। ArgoCD নিজে Traefik, dev আর prod বসিয়েছে।
+  - পদ্ধতির section 5 আর 6-এর সব bash block markdown থেকে হুবহু তুলে "lab machine"-এ (bash, kubectl, helm, curl) চালানো হয়েছে। প্রতিটার output লেখার সাথে মেলে:
+    - পাঁচটা workload, HPA `cpu: 5%/70%` (1–4), probe `/healthz` আর `/readyz`, PDB, grace period 30;
+    - PVC `Bound`, ১২টা product;
+    - সব pod-এ requests আর limits; uid 10001, 101, 70, 999, কোথাও 0 নয়;
+    - Secret-এর শুধু key আর byte; ConfigMap; Secret-এর reference;
+    - NetworkPolicy: catalog-api আর order-worker খোলা, web বন্ধ (web → catalog-api খোলা), dev → prod-এর database বন্ধ;
+    - `/ping` 200; `helm lint` দুই values-এ; Application-এর chart আর values ফাইল;
+    - database-এ order `COMPLETED`।
+  - Section 3 আর 4-এর kubectl-এর check-ও চলেছে (dev-এর curl NodePort 30081-এ)। শেষে container, network আর অস্থায়ী ফাইল মোছা হয়েছে।
+- ⏳ Lab-এ চালানো: GitHub-এর দুই workflow, ArgoCD-র UI, ALB, browser-এর checkpoint। আর ALB থেকে NodePort-এ যাওয়া UFW-এর routed allow পার হয় কিনা।
 
 ## 7. Q7: CI/CD আর GitOps
 
@@ -711,6 +750,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | `e23bf34` | 2026-11-15 | Q7 step 7.4: main pipeline v1 (build, OIDC দিয়ে ECR, gitops-এ tag), `update-gitops.sh`, pipeline-এর রিহার্সাল |
 | `2e538cc` | 2026-11-15 | Q7 step 7.4: pipeline-এ "Run workflow" বোতাম (`workflow_dispatch`), রিহার্সালে trigger-এর check |
 | `7d4076a` | 2026-11-15 | Q7 step 7.5: `promote` workflow (dev-এর image Git দিয়ে prod-এ), রিহার্সালে দুই workflow |
+| `04305e8` | 2026-11-15 | Q5 step 5.4: lab-এ Q5 চালানোর পদ্ধতি (repo ভাগ, GitHub-এর setting, pipeline, bootstrap, promote, প্রমাণ) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -734,6 +774,7 @@ devops-final/
 │   │   └── templates/                    web, catalog-api (+ PDB), order-worker (+ HPA), postgres, redis, ingress, networkpolicy, configmap, _helpers
 │   ├── helm/tests/run.sh                 chart-এর রিহার্সাল: local k3s-এ install, যাচাই, শেষে সব মোছে
 │   ├── docs/evidence/q4/commands.md      Q4 lab-এ চালানোর পদ্ধতি, প্রমাণ আর screenshot-এর তালিকা (screenshot-ও এখানে)
+│   ├── docs/evidence/q5/commands.md      Q5-এর পদ্ধতি: একবার repo ভাগ আর GitHub-এর setting; প্রতি session-এ pipeline, bootstrap, promote, prod-এর sync, প্রমাণ
 │   ├── linux/                            Q3
 │   │   ├── sshd_config                   root আর password login বন্ধ
 │   │   ├── systemd/                      shoplite-backup.service, .timer, .sh (রাতে pg_dump)
@@ -1000,6 +1041,8 @@ bash ansible/tests/run.sh
   - AWS লাগে না, তাই lab machine-এ GitHub-এর credential বা yq লাগে না।
   - prod-এর chaos flag ছোঁয় না; Q8-এর peer-এর commit থাকে।
 - **Repo ভাগের সময় shoplite-app-এর `test.md` বদলে যাবে** (user-এর সিদ্ধান্ত, 15 Nov)। Force push করা হবে `git subtree split`-এর history দিয়ে। GitHub-এর shoplite-app-এ থাকবে শুধু আমাদের code আর তার history।
+- **দুই repo public** (5.4)। ArgoCD-তে repo-র কোনো credential রাখা হয়নি, তাই সে GitHub থেকে credential ছাড়াই পড়ে। Private রাখতে চাইলে ArgoCD-কে একটা read-only deploy key দিতে হবে; সেটা এখন নেই।
+- **প্রতি session-এ promote, তারপর prod-এর sync** (5.4)। ECR প্রতি session-এ খালি থাকে, আর main-এর run শুধু সর্বশেষ commit-এর image push করে। তাই prod-এর পুরনো tag-এর image না-ও থাকতে পারে; promote prod-কে dev-এর tag-এ আনে।
 
 ## 12. জানা বিষয়
 
@@ -1064,17 +1107,11 @@ bash ansible/tests/run.sh
 
 ## 13. পরের কাজ
 
-Q5-এর code শেষ (section 6); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর:
+Q5-এর code আর lab-এর পদ্ধতি শেষ (section 6); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর:
 
-1. **5.4:** lab-এ Q5 চালানোর পদ্ধতি, `docs/evidence/q5/commands.md` (ইংরেজিতে, Q4-এর পদ্ধতির মতো যাচাই করা)। ArgoCD দিয়ে বসবে, image আসবে pipeline দিয়ে। পদ্ধতিতে যা থাকবে:
-   - Repo ভাগ: `SaikatGeek/shoplite-app` (তার `test.md` বদলে যাবে, force push; user-এর সিদ্ধান্ত) আর `SaikatGeek/shoplite-gitops`।
-   - GitHub-এর setting:
-     - shoplite-gitops-এ write access-সহ deploy key, তার private key shoplite-app-এর secret `GITOPS_DEPLOY_KEY`-এ;
-     - variable `AWS_ROLE_ARN` (`terraform output -raw ci_role_arn`), দরকার হলে `AWS_REGION`, আর `LAB_ACTIVE=true`।
-   - প্রতি session-এর শুরুতে ECR খালি থাকে, তাই Actions tab-এর "Run workflow" বোতাম দিয়ে main-এর ওপর pipeline একবার চালাতে হয়। তারপর `scripts/bootstrap-cluster.sh`, `promote`-এর "Run workflow", prod-এর manual sync, প্রমাণ।
-   - Session শেষে `LAB_ACTIVE` বন্ধ।
-2. তারপর Q6-এর dashboard, alert আর runbook, আর Q7-এর বাকি অংশ (lint, test, Trivy, PR pipeline, Terraform plan-এর comment), সবই নিজের PC-তে।
-3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
+1. Q6-এর dashboard, alert আর runbook, আর Q7-এর বাকি অংশ (lint, test, Trivy, PR pipeline, Terraform plan-এর comment), সবই নিজের PC-তে।
+2. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
    - Q4: `docs/evidence/q4/commands.md`।
-   - Q5-এর lab-এর আগে দুই repo আলাদা করতে হবে (section 7)।
+   - Q5: `docs/evidence/q5/commands.md`। তার আগে একবার দুই repo ভাগ আর GitHub-এর setting (ওই ফাইলের section 0)।
+   - ভাগের পরে shoplite-gitops বদলাতে হবে তার নিজের clone-এ, কারণ CI সেখানে commit করে। shoplite-app-এর বদল devops-final থেকে আবার split করে `--force` ছাড়া push করা যায় (fast-forward)।

@@ -24,10 +24,16 @@ Course capstone (Poridhi "Mastering DevOps and AWS", Batch 03), deadline **17 No
 
 ## Repository layout
 
-- `shoplite-app/` and `shoplite-gitops/` are the two repositories the question asks for. They live as subfolders here and will be split out later, so **every path inside them must be relative to that subfolder** (compose, Makefile, CI, Helm). The user's decision (14 Nov): keep working in this monorepo; split into `SaikatGeek/shoplite-app` (exists, holds only a placeholder `test.md`; the user chose on 15 Nov to replace it with a force push of the `git subtree split` history) and `SaikatGeek/shoplite-gitops` (not created yet) at the end, but **before the lab session that runs ArgoCD and the pipeline** (Q5 onward). Write code with those final URLs (`https://github.com/SaikatGeek/shoplite-app.git`, `https://github.com/SaikatGeek/shoplite-gitops.git`); GitHub Actions workflows go in `shoplite-app/.github/workflows/` (the split repo's root). Until the split, Actions and ArgoCD cannot run against GitHub: verify locally (ArgoCD in local k3s from a local git server with the URLs rewritten in the test).
+- `shoplite-app/` and `shoplite-gitops/` are the two repositories the question asks for. They live as subfolders here and will be split out later, so **every path inside them must be relative to that subfolder** (compose, Makefile, CI, Helm). The user's decision (14 Nov): keep working in this monorepo; split into `SaikatGeek/shoplite-app` (exists, holds only a placeholder `test.md`; the user chose on 15 Nov to replace it with a force push of the `git subtree split` history) and `SaikatGeek/shoplite-gitops` (not created yet) at the end, but **before the lab session that runs ArgoCD and the pipeline** (Q5 onward). The split's commands are section 0.1 of `docs/evidence/q5/commands.md`. Both repositories must be public, because ArgoCD reads them without credentials. After the split, a shoplite-app change is published by splitting again and pushing without `--force` (the split is deterministic, so it is a fast-forward). shoplite-gitops is changed in its own clone, because CI commits to it. Write code with those final URLs (`https://github.com/SaikatGeek/shoplite-app.git`, `https://github.com/SaikatGeek/shoplite-gitops.git`); GitHub Actions workflows go in `shoplite-app/.github/workflows/` (the split repo's root). Until the split, Actions and ArgoCD cannot run against GitHub: verify locally (ArgoCD in local k3s from a local git server with the URLs rewritten in the test).
 - Root keeps course docs: `project.md`, `PLAN.md`, `PROGRESS.md`, `architecture-diagram.*`, `OFFICE-PC-GUIDE.md`.
 - Target structure of both repos: `project.md` section 2.1 and `PLAN.md` section 3.
-- Lab procedures, in English for the grader: `shoplite-app/docs/evidence/qN/commands.md` (the steps, what each should show, the screenshot names; the screenshots go in the same folder). Q3's is `linux/evidence/commands.md` because the question names that folder. Q4's (step 4.8) is checked without AWS: its tools block ran on a fresh `ubuntu:24.04`, every `--query` was evaluated with jmespath 1.0.1 on API-shaped samples, and every `aws` command was run without credentials (stopping only at `Unable to locate credentials` means the arguments are valid). Do the same for later ones. No one-command lab script (the question does not ask for one; the user may ask later).
+- Lab procedures, in English for the grader: `shoplite-app/docs/evidence/qN/commands.md` (the steps, what each should show, the screenshot names; the screenshots go in the same folder). Q3's is `linux/evidence/commands.md` because the question names that folder. Q4's (step 4.8) is checked without AWS: its tools block ran on a fresh `ubuntu:24.04`, every `--query` was evaluated with jmespath 1.0.1 on API-shaped samples, and every `aws` command was run without credentials (stopping only at `Unable to locate credentials` means the arguments are valid). Do the same for later ones.
+
+Q5's procedure (step 5.4) was checked the same way, and two more:
+- Its split ran in a container against bare stand-in repositories.
+- Every bash block of its sections 5 and 6, taken verbatim from the markdown, ran from a stand-in lab machine (bash, kubectl, helm, curl). The cluster came from a copy of `scripts/tests/bootstrap-cluster.sh` with the cleanup trap and the self-heal step cut, where ArgoCD had installed Traefik, dev and prod. Remove its containers and network by hand afterwards.
+
+Check later procedures with kubectl blocks the same way. No one-command lab script (the question does not ask for one; the user may ask later).
 
 ## Code conventions already in place (keep them)
 
@@ -175,18 +181,33 @@ Q1 and Q2 are done; Q3's code is done and rehearsed (its screenshots are taken i
 
 **Q4, in steps (PROGRESS section 5):** 4.1 base (state bucket, S3 backend with lock, tags, budget) and 4.2 `modules/network` (VPC 10.0.0.0/16, public 10.0.0.0/24 + 10.0.1.0/24, private 10.0.10.0/24 + 10.0.11.0/24, IGW, one NAT Gateway, outputs `vpc_id`, `vpc_cidr`, `azs`, `public_subnet_ids`, `private_subnet_ids`) and 4.3 `modules/compute` (groups `nodes` with 8472/udp, 10250/tcp, 9100/tcp from itself and `control-plane` with 6443/tcp from `nodes`, no SSH, egress all; role with AmazonSSMManagedInstanceCore + AmazonEC2ContainerRegistryPullOnly; Ubuntu 24.04 control plane t3.medium and 2 workers t3.large round robin over the private subnets, no public IP, IMDSv2 hop 1, encrypted 30 GiB gp3, tags `role`; outputs instance ids, private IPs, `node_security_group_id`) and 4.4 `modules/alb` (internet-facing ALB in the public subnets; listeners 80 → prod NodePort 30080 and 8080 → dev NodePort 30081; instance target groups with the workers, health check `/ping` 200; ALB group 80/8080 in, egress only to `nodes` on the NodePorts; `nodes` accepts the NodePorts only from the ALB; no Route 53 without a domain; outputs `dns_name`, `urls`; root output `app_urls`) are done. Q5 must make Traefik answer `/ping` on the web entrypoint (or change `health_check_path`). 4.5 `modules/ecr` is done too (repositories `shoplite/web`, `shoplite/catalog-api`, `shoplite/order-worker` with `force_delete` only; outputs `repository_urls`, `repository_arns`, `registry`; root outputs `ecr_repository_urls`, `ecr_registry`), so all four modules the question names exist. 4.6 `terraform/q3-server` is done as well (the user chose a small VPC of its own: 10.1.0.0/16, one public subnet, IGW, no NAT; Ubuntu 24.04 t3.medium with a public IP, key pair from `TF_VAR_ssh_public_key`, 20 GiB encrypted disk, IMDSv2; 22, 80, 443 and 8000 only from `TF_VAR_admin_cidr` (/24 or narrower); backend key `q3-server/terraform.tfstate`; `linux/evidence/commands.md` sections 0.1 "Create the server" and "After grading"). 4.7 Ansible is split in three: 4.7a (base and `hardening` role) and 4.7b (`container_runtime`, `k3s_server`, `k3s_agent`, `kubeconfig`; rehearsed: three Ready nodes behind UFW, second run `changed=0`) are done. 4.7c (the lab connection: node key pair, `ansible_inventory` and `kubectl_tunnel` outputs, kubelet's ECR credential provider) and 4.8 (`docs/evidence/q4/commands.md`, the lab procedure and evidence list) are done too: Q4's code is complete; what remains of Q4 is running it in the lab. Lab limits are unknown until the PLAN Phase 3 preflight (the procedure's 0.4 has the fallbacks). No Route 53 record unless the user has a domain.
 
-**Q5, in steps (PROGRESS section 6):** 5.1–5.3 are done: Q5's code is complete. 5.4 (the lab procedure `docs/evidence/q5/commands.md`) comes after the GitOps foundation, because the user chose PLAN's way (14 Nov): in the lab everything is installed by ArgoCD and images reach ECR through the pipeline. Check in the lab that ALB → NodePort passes UFW (routed allow).
+**Q5, in steps (PROGRESS section 6):** 5.1–5.4 are done. Q5's code and its lab procedure `docs/evidence/q5/commands.md` (`04305e8`) are complete. In the lab, everything is installed by ArgoCD and images reach ECR through the pipeline (the user chose PLAN's way, 14 Nov).
+
+The procedure:
+- Once: the split (section 0.1) and the GitHub settings (0.2: the deploy key and its secret, `AWS_REGION` if needed).
+- Every session, in order:
+  1. Q4's procedure 0.2–3, then Helm 4.3.1;
+  2. the variables `AWS_ROLE_ARN` and `LAB_ACTIVE=true`;
+  3. main's "Run workflow";
+  4. `scripts/bootstrap-cluster.sh`;
+  5. promote's "Run workflow", then prod's manual sync in ArgoCD (REFRESH → SYNC);
+  6. the evidence for 5a–5e and the checkpoint (19 screenshots, video V2);
+  7. `LAB_ACTIVE=false` and Q4's destroy at the end.
+
+Promote runs every session: only main's newest images are in the fresh ECR. Check in the lab that ALB → NodePort passes UFW (routed allow).
 
 **Q7's GitOps foundation, in steps (PROGRESS section 7):** 7.1 (shoplite-gitops: root app, dev and prod Applications, `envs` values) and 7.2 (cluster bootstrap, ArgoCD; the GitOps rehearsal passed in full on PC-01, 15 Nov) are done.
 
-7.3 (Terraform `modules/github-oidc`: the CI role, push to the three ECR repositories only, `ac8e1b3`), 7.4 (main pipeline v1, `e23bf34`, with its "Run workflow" button `2e538cc`) and 7.5 (`promote.yml`: dev's image to prod through Git, `7d4076a`) are done too. Both are rehearsed locally; their first real runs come after the split.
+7.3 (Terraform `modules/github-oidc`: the CI role, push to the three ECR repositories only, `ac8e1b3`), 7.4 (main pipeline v1, `e23bf34`, with its "Run workflow" button `2e538cc`) and 7.5 (`promote.yml`: dev's image to prod through Git, `7d4076a`) are done too. The two workflows are rehearsed locally; their first real runs come after the split.
 
 At the split, `SaikatGeek/shoplite-app`'s placeholder `test.md` is replaced: the user chose a force push of the `git subtree split` history (15 Nov).
 
-Next: 5.4, the Q5 lab procedure `docs/evidence/q5/commands.md` (English, checked like Q4's). It covers:
-- the repository split, asking the user before overwriting `test.md`;
-- the GitHub settings (deploy key with write access on shoplite-gitops, secret `GITOPS_DEPLOY_KEY`, variables `AWS_ROLE_ARN`, `AWS_REGION` if needed, `LAB_ACTIVE=true`);
-- one pipeline run per session from the "Run workflow" button on main (ECR starts empty), `scripts/bootstrap-cluster.sh`, then promote's "Run workflow" and prod's manual sync, the evidence;
-- `LAB_ACTIVE` off at the end.
+Next, both on the user's own PC; ask the user which comes first:
+- Q6: monitoring, dashboards, alert rules with severity and `runbook_url`, runbooks (PLAN Phase 7).
+- The rest of Q7:
+  - lint (Hadolint, `helm lint`), tests and the Trivy gate in main;
+  - `pr.yml`;
+  - `terraform-plan.yml`, with a separate read-only role;
+  - self-heal evidence.
 
-Then Q6 and the rest of Q7.
+Then the repository split and the lab sessions Q3 → Q8.
