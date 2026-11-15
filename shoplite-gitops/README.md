@@ -1,6 +1,6 @@
 # shoplite-gitops
 
-Desired state of ShopLite for ArgoCD. GitHub Actions in `shoplite-app` commits new image tags here; ArgoCD syncs the cluster from this repository. Nothing here is applied with `kubectl apply` from CI.
+Desired state of ShopLite for ArgoCD. GitHub Actions in `shoplite-app` commits new image tags here (`scripts/update-gitops.sh`, through a deploy key that can write only to this repository); ArgoCD syncs the cluster from this repository. Nothing here is applied with `kubectl apply` from CI.
 
 ```text
 shoplite-gitops/

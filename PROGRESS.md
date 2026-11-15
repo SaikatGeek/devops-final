@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-15, Q7 step 7.3 শেষ (GitHub OIDC-এর Terraform)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-15, Q7 step 7.4 শেষ (main pipeline-এর প্রথম সংস্করণ)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -20,7 +20,7 @@
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। বাকি 5.4 (lab-এর পদ্ধতি) আর lab-এ চালানো |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
-| Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 (root app, dev আর prod-এর Application, `envs` values), 7.2 (cluster-এর bootstrap, ArgoCD; local k3s-এ পুরো রিহার্সাল pass) আর 7.3 (GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push) শেষ; এরপর 7.4 (pipeline-এর প্রথম সংস্করণ), তারপর Q7-এর বাকি অংশ |
+| Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 (root app, dev আর prod-এর Application, `envs` values), 7.2 (cluster-এর bootstrap, ArgoCD; local k3s-এ পুরো রিহার্সাল pass) 7.3 (GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push) আর 7.4 (main pipeline v1: build → OIDC দিয়ে ECR → gitops-এ tag; local-এ রিহার্সাল, আসল run repo ভাগের পরে) শেষ; এরপর 5.4, তারপর Q7-এর বাকি অংশ |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
 
@@ -496,7 +496,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | 7.1 | shoplite-gitops-এর কাঠামো: root app, dev আর prod-এর Application, `envs` values | (c) | ✅ `b3b00a0` |
 | 7.2 | Cluster-এর bootstrap: namespace, DB-র Secret, pin করা ArgoCD, root app; ArgoCD ALB-র `/argocd`-এ; local রিহার্সাল (ArgoCD Git থেকে sync করে) | (c), (d) | ✅ `7adece6` |
 | 7.3 | Terraform-এ GitHub OIDC: CI-এর IAM role, শুধু তিনটা ECR repo-তে push | (a) | ✅ `ac8e1b3` |
-| 7.4 | Pipeline-এর প্রথম সংস্করণ: build → OIDC দিয়ে ECR-এ push → gitops-এ tag commit | (a) | ⬜ |
+| 7.4 | Pipeline-এর প্রথম সংস্করণ: build → OIDC দিয়ে ECR-এ push → gitops-এ tag commit | (a) | ✅ `e23bf34` (GitHub-এ প্রথম run repo ভাগের পরে) |
 | পরে | Q7-এর বাকি: lint (Hadolint, `helm lint`), test, Trivy, PR pipeline, Terraform plan-এর comment, prod-এ তোলার workflow, self-heal-এর প্রমাণ | (a), (b), (d) | ⬜ |
 
 **Step 7.1-এ কী হলো** (`shoplite-gitops/`, `b3b00a0`)
@@ -587,6 +587,57 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
   - `import` address মেনে নেয়, থামে credential-এ। ভুল address দিলে বলে "does not exist in the configuration"।
   - `state rm` একটা নমুনা state থেকে provider-টা সরায়।
 
+**Step 7.4-এ কী হলো** (`e23bf34`): main-branch pipeline-এর প্রথম সংস্করণ। Repo ভাগের পরে GitHub-এ চলবে (GitHub শুধু repo-র গোড়ার `.github/workflows` চালায়)।
+- **`shoplite-app/.github/workflows/main.yml`:** main-এ প্রতিটা push-এ একটা job:
+  1. checkout, tag = short commit SHA (`${GITHUB_SHA::7}`);
+  2. তিনটা image build (`--target runtime`);
+  3. `LAB_ACTIVE` `true` হলে:
+     - OIDC দিয়ে CI-এর role নেয় (`AWS_ROLE_ARN`, `AWS_REGION`; না দিলে region `ap-southeast-1`);
+     - ECR-এ login আর push (`<registry>/shoplite/<service>:<sha>`);
+     - deploy key (`GITOPS_DEPLOY_KEY`) দিয়ে shoplite-gitops checkout করে `update-gitops.sh` চালায়।
+  4. `LAB_ACTIVE` না থাকলে শুধু build হয়, আর একটা notice দেখায়। এতে lab-এর বাইরের push-এও run সবুজ থাকে (PLAN)।
+
+  অন্য বিষয়গুলো:
+  - Action-গুলো commit SHA দিয়ে pin করা (PLAN): checkout v7.0.1, configure-aws-credentials v6.3.0, amazon-ecr-login v2.1.7। প্রতিটাই তখন দুই সপ্তাহের বেশি পুরনো সর্বশেষ release।
+  - `concurrency`: একবারে একটা run, push-এর ক্রমে, যাতে দেরিতে শেষ হওয়া পুরনো run নতুন tag-এর ওপর লিখতে না পারে।
+  - Permission শুধু `contents: read` আর `id-token: write`। `kubectl` বা cluster-এর কোনো credential নেই।
+- **`shoplite-app/scripts/update-gitops.sh`:** shoplite-gitops-এর checkout-এ `envs/<env>/values.yaml`-এ registry আর tag লেখে।
+  - Commit করে `github-actions[bot]` হিসেবে, message-এ run-এর link আর source commit।
+  - তারপর push করে। প্রতিবার শুরু করে সর্বশেষ main থেকে, তাই মাঝে অন্য কারো commit এলে সেটা থাকে। তিনবার চেষ্টা করে।
+  - একই tag আবার দিলে কিছু commit করে না।
+  - Input যাচাই করে: environment `dev`/`prod`, registry শুধু host, tag Docker-এর নিয়মে।
+  - পরের `promote` workflow-ও (prod) এটাই ব্যবহার করবে।
+- **রিহার্সাল `shoplite-app/scripts/tests/pipeline.sh`** (সাথে `runner.Dockerfile`: GitHub runner-এর মতো bash, git, yq), প্রায় ২০ সেকেন্ড:
+  1. actionlint দিয়ে workflow, `run:`-এর ভেতরে shellcheck; shellcheck দিয়ে script-গুলো।
+  2. প্রতিটা action:
+     - comment-এ লেখা release-এর commit-এ pin করা কিনা (GitHub থেকে tag এনে মেলায়);
+     - যে input দেওয়া হচ্ছে, সেই commit-এর `action.yml`-এ আছে কিনা, আর দরকারি input দেওয়া কিনা;
+     - workflow যে output পড়ে, সেটা আছে কিনা।
+
+     actionlint নতুন release চেনে না: `aws-regoin` বানান ভুল সে ধরেনি, এই পরীক্ষা ধরে।
+  3. `update-gitops.sh`, shoplite-gitops-এর একটা bare copy-র বিরুদ্ধে ("GitHub"):
+     - প্রথম run-এ একটাই commit, শুধু dev-এর ফাইল, comment থাকে;
+     - একই tag-এ কিছু হয় না;
+     - checkout-এর পরে অন্য কেউ prod-এ chaos flag আর dev-এ quote ছাড়া tag push করলে, আর প্রথম push বাতিল হলে: সর্বশেষ main থেকে আবার চেষ্টা করে, অন্যের commit থাকে;
+     - `0123456` আর `1e23456` string থাকে;
+     - ভুল input বাতিল হয়।
+  4. CI-এর লেখা values দিয়ে chart (dev Application-এর মতো স্তরে) ECR-এর image দেখায়।
+
+**যাচাই:**
+- ✅ রিহার্সাল `PASS`, container রেখে যায় না।
+- ✅ Mutation: copy-তে ৯টা ইচ্ছাকৃত ভুলের প্রত্যেকটায় রিহার্সাল fail করেছে:
+  - ভুল SHA;
+  - comment-এর version SHA-র সাথে মেলে না;
+  - input-এর বানান ভুল;
+  - নেই এমন output;
+  - সর্বশেষ main না আনা;
+  - কিছু না বদলালেও commit;
+  - প্রথম বাতিলেই হাল ছাড়া;
+  - `env()` (YAML-কে type ঠিক করতে দেওয়া);
+  - dev-এর tag prod-এর ফাইলে লেখা।
+- ✅ GitHub-এর ubuntu-24.04 runner-এ yq 4.54.3, git আর docker আছে (runner-images-এর তালিকা)।
+- ⏳ GitHub-এ আসল run: repo ভাগের পরে, lab session-এ (deploy key, variable, `LAB_ACTIVE`)। সেটাই Q7a-এর প্রমাণ।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -617,6 +668,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | `b3b00a0` | 2026-11-14 | Q7 step 7.1: shoplite-gitops-এর root app, dev আর prod-এর Application, `envs` values |
 | `7adece6` | 2026-11-15 | Q7 step 7.2: bootstrap script, ArgoCD-র values, GitOps-এর রিহার্সাল |
 | `ac8e1b3` | 2026-11-15 | Q7 step 7.3: GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push (Terraform) |
+| `e23bf34` | 2026-11-15 | Q7 step 7.4: main pipeline v1 (build, OIDC দিয়ে ECR, gitops-এ tag), `update-gitops.sh`, pipeline-এর রিহার্সাল |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -630,7 +682,9 @@ devops-final/
 │   ├── Makefile                          build, up, down, test, smoke
 │   ├── scripts/smoke-test.sh             stack চালু → readyz → order → COMPLETED
 │   ├── scripts/bootstrap-cluster.sh      নতুন cluster-এ একবার: namespace, DB-র Secret, ArgoCD, root app (Q7, 7.2)
-│   ├── scripts/tests/                    bootstrap-এর রিহার্সাল: local k3s, test-এর Git server, lab machine-এর tools
+│   ├── scripts/update-gitops.sh          CI: shoplite-gitops-এ এক environment-এর image registry আর tag commit ও push (Q7, 7.4)
+│   ├── scripts/tests/                    রিহার্সাল: bootstrap (local k3s, test-এর Git server, lab machine-এর tools); pipeline (actionlint, pin, update-gitops)
+│   ├── .github/workflows/main.yml        main pipeline: build → OIDC দিয়ে ECR → gitops-এ dev-এর tag (Q7a; repo ভাগের পরে চলে)
 │   ├── .env.example                      local-এর setting (WEB_PORT সহ); আসল .env Git-এ যায় না
 │   ├── helm/shoplite/                    Q5-এর chart: Chart.yaml, values.yaml, values-dev.yaml, values-prod.yaml
 │   │   ├── files/init.sql                table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
@@ -766,6 +820,12 @@ GitOps-এর রিহার্সাল (Docker আর internet লাগে; 
 bash scripts/tests/bootstrap-cluster.sh
 ```
 
+Pipeline-এর রিহার্সাল (Docker আর internet লাগে; actionlint, action-এর pin, `update-gitops.sh`, chart-এর image; প্রায় ২০ সেকেন্ড), `shoplite-app` থেকে:
+
+```bash
+bash scripts/tests/pipeline.sh
+```
+
 Ansible-এর রিহার্সাল (Docker আর internet লাগে; ৩টা node-এ hardening আর k3s, দুইবার run, যাচাই, শেষে সব মোছে; ৫–১০ মিনিট), `shoplite-app` থেকে:
 
 ```bash
@@ -881,6 +941,13 @@ bash ansible/tests/run.sh
 - **Role-এর অনুমতি শুধু push**, AWS-এর docs-এর ছয়টা action, শুধু তিনটা repo-তে। ব্যতিক্রম শুধু login (`GetAuthorizationToken`), যা AWS repo দিয়ে সীমিত করতে দেয় না।
 - **OIDC provider-এ thumbprint নেই।** GitHub-এর জন্য AWS নিজের বিশ্বস্ত CA দিয়ে certificate যাচাই করে; pin করা thumbprint GitHub certificate বদলালে পুরনো হয়ে যেত। Provider 6.73-এ এটা optional (`validate` pass)।
 - **OIDC-এর role root config-এ, Q4-এর একই apply-এ।** ECR-এর ARN সরাসরি module থেকে আসে, আর lab-এ আলাদা init বা apply লাগে না।
+- **Pipeline-এর setting** (user-এর সিদ্ধান্ত, 15 Nov):
+  - Role-এর ARN shoplite-app-এর Actions variable `AWS_ROLE_ARN`-এ; এটা secret নয়।
+  - gitops-এ লেখা হবে deploy key দিয়ে (secret `GITOPS_DEPLOY_KEY`)। এর অনুমতি শুধু shoplite-gitops-এ, আর key কারো account-এর সাথে বাঁধা নয়।
+  - Region `AWS_REGION`, না দিলে `ap-southeast-1` (Terraform-এর default)।
+- **`LAB_ACTIVE` (PLAN):** `true` না হলে pipeline শুধু build করে। Lab-এর বাইরে AWS-এর role বা ECR থাকে না, তখনো run সবুজ থাকে।
+- **এক job, matrix নয়।** পরে Trivy যে image scan করবে, push হবে ঠিক সেটাই; আবার build করলে অন্য image হতে পারত। OIDC login-ও একবার।
+- **Tag সবসময় string** (`strenv()`): `0123456` বা `1e23456` number হয়ে গেলে chart ভুল image নাম লিখত।
 
 ## 12. জানা বিষয়
 
@@ -939,22 +1006,25 @@ bash ansible/tests/run.sh
 - **ArgoCD-র page curl দিয়ে চাইলে `<base href="/">` আসে।** `/argocd` base বসে শুধু browser-এর request-এ (`Accept: text/html`)।
 - **Module-এর input validation `terraform test`-এর mock apply-তেও চলে**, mock-এর বানানো মান দিয়ে। তাই root-এর test-এ mock করা ECR repo-কে ঠিকঠাক ARN দিতে হয় (`mock_resource "aws_ecr_repository"`), নইলে github-oidc-এর validation সব apply থামিয়ে দেয়।
 - **Terraform 1.17.2-এর `plan`/`apply`-এ `-exclude` নেই।** একটা module বাদ দিয়ে apply করতে হলে সেটা comment out করতে হয়।
+- **অফিসের network থেকে GitHub-এর REST API token ছাড়া 403 দেয় (rate limit)।** Release-এর tag, commit SHA আর তারিখ git দিয়ে পাওয়া যায়: `git ls-remote --tags`, আর `git fetch --depth=1 <repo> refs/tags/<tag>`।
+- **actionlint 1.7.12 নতুন release-এর input চেনে না।** configure-aws-credentials v6.3.0-তে `aws-regoin` বানান ভুল ধরেনি। Pipeline-এর রিহার্সাল তাই pin করা commit-এর `action.yml` থেকে মেলায়।
+- **yq-তে `strenv()` string রাখে, `env()` রাখে না।** `strenv()` `0123456`/`1e23456`-কে quote করে লেখে; `env()` YAML-কে type ঠিক করতে দেয়, তখন এগুলো number হয়ে যায়।
 
 ## 13. পরের কাজ
 
-Q5-এর code শেষ (section 6); Q7-এর 7.1, 7.2 আর 7.3 শেষ (section 7)। এরপর:
+Q5-এর code শেষ (section 6); Q7-এর 7.1–7.4 শেষ (section 7): GitOps-এর ভিত আর pipeline-এর প্রথম সংস্করণ। এরপর:
 
-1. **Q7 step 7.4:** pipeline-এর প্রথম সংস্করণ, `shoplite-app/.github/workflows/`-এ।
-   - main-এ push হলে তিনটা image build হবে, tag short SHA।
-   - OIDC দিয়ে `ci_role_arn` নিয়ে ECR-এ push।
-   - shoplite-gitops-এর `envs/dev/values.yaml`-এ registry আর tag commit।
+1. **5.4:** lab-এ Q5 চালানোর পদ্ধতি, `docs/evidence/q5/commands.md` (ইংরেজিতে, Q4-এর পদ্ধতির মতো যাচাই করা)। ArgoCD দিয়ে বসবে, image আসবে pipeline দিয়ে। পদ্ধতিতে যা থাকবে:
+   - Repo ভাগ: `SaikatGeek/shoplite-app` (তার `test.md` বদলানোর আগে user-এর অনুমতি) আর `SaikatGeek/shoplite-gitops`।
+   - GitHub-এর setting:
+     - shoplite-gitops-এ write access-সহ deploy key, তার private key shoplite-app-এর secret `GITOPS_DEPLOY_KEY`-এ;
+     - variable `AWS_ROLE_ARN` (`terraform output -raw ci_role_arn`), দরকার হলে `AWS_REGION`, আর `LAB_ACTIVE=true`।
+   - প্রতি session-এর শুরুতে ECR খালি থাকে, তাই pipeline একবার চালাতে হয়। তারপর `scripts/bootstrap-cluster.sh`, prod-এর manual sync, প্রমাণ।
+   - Session শেষে `LAB_ACTIVE` বন্ধ।
 
-   Repo ভাগের আগে GitHub-এ চলে না, তাই যাচাই local-এ (CLAUDE.md)। শুরুর আগে user-এর সাথে দুটো জিনিস ঠিক করতে হবে:
-   - workflow role-এর ARN কোথা থেকে পাবে (যেমন repo-র Actions variable);
-   - shoplite-gitops-এ লেখার অনুমতি কীভাবে আসবে (যেমন deploy key বা token)।
-2. তারপর 5.4 (lab-এ Q5-এর পদ্ধতি, ArgoCD দিয়ে)।
-3. তারপর Q6-এর dashboard, alert আর runbook, আর Q7-এর বাকি অংশ, সবই নিজের PC-তে।
-4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
+   **User-কে জিজ্ঞেস করতে হবে:** session-এর শুরুতে pipeline চালানোর জন্য খালি commit (`git commit --allow-empty`) দেওয়া হবে, নাকি workflow-এ "Run workflow" বোতাম (`workflow_dispatch`) যোগ হবে। প্রশ্ন এটা চায় না, তাই user ঠিক করবে।
+2. তারপর Q6-এর dashboard, alert আর runbook, আর Q7-এর বাকি অংশ (lint, test, Trivy, PR pipeline, Terraform plan-এর comment, `promote`), সবই নিজের PC-তে।
+3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
    - Q4: `docs/evidence/q4/commands.md`।
    - Q5-এর lab-এর আগে দুই repo আলাদা করতে হবে (section 7)।
