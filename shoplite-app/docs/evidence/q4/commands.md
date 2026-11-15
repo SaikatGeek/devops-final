@@ -13,9 +13,14 @@ the first Ansible run 5–10 minutes.
 ## 0.1 Clone
 
 ```bash
-git clone https://github.com/SaikatGeek/devops-final.git   # until the repositories are split
-cd devops-final/shoplite-app
+git clone https://github.com/SaikatGeek/shoplite-app.git
+git clone https://github.com/SaikatGeek/shoplite-gitops.git   # next to it; question 5 needs it
+cd shoplite-app
 ```
+
+Before the repositories are split ([question 5, section 0.1](../q5/commands.md#01-the-two-repositories)),
+the code is in one repository:
+`git clone https://github.com/SaikatGeek/devops-final.git && cd devops-final/shoplite-app`.
 
 ## 0.2 Tools
 
