@@ -2,8 +2,9 @@
 # Commits a new image tag to shoplite-gitops (question 7a): writes an environment's image
 # registry and tag into envs/<env>/values.yaml of a shoplite-gitops checkout, commits and
 # pushes. ArgoCD then deploys from Git; nothing here touches the cluster. The main pipeline
-# (.github/workflows/main.yml) runs it for dev, right after pushing the images to ECR:
-#   scripts/update-gitops.sh <shoplite-gitops checkout> dev <registry> <tag>
+# (.github/workflows/main.yml) runs it for dev, right after pushing the images to ECR; the
+# promote workflow (.github/workflows/promote.yml) runs it for prod with dev's image:
+#   scripts/update-gitops.sh <shoplite-gitops checkout> <dev|prod> <registry> <tag>
 # Each attempt starts again from the newest main, so a commit pushed in the meantime is kept;
 # after three failed pushes it gives up. Writing the tag that is already there commits
 # nothing. Needs git and yq (mikefarah, v4), both installed on GitHub's runners.
@@ -24,7 +25,11 @@ cd "$dir"
 
 message=(-m "$env: images $tag")
 if [ -n "${GITHUB_RUN_ID:-}" ]; then
-  message+=(-m "Built and pushed by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID from $GITHUB_REPOSITORY@$GITHUB_SHA.")
+  run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+  case $env in
+    dev) message+=(-m "Built and pushed by $run from $GITHUB_REPOSITORY@$GITHUB_SHA.") ;;
+    prod) message+=(-m "Promoted from dev by $run.") ;;
+  esac
 fi
 
 for attempt in 1 2 3; do

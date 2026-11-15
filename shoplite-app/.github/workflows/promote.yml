@@ -1,0 +1,49 @@
+# Promotes dev's image to production (question 7, step 7.5). It commits the image registry
+# and tag that dev runs (envs/dev/values.yaml in shoplite-gitops, written by the main
+# pipeline) to envs/prod/values.yaml. ArgoCD then shows shoplite-prod OutOfSync until
+# someone syncs it by hand (manual synchronization for production, question 7c).
+# Started only from the "Run workflow" button on the Actions tab. It needs neither AWS nor
+# the cluster: the images are in ECR already, because dev runs them. Prod's fault-injection
+# flags are left as they are.
+#
+# Uses the secret GITOPS_DEPLOY_KEY, like the main pipeline.
+name: promote
+
+on:
+  workflow_dispatch:
+
+# One promotion at a time.
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    name: commit dev's image to prod (then sync shoplite-prod in ArgoCD)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out shoplite-app
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check out shoplite-gitops with the deploy key
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: SaikatGeek/shoplite-gitops
+          ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
+          path: shoplite-gitops
+
+      - name: Commit dev's image to prod
+        id: promote
+        run: |
+          dev=shoplite-gitops/envs/dev/values.yaml
+          registry=$(yq '.image.registry // ""' "$dev")
+          tag=$(yq '.image.tag // ""' "$dev")
+          if [ -z "$registry" ] || [ -z "$tag" ]; then
+            echo "::error::dev has no image yet; run the main workflow first"
+            exit 1
+          fi
+          bash scripts/update-gitops.sh shoplite-gitops prod "$registry" "$tag"
+          echo "::notice::prod now has the images dev runs ($tag). Sync shoplite-prod in ArgoCD to deploy them."
