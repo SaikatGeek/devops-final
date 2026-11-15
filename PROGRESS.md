@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-15, Q7 step 7.2 শেষ (অফিসের PC-তে পুরো রিহার্সাল pass)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-15, Q7 step 7.3 শেষ (GitHub OIDC-এর Terraform)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -20,7 +20,7 @@
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। বাকি 5.4 (lab-এর পদ্ধতি) আর lab-এ চালানো |
 | Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
-| Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 (root app, dev আর prod-এর Application, `envs` values) আর 7.2 (cluster-এর bootstrap, ArgoCD; local k3s-এ পুরো রিহার্সাল pass) শেষ; এরপর 7.3 (GitHub OIDC), 7.4 (pipeline-এর প্রথম সংস্করণ), তারপর Q7-এর বাকি অংশ |
+| Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 (root app, dev আর prod-এর Application, `envs` values), 7.2 (cluster-এর bootstrap, ArgoCD; local k3s-এ পুরো রিহার্সাল pass) আর 7.3 (GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push) শেষ; এরপর 7.4 (pipeline-এর প্রথম সংস্করণ), তারপর Q7-এর বাকি অংশ |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
 
@@ -495,7 +495,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 |---|---|---|---|
 | 7.1 | shoplite-gitops-এর কাঠামো: root app, dev আর prod-এর Application, `envs` values | (c) | ✅ `b3b00a0` |
 | 7.2 | Cluster-এর bootstrap: namespace, DB-র Secret, pin করা ArgoCD, root app; ArgoCD ALB-র `/argocd`-এ; local রিহার্সাল (ArgoCD Git থেকে sync করে) | (c), (d) | ✅ `7adece6` |
-| 7.3 | Terraform-এ GitHub OIDC: CI-এর IAM role, শুধু তিনটা ECR repo-তে push | (a) | ⬜ |
+| 7.3 | Terraform-এ GitHub OIDC: CI-এর IAM role, শুধু তিনটা ECR repo-তে push | (a) | ✅ `ac8e1b3` |
 | 7.4 | Pipeline-এর প্রথম সংস্করণ: build → OIDC দিয়ে ECR-এ push → gitops-এ tag commit | (a) | ⬜ |
 | পরে | Q7-এর বাকি: lint (Hadolint, `helm lint`), test, Trivy, PR pipeline, Terraform plan-এর comment, prod-এ তোলার workflow, self-heal-এর প্রমাণ | (a), (b), (d) | ⬜ |
 
@@ -557,6 +557,36 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 
   আর wave-এর পরীক্ষা এখন Middleware CRD তৈরির সময়ের সাথে মেলায়, Traefik-এর pod-এর সাথে নয় (কারণ section 12-এ)।
 
+**Step 7.3-এ কী হলো** (`ac8e1b3`): GitHub Actions কোনো AWS key ছাড়াই ECR-এ push করবে।
+- **`terraform/modules/github-oidc/`:**
+  - `main.tf`:
+    - **OIDC identity provider** (`token.actions.githubusercontent.com`, audience `sts.amazonaws.com`): AWS GitHub-এর দেওয়া token বিশ্বাস করে। প্রতিটা workflow run GitHub থেকে একটা স্বল্পমেয়াদি token পায়, আর AWS সেটা বদলে দেয় এক ঘণ্টার credential-এ।
+    - **Role `shoplite-github-ci`:** নিতে পারে শুধু `SaikatGeek/shoplite-app`-এর `main` branch-এর run। `StringEquals` দিয়ে হুবহু মেলায়, wildcard নেই; তাই PR, অন্য branch বা অন্য repo পারে না।
+    - **Policy `ecr-push`:** ECR-এ login (`GetAuthorizationToken`; AWS এটা repo দিয়ে সীমিত করতে দেয় না) আর AWS-এর docs-এ push-এর যে ছয়টা action আছে, শুধু তিনটা repo-র ARN-এ। Delete বা অন্য কিছু নেই।
+  - `variables.tf`: input যাচাই করে। repo হতে হবে `owner/name`, আর ARN হতে হবে ECR repo-র ARN, wildcard ছাড়া। ভুলে `*` দিলে push সব repo-তে খুলে যেত।
+  - `outputs.tf`: `role_arn`, `oidc_provider_arn`।
+  - `tests/github_oidc.tftest.hcl`: ৮টা run (নিচে)।
+- **Root:** `main.tf`-এ `module "github_oidc"`, ECR module-এর ARN দিয়ে। `outputs.tf`-এ `ci_role_arn`, যা workflow-কে `role-to-assume` হিসেবে দিতে হবে (7.4)। Q4-এর একই `apply`-এ তৈরি হয়।
+- **Q4-এর lab পদ্ধতি** (`docs/evidence/q4/commands.md`): দুটো fallback যোগ হলো।
+  - Account OIDC provider বানাতে না দিলে: instructor-কে জানাও, আর Q4 চালিয়ে যেতে module-টা comment out করো।
+  - GitHub-এর provider আগে থেকেই থাকলে (`EntityAlreadyExists`): `terraform import` করো, আর শেষের destroy-এর আগে `state rm`, যাতে provider-টা থেকে যায়।
+
+**যাচাই** (AWS ছাড়া, `hashicorp/terraform:1.17.2`-এ):
+- ✅ `fmt -check`, root-এর `validate`; module-এর ৮টা test আর root-এর ১০টা pass।
+- ✅ Test যে সত্যিই ভুল ধরে, তা দেখা হয়েছে container-এর ভেতরে code ইচ্ছা করে ভুল করে (host-এর ফাইল অপরিবর্তিত)। নিচের ৮টা ভুলের প্রত্যেকটায় test fail করেছে:
+  - যেকোনো branch (`*`);
+  - `pull_request`;
+  - `StringLike`;
+  - audience-এর শর্ত বাদ;
+  - `BatchDeleteImage` যোগ;
+  - push সব repo-তে (`*`);
+  - login-এর জায়গায় `ecr:*`;
+  - root-এ ARN-এর বদলে repo-র URL পাঠানো।
+- ✅ AWS-এর docs-এর push permission-এর তালিকার সাথে মেলানো (ECR User Guide, "IAM permissions for pushing an image")।
+- ✅ Fallback-এর command:
+  - `import` address মেনে নেয়, থামে credential-এ। ভুল address দিলে বলে "does not exist in the configuration"।
+  - `state rm` একটা নমুনা state থেকে provider-টা সরায়।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -586,6 +616,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | `f367f76` | 2026-11-14 | Q5 step 5.3: Postgres আর Redis-এর NetworkPolicy |
 | `b3b00a0` | 2026-11-14 | Q7 step 7.1: shoplite-gitops-এর root app, dev আর prod-এর Application, `envs` values |
 | `7adece6` | 2026-11-15 | Q7 step 7.2: bootstrap script, ArgoCD-র values, GitOps-এর রিহার্সাল |
+| `ac8e1b3` | 2026-11-15 | Q7 step 7.3: GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push (Terraform) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -626,12 +657,13 @@ devops-final/
 │   │   ├── q3-server/                    Q3-এর EC2, নিজের ছোট VPC-তে (+ নিজের tests/)
 │   │   ├── backend.tf                    S3 backend, use_lockfile
 │   │   ├── main.tf, variables.tf         provider, project=shoplite tag, USD 20 budget, module-গুলো জোড়া
-│   │   ├── outputs.tf                    VPC আর subnet-এর id, node-এর instance id, app-এর URL, ECR-এর URL, Ansible-এর inventory, kubectl-এর tunnel
+│   │   ├── outputs.tf                    VPC আর subnet-এর id, node-এর instance id, app-এর URL, ECR-এর URL, Ansible-এর inventory, kubectl-এর tunnel, CI-এর role (`ci_role_arn`)
 │   │   ├── templates/inventory.ini.tftpl lab-এর inventory: node instance id দিয়ে, SSH SSM-এর ভেতর দিয়ে
 │   │   ├── modules/network/              VPC, subnet, IGW, NAT, route table (+ নিজের tests/)
 │   │   ├── modules/compute/              node-এর security group, IAM role, key pair, ৩টা EC2 (+ নিজের tests/)
 │   │   ├── modules/alb/                  ALB, listener, target group, ALB → node-এর rule (+ নিজের tests/)
 │   │   ├── modules/ecr/                  তিনটা image repository (+ নিজের tests/)
+│   │   ├── modules/github-oidc/          GitHub-এর OIDC provider আর CI-এর role, শুধু ECR-এ push (Q7, 7.3; + নিজের tests/)
 │   │   └── tests/                        terraform test, mock provider
 │   └── services/
 │       ├── web/
@@ -845,6 +877,10 @@ bash ansible/tests/run.sh
 - **Ingress-এর health check ArgoCD-তে, সবসময় Healthy।** Traefik NodePort-এর পেছনে, ALB Terraform-এর, তাই Ingress-এ load balancer-এর ঠিকানা কখনো আসে না। এটা ছাড়া প্রতিটা app চিরকাল "Progressing" দেখাত। README-র deviation log-এ যাবে।
 - **রিহার্সালে prod-এর manual sync ArgoCD-র API দিয়ে** (`POST /argocd/api/v1/applications/shoplite-prod/sync`, admin-এর token দিয়ে)। UI-র Sync button ঠিক এটাই পাঠায়; lab-এ sync হবে UI থেকে।
 - **রিহার্সালের Git server-এর IP স্থির (172.30.0.10), আর repo থাকে তার container-এর ভেতরে।** k3s-এর CoreDNS Docker-এর container-এর নাম চেনে না। আর host-এর %TEMP%-এ রাখা repo বাসার PC-র কোনো cleaner ভেঙে দিয়েছিল (section 12)।
+- **CI-এর role নিতে পারে শুধু shoplite-app-এর `main`** (হুবহু মেলানো, wildcard নেই)। প্রশ্নের main-branch pipeline-ই শুধু push করে। PR pipeline (Q7b)-এর Terraform plan-এর জন্য পরে আলাদা, শুধু পড়ার অনুমতির role লাগবে; push-এর role PR-কে দেওয়া হবে না।
+- **Role-এর অনুমতি শুধু push**, AWS-এর docs-এর ছয়টা action, শুধু তিনটা repo-তে। ব্যতিক্রম শুধু login (`GetAuthorizationToken`), যা AWS repo দিয়ে সীমিত করতে দেয় না।
+- **OIDC provider-এ thumbprint নেই।** GitHub-এর জন্য AWS নিজের বিশ্বস্ত CA দিয়ে certificate যাচাই করে; pin করা thumbprint GitHub certificate বদলালে পুরনো হয়ে যেত। Provider 6.73-এ এটা optional (`validate` pass)।
+- **OIDC-এর role root config-এ, Q4-এর একই apply-এ।** ECR-এর ARN সরাসরি module থেকে আসে, আর lab-এ আলাদা init বা apply লাগে না।
 
 ## 12. জানা বিষয়
 
@@ -901,13 +937,22 @@ bash ansible/tests/run.sh
 - **Traefik-এর প্রথম sync-এর পরে ArgoCD ৩০–৪৫ সেকেন্ড ComparisonError দেখায়:** `unable to resolve parseableType for GroupVersionKind: traefik.io/v1alpha1, Kind=IngressRoute`। ServerSideApply-এর diff নতুন CRD-এর schema চায়, যা ArgoCD-র cache-এ তখনো আসেনি; নিজে থেকেই চলে যায়। ওই সময় app দেখায় "Unknown Healthy", তাই root তখন wave 1-এ চলে যেতে পারে। CRD তখন থাকেই, তাই ক্ষতি নেই; কিন্তু রিহার্সালের wave-এর পরীক্ষা এজন্য Traefik-এর pod-এর বদলে CRD তৈরির সময় দেখে।
 - **ArgoCD 3-এ resource-এর health Application-এর CR-এ থাকে না** (`.status.resources[*].health` ফাঁকা)। কোন resource Healthy নয়, দেখতে API লাগে: `/argocd/api/v1/applications/<name>/resource-tree`, admin-এর token দিয়ে (`POST /argocd/api/v1/session`)। অথবা UI।
 - **ArgoCD-র page curl দিয়ে চাইলে `<base href="/">` আসে।** `/argocd` base বসে শুধু browser-এর request-এ (`Accept: text/html`)।
+- **Module-এর input validation `terraform test`-এর mock apply-তেও চলে**, mock-এর বানানো মান দিয়ে। তাই root-এর test-এ mock করা ECR repo-কে ঠিকঠাক ARN দিতে হয় (`mock_resource "aws_ecr_repository"`), নইলে github-oidc-এর validation সব apply থামিয়ে দেয়।
+- **Terraform 1.17.2-এর `plan`/`apply`-এ `-exclude` নেই।** একটা module বাদ দিয়ে apply করতে হলে সেটা comment out করতে হয়।
 
 ## 13. পরের কাজ
 
-Q5-এর code শেষ (section 6); GitOps-এর ভিতের 7.1 আর 7.2 শেষ (section 7)। এরপর:
+Q5-এর code শেষ (section 6); Q7-এর 7.1, 7.2 আর 7.3 শেষ (section 7)। এরপর:
 
-1. **Q7 step 7.3:** Terraform-এ GitHub OIDC (`terraform/modules/github-oidc`, PLAN section 3): CI-এর IAM role, যা push করতে পারে শুধু তিনটা ECR repo-তে। অন্য module-এর মতো `tests/*.tftest.hcl` (mock provider), তাই AWS ছাড়াই যাচাই।
-2. তারপর 7.4 (pipeline-এর প্রথম সংস্করণ: build → OIDC দিয়ে ECR-এ push → gitops-এ tag commit), 5.4 (lab-এ Q5-এর পদ্ধতি, ArgoCD দিয়ে)।
+1. **Q7 step 7.4:** pipeline-এর প্রথম সংস্করণ, `shoplite-app/.github/workflows/`-এ।
+   - main-এ push হলে তিনটা image build হবে, tag short SHA।
+   - OIDC দিয়ে `ci_role_arn` নিয়ে ECR-এ push।
+   - shoplite-gitops-এর `envs/dev/values.yaml`-এ registry আর tag commit।
+
+   Repo ভাগের আগে GitHub-এ চলে না, তাই যাচাই local-এ (CLAUDE.md)। শুরুর আগে user-এর সাথে দুটো জিনিস ঠিক করতে হবে:
+   - workflow role-এর ARN কোথা থেকে পাবে (যেমন repo-র Actions variable);
+   - shoplite-gitops-এ লেখার অনুমতি কীভাবে আসবে (যেমন deploy key বা token)।
+2. তারপর 5.4 (lab-এ Q5-এর পদ্ধতি, ArgoCD দিয়ে)।
 3. তারপর Q6-এর dashboard, alert আর runbook, আর Q7-এর বাকি অংশ, সবই নিজের PC-তে।
 4. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।

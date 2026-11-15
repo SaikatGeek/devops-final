@@ -138,8 +138,8 @@ docker compose down
 | ✅ | Q3-এর code: `linux/` folder (`3019a9a`), local-এ রিহার্সাল করা | হয়ে গেছে |
 | ✅ | Q4-এর code: Terraform (4.1–4.6), Ansible (4.7), lab-এর পদ্ধতি (4.8) | হয়ে গেছে |
 | ✅ | Q5-এর code: Helm chart আর Traefik (5.1–5.3) | হয়ে গেছে |
-| ✅ | Q7-এর GitOps-এর ভিত: 7.1 আর 7.2 (bootstrap, ArgoCD; local k3s-এ রিহার্সাল pass) | হয়ে গেছে |
-| 1 | 7.3 (GitHub OIDC), 7.4 (pipeline), 5.4 (Q5-এর lab পদ্ধতি), তারপর Q6 আর Q7-এর বাকি code | যেকোনো PC |
+| ✅ | Q7-এর GitOps-এর ভিত: 7.1 আর 7.2 (bootstrap, ArgoCD; local k3s-এ রিহার্সাল pass), 7.3 (GitHub OIDC-এর role) | হয়ে গেছে |
+| 1 | 7.4 (pipeline), 5.4 (Q5-এর lab পদ্ধতি), তারপর Q6 আর Q7-এর বাকি code | যেকোনো PC |
 | 2 | Q3 থেকে Q8 চালানো আর প্রমাণ (Q3: `linux/evidence/commands.md` ধরে) | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
 
 ## ৮. সমস্যা হলে
