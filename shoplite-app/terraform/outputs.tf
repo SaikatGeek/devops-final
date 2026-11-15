@@ -52,3 +52,8 @@ output "ecr_registry" {
   description = "Registry host for docker login."
   value       = module.ecr.registry
 }
+
+output "ci_role_arn" {
+  description = "The role GitHub Actions takes through OIDC to push the images (role-to-assume in shoplite-app's workflows)."
+  value       = module.github_oidc.role_arn
+}

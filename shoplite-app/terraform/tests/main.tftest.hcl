@@ -22,6 +22,20 @@ mock_provider "aws" {
       arn = "arn:aws:elasticloadbalancing:ap-southeast-1:123456789012:targetgroup/shoplite/2222222222222222"
     }
   }
+
+  # The github-oidc module accepts only well-formed ECR repository ARNs (no wildcard), so the
+  # mocked repositories need them too.
+  mock_resource "aws_ecr_repository" {
+    defaults = {
+      arn = "arn:aws:ecr:ap-southeast-1:123456789012:repository/shoplite/example"
+    }
+  }
+
+  mock_resource "aws_iam_role" {
+    defaults = {
+      arn = "arn:aws:iam::123456789012:role/shoplite-example"
+    }
+  }
 }
 
 variables {
@@ -112,6 +126,16 @@ run "ecr_has_a_repository_for_each_image" {
   assert {
     condition     = keys(output.ecr_repository_urls) == ["catalog-api", "order-worker", "web"]
     error_message = "The root configuration must create the three image repositories."
+  }
+}
+
+run "github_actions_gets_a_role_to_push_the_images" {
+  command = apply
+
+  # The module checks its inputs: this apply fails unless the ECR repositories' ARNs reach it.
+  assert {
+    condition     = output.ci_role_arn == "arn:aws:iam::123456789012:role/shoplite-example"
+    error_message = "The root configuration must create the CI role and expose its ARN as ci_role_arn."
   }
 }
 

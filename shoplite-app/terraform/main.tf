@@ -1,5 +1,6 @@
 # ShopLite on AWS (question 4). The modules are added step by step:
-# network (VPC), compute (Kubernetes nodes), alb (load balancer), ecr (image repositories).
+# network (VPC), compute (Kubernetes nodes), alb (load balancer), ecr (image repositories),
+# github-oidc (the role GitHub Actions takes to push images, question 7).
 #
 # Once per account run terraform/bootstrap (the state bucket), then:
 #   terraform -chdir=terraform init -backend-config="bucket=<state_bucket>" -backend-config="region=<region>"
@@ -57,6 +58,16 @@ module "alb" {
 module "ecr" {
   source = "./modules/ecr"
   name   = "shoplite"
+}
+
+# Question 7a: GitHub Actions pushes the images to ECR through OIDC, so no AWS key is stored
+# in GitHub. Only workflow runs on shoplite-app's main branch can take the role, and it may
+# only push to the three repositories above.
+module "github_oidc" {
+  source              = "./modules/github-oidc"
+  name                = "shoplite"
+  github_repository   = "SaikatGeek/shoplite-app"
+  ecr_repository_arns = values(module.ecr.repository_arns)
 }
 
 # Cost guard: an e-mail as soon as this month's actual cost passes USD 20.

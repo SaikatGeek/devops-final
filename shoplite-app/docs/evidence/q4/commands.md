@@ -97,11 +97,15 @@ If `apply` stops with `AccessDenied` or an unavailable type, these are the fallb
 | Budgets | keep the code, take a screenshot of the `AccessDenied` error |
 | NAT Gateway | a NAT instance (allowed by the question) |
 | IAM roles or instance profiles | a bastion host instead of SSM (allowed by the question) |
+| An IAM OIDC identity provider (for question 7) | tell the instructor: question 7's push to ECR needs it. To go on with question 4 meanwhile, comment out `module "github_oidc"` in `terraform/main.tf` and `output "ci_role_arn"` in `terraform/outputs.tf`, then apply again |
+| The account has GitHub's OIDC provider already (`EntityAlreadyExists`) | use it: `terraform -chdir=terraform import module.github_oidc.aws_iam_openid_connect_provider.github arn:aws:iam::<account>:oidc-provider/token.actions.githubusercontent.com`, then apply again. Before the final destroy, `terraform -chdir=terraform state rm module.github_oidc.aws_iam_openid_connect_provider.github`, so the provider stays |
 
 ## 1. Create the infrastructure (4a–4f)
 
 `terraform/bootstrap` creates the S3 bucket for the state, once per account. The main
-configuration keeps its state there, with S3's own lock file.
+configuration keeps its state there, with S3's own lock file. The same apply also creates
+the role GitHub Actions takes through OIDC to push the images (question 7, output
+`ci_role_arn`).
 
 ```bash
 terraform -chdir=terraform/bootstrap init
