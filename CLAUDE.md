@@ -60,8 +60,8 @@ Course capstone (Poridhi "Mastering DevOps and AWS", Batch 03), deadline **17 No
     - a manual prod sync through `POST /argocd/api/v1/applications/shoplite-prod/sync` (what the UI's button sends), then root Synced Healthy;
     - an order COMPLETED through each NodePort;
     - self-heal reverts a `kubectl scale` in dev, while prod keeps it and shows OutOfSync.
-  - About 15 minutes.
-  - Status on 15 Nov: on the home PC everything up to "prod OutOfSync" passed, with the Ingress health check hot-patched into the cluster. Not run yet: the last edits (repos inside the container, the CRD-based wave check, the `Accept` header, the Ingress check in the values file) and every check after prod OutOfSync.
+  - About 6 minutes on PC-01, about 15 on the home PC.
+  - Passed in full on PC-01 on 15 Nov, first try (step 7.2 done).
 - Traefik (Q5d) lives in **shoplite-gitops** `apps/traefik.yaml` (the user's choice, per PLAN): an ArgoCD Application with Traefik's chart 42.2.0 (Traefik v3.7.16) and inline `valuesObject`: NodePort Service, entrypoint `web` → 30080 (prod, ALB 80) and `dev` (port 8001, exposed 8080) → 30081 (dev, ALB 8080), no websecure, `/ping` on web and dev through the chart's `ingressRoute.healthcheck` (the ALB health check), requests and limits, `ServerSideApply=true`. Traefik's Middleware CRD must exist before the shoplite chart is applied (sync Traefik first in Q7).
 - `helm/tests/run.sh` rehearses on a local `rancher/k3s:v1.37.2-k3s1` container (images loaded with `docker save | ctr import`; Helm `alpine/helm:4.3.1` and `curl` from the web image on the k3s container's network; `fail-cgroupv1=false` on cgroup v1 hosts). It installs Traefik exactly as `../shoplite-gitops/apps/traefik.yaml` says (read with `mikefarah/yq:4.54.1`; `SHOPLITE_GITOPS_DIR` overrides the path), lints, dry-runs the prod manifests server-side, installs dev (`shoplite-dev`) and prod (`shoplite`), then checks ready pods, non-root uids, requests/limits, the seed, orders to `COMPLETED` (through web's proxy and through NodePorts 30080/30081, each landing in its own environment's database), `/ping` 200 on both NodePorts, NetworkPolicy (`nc -z` from the pods: catalog-api and order-worker reach `postgres:5432` and `redis:6379`, web does not, dev does not reach prod's), a setting change rolling only catalog-api and order-worker (Deployment `generation`), the HPA scaling out under 400 orders, and `kubectl drain` evicting one catalog-api pod per environment while the PDB refuses the second. About 10 minutes; extend it with every chart step.
 - Config only from environment variables (`config.py`), validated at startup.
@@ -102,7 +102,7 @@ MSYS_NO_PATHCONV=1 $TF -chdir=bootstrap init -backend=false && MSYS_NO_PATHCONV=
 MSYS_NO_PATHCONV=1 $TF init -backend=false && MSYS_NO_PATHCONV=1 $TF validate && MSYS_NO_PATHCONV=1 $TF test
 ```
 
-Helm chart rehearsal (Docker and internet; about 10 minutes; cleans up after itself; needs `../shoplite-gitops`): `bash helm/tests/run.sh`. GitOps rehearsal (Docker and internet; about 15 minutes, more the first time for ArgoCD's image; cleans up after itself; needs `../shoplite-gitops`): `bash scripts/tests/bootstrap-cluster.sh`. Ansible rehearsal (Docker and internet; 5–10 minutes, mostly the k3s download; cleans up after itself): `bash ansible/tests/run.sh`. Run it in the background and redirect its output to a file; the playbook's own log goes to a temp folder (`/tmp/tmp.*/run1.log`).
+Helm chart rehearsal (Docker and internet; about 10 minutes; cleans up after itself; needs `../shoplite-gitops`): `bash helm/tests/run.sh`. GitOps rehearsal (Docker and internet; about 6 minutes on PC-01, 15 on the home PC, more the first time for ArgoCD's image; cleans up after itself; needs `../shoplite-gitops`): `bash scripts/tests/bootstrap-cluster.sh`. Ansible rehearsal (Docker and internet; 5–10 minutes, mostly the k3s download; cleans up after itself): `bash ansible/tests/run.sh`. Run it in the background and redirect its output to a file; the playbook's own log goes to a temp folder (`/tmp/tmp.*/run1.log`).
 
 On PC-01 real `make` runs in WSL Ubuntu: `wsl.exe -d Ubuntu --cd /mnt/e/devops-final/shoplite-app -- make up` (see the WSL gotcha for anything longer).
 
@@ -147,12 +147,6 @@ Q1 and Q2 are done; Q3's code is done and rehearsed (its screenshots are taken i
 
 **Q5, in steps (PROGRESS section 6):** 5.1–5.3 are done: Q5's code is complete. 5.4 (the lab procedure `docs/evidence/q5/commands.md`) comes after the GitOps foundation, because the user chose PLAN's way (14 Nov): in the lab everything is installed by ArgoCD and images reach ECR through the pipeline. Check in the lab that ALB → NodePort passes UFW (routed allow).
 
-**Q7's GitOps foundation, in steps (PROGRESS section 7):** 7.1 (shoplite-gitops: root app, dev and prod Applications, `envs` values) is done.
+**Q7's GitOps foundation, in steps (PROGRESS section 7):** 7.1 (shoplite-gitops: root app, dev and prod Applications, `envs` values) and 7.2 (cluster bootstrap, ArgoCD; the GitOps rehearsal passed in full on PC-01, 15 Nov) are done.
 
-**7.2 is in progress (code pushed 15 Nov from the home PC).** Next, on the office PC, run `bash scripts/tests/bootstrap-cluster.sh` from `shoplite-app/`, in the background with output to a file, until it ends with `PASS`.
-- Not run yet:
-  - the last edits: repos created inside the Git server container, the CRD-based wave check, `Accept: text/html` on the `/argocd` page check, the Ingress health check in `argocd-values.yaml`;
-  - every check after "prod waits for a manual sync": the `/argocd` page and 401, the manual prod sync through ArgoCD's API, orders through both NodePorts, self-heal.
-- Then mark 7.2 done in PROGRESS (status, commit, verification), update this section, commit and push.
-
-Then 7.3 (Terraform `github-oidc`: the CI role, push to the three ECR repositories only), 7.4 (pipeline v1: build, OIDC, ECR push, tag commit to shoplite-gitops), then 5.4, Q6, the rest of Q7.
+Next: 7.3 (Terraform `github-oidc`: the CI role, push to the three ECR repositories only), then 7.4 (pipeline v1: build, OIDC, ECR push, tag commit to shoplite-gitops), then 5.4, Q6, the rest of Q7.
