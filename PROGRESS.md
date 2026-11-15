@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-15, Q7 step 7.4 শেষ (main pipeline-এর প্রথম সংস্করণ)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-15, Q7 step 7.4 শেষ (main pipeline-এর প্রথম সংস্করণ, "Run workflow" বোতাম সহ)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -496,7 +496,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | 7.1 | shoplite-gitops-এর কাঠামো: root app, dev আর prod-এর Application, `envs` values | (c) | ✅ `b3b00a0` |
 | 7.2 | Cluster-এর bootstrap: namespace, DB-র Secret, pin করা ArgoCD, root app; ArgoCD ALB-র `/argocd`-এ; local রিহার্সাল (ArgoCD Git থেকে sync করে) | (c), (d) | ✅ `7adece6` |
 | 7.3 | Terraform-এ GitHub OIDC: CI-এর IAM role, শুধু তিনটা ECR repo-তে push | (a) | ✅ `ac8e1b3` |
-| 7.4 | Pipeline-এর প্রথম সংস্করণ: build → OIDC দিয়ে ECR-এ push → gitops-এ tag commit | (a) | ✅ `e23bf34` (GitHub-এ প্রথম run repo ভাগের পরে) |
+| 7.4 | Pipeline-এর প্রথম সংস্করণ: build → OIDC দিয়ে ECR-এ push → gitops-এ tag commit | (a) | ✅ `e23bf34`, "Run workflow" বোতাম `2e538cc` (GitHub-এ প্রথম run repo ভাগের পরে) |
 | পরে | Q7-এর বাকি: lint (Hadolint, `helm lint`), test, Trivy, PR pipeline, Terraform plan-এর comment, prod-এ তোলার workflow, self-heal-এর প্রমাণ | (a), (b), (d) | ⬜ |
 
 **Step 7.1-এ কী হলো** (`shoplite-gitops/`, `b3b00a0`)
@@ -601,6 +601,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
   - Action-গুলো commit SHA দিয়ে pin করা (PLAN): checkout v7.0.1, configure-aws-credentials v6.3.0, amazon-ecr-login v2.1.7। প্রতিটাই তখন দুই সপ্তাহের বেশি পুরনো সর্বশেষ release।
   - `concurrency`: একবারে একটা run, push-এর ক্রমে, যাতে দেরিতে শেষ হওয়া পুরনো run নতুন tag-এর ওপর লিখতে না পারে।
   - Permission শুধু `contents: read` আর `id-token: write`। `kubectl` বা cluster-এর কোনো credential নেই।
+  - Actions tab-এ "Run workflow" বোতাম (`workflow_dispatch`, `2e538cc`, user-এর সিদ্ধান্ত)। Lab session-এর শুরুতে ECR খালি থাকে; বোতাম main-এর সর্বশেষ commit-এর image push করে, নতুন commit লাগে না। অন্য branch থেকে চালালে AWS-এ পৌঁছায় না, কারণ CI-এর role শুধু main-কে মানে।
 - **`shoplite-app/scripts/update-gitops.sh`:** shoplite-gitops-এর checkout-এ `envs/<env>/values.yaml`-এ registry আর tag লেখে।
   - Commit করে `github-actions[bot]` হিসেবে, message-এ run-এর link আর source commit।
   - তারপর push করে। প্রতিবার শুরু করে সর্বশেষ main থেকে, তাই মাঝে অন্য কারো commit এলে সেটা থাকে। তিনবার চেষ্টা করে।
@@ -608,7 +609,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
   - Input যাচাই করে: environment `dev`/`prod`, registry শুধু host, tag Docker-এর নিয়মে।
   - পরের `promote` workflow-ও (prod) এটাই ব্যবহার করবে।
 - **রিহার্সাল `shoplite-app/scripts/tests/pipeline.sh`** (সাথে `runner.Dockerfile`: GitHub runner-এর মতো bash, git, yq), প্রায় ২০ সেকেন্ড:
-  1. actionlint দিয়ে workflow, `run:`-এর ভেতরে shellcheck; shellcheck দিয়ে script-গুলো।
+  1. actionlint দিয়ে workflow, `run:`-এর ভেতরে shellcheck; shellcheck দিয়ে script-গুলো। Workflow-এর trigger ঠিক দুটো: main-এ push আর `workflow_dispatch`।
   2. প্রতিটা action:
      - comment-এ লেখা release-এর commit-এ pin করা কিনা (GitHub থেকে tag এনে মেলায়);
      - যে input দেওয়া হচ্ছে, সেই commit-এর `action.yml`-এ আছে কিনা, আর দরকারি input দেওয়া কিনা;
@@ -635,6 +636,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
   - প্রথম বাতিলেই হাল ছাড়া;
   - `env()` (YAML-কে type ঠিক করতে দেওয়া);
   - dev-এর tag prod-এর ফাইলে লেখা।
+- ✅ বোতাম যোগের পরে (`2e538cc`) রিহার্সাল আবার `PASS` (১৬ সেকেন্ড)। Trigger-এর আরও ৪টা ভুলের প্রত্যেকটায় fail করেছে: বোতাম মুছে ফেলা, সব branch-এর push-এ চালানো, আরেকটা branch যোগ, pull request-এও চালানো।
 - ✅ GitHub-এর ubuntu-24.04 runner-এ yq 4.54.3, git আর docker আছে (runner-images-এর তালিকা)।
 - ⏳ GitHub-এ আসল run: repo ভাগের পরে, lab session-এ (deploy key, variable, `LAB_ACTIVE`)। সেটাই Q7a-এর প্রমাণ।
 
@@ -669,6 +671,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | `7adece6` | 2026-11-15 | Q7 step 7.2: bootstrap script, ArgoCD-র values, GitOps-এর রিহার্সাল |
 | `ac8e1b3` | 2026-11-15 | Q7 step 7.3: GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push (Terraform) |
 | `e23bf34` | 2026-11-15 | Q7 step 7.4: main pipeline v1 (build, OIDC দিয়ে ECR, gitops-এ tag), `update-gitops.sh`, pipeline-এর রিহার্সাল |
+| `2e538cc` | 2026-11-15 | Q7 step 7.4: pipeline-এ "Run workflow" বোতাম (`workflow_dispatch`), রিহার্সালে trigger-এর check |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -948,6 +951,10 @@ bash ansible/tests/run.sh
 - **`LAB_ACTIVE` (PLAN):** `true` না হলে pipeline শুধু build করে। Lab-এর বাইরে AWS-এর role বা ECR থাকে না, তখনো run সবুজ থাকে।
 - **এক job, matrix নয়।** পরে Trivy যে image scan করবে, push হবে ঠিক সেটাই; আবার build করলে অন্য image হতে পারত। OIDC login-ও একবার।
 - **Tag সবসময় string** (`strenv()`): `0123456` বা `1e23456` number হয়ে গেলে chart ভুল image নাম লিখত।
+- **"Run workflow" বোতাম (`workflow_dispatch`)** (user-এর সিদ্ধান্ত, 15 Nov, খালি commit-এর বদলে)।
+  - প্রতি lab session-এর শুরুতে ECR খালি থাকে। তখন Actions tab থেকে main-এর ওপর একবার চালানো হয়।
+  - প্রশ্ন এটা চায় না, তাই README-র deviation log-এ যাবে।
+  - অন্য branch থেকে চালালে CI-এর role পাওয়া যায় না (trust শুধু `refs/heads/main`)।
 
 ## 12. জানা বিষয়
 
@@ -1019,10 +1026,8 @@ Q5-এর code শেষ (section 6); Q7-এর 7.1–7.4 শেষ (section 7):
    - GitHub-এর setting:
      - shoplite-gitops-এ write access-সহ deploy key, তার private key shoplite-app-এর secret `GITOPS_DEPLOY_KEY`-এ;
      - variable `AWS_ROLE_ARN` (`terraform output -raw ci_role_arn`), দরকার হলে `AWS_REGION`, আর `LAB_ACTIVE=true`।
-   - প্রতি session-এর শুরুতে ECR খালি থাকে, তাই pipeline একবার চালাতে হয়। তারপর `scripts/bootstrap-cluster.sh`, prod-এর manual sync, প্রমাণ।
+   - প্রতি session-এর শুরুতে ECR খালি থাকে, তাই Actions tab-এর "Run workflow" বোতাম দিয়ে main-এর ওপর pipeline একবার চালাতে হয়। তারপর `scripts/bootstrap-cluster.sh`, prod-এর manual sync, প্রমাণ।
    - Session শেষে `LAB_ACTIVE` বন্ধ।
-
-   **User-কে জিজ্ঞেস করতে হবে:** session-এর শুরুতে pipeline চালানোর জন্য খালি commit (`git commit --allow-empty`) দেওয়া হবে, নাকি workflow-এ "Run workflow" বোতাম (`workflow_dispatch`) যোগ হবে। প্রশ্ন এটা চায় না, তাই user ঠিক করবে।
 2. তারপর Q6-এর dashboard, alert আর runbook, আর Q7-এর বাকি অংশ (lint, test, Trivy, PR pipeline, Terraform plan-এর comment, `promote`), সবই নিজের PC-তে।
 3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
