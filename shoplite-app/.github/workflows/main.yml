@@ -16,6 +16,10 @@ name: main
 on:
   push:
     branches: [main]
+  # The "Run workflow" button on the Actions tab. A lab session starts with an empty ECR, so
+  # one run from main pushes the images of main's newest commit, with no new commit needed.
+  # From another branch nothing reaches AWS: the CI role trusts only main.
+  workflow_dispatch:
 
 # One run at a time, in push order: an older run that finishes late must not write its tag
 # over a newer one.

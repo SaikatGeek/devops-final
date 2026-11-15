@@ -3,7 +3,8 @@
 # and AWS (the real run needs the split repositories and a lab session):
 #   1. actionlint checks the workflow and runs shellcheck on its run steps; shellcheck checks
 #      the scripts
-#   2. every action is pinned to the commit of the release its comment names, and gets only
+#   2. the workflow runs on a push to main and from its "Run workflow" button, nothing else;
+#      every action is pinned to the commit of the release its comment names, and gets only
 #      inputs that this commit's action.yml declares (actionlint does not know the newest
 #      releases); every step output the workflow reads exists
 #   3. scripts/update-gitops.sh, run the way the pipeline runs it, against a copy of
@@ -52,6 +53,16 @@ echo "ok    no findings"
 step "starting a stand-in for GitHub's runner (bash, git, yq)"
 docker build -q -t shoplite/pipeline-test-runner -f scripts/tests/runner.Dockerfile scripts/tests >/dev/null
 docker run -d --name "$RUNNER" -v "$HOST_DIR:/app:ro" shoplite/pipeline-test-runner sleep infinity >/dev/null
+
+step "the triggers: a push to main and the \"Run workflow\" button (workflow_dispatch), nothing else"
+on_runner <<'EOF' || fail "the workflow's triggers are not exactly a push to main and workflow_dispatch"
+wf=/app/.github/workflows/main.yml
+triggers=$(yq -o=json -I=0 '.on | keys | sort' "$wf")
+[ "$triggers" = '["push","workflow_dispatch"]' ] || { echo "triggers: $triggers"; exit 1; }
+push=$(yq -o=json -I=0 '.on.push' "$wf")
+[ "$push" = '{"branches":["main"]}' ] || { echo "push trigger: $push"; exit 1; }
+echo "ok    on: push to main, workflow_dispatch"
+EOF
 
 step "the actions: pinned to the commit of the release in their comment, given only inputs they declare"
 on_runner <<'EOF' || fail "an action's pin, inputs or outputs do not match"
