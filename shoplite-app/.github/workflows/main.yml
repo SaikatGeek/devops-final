@@ -1,0 +1,94 @@
+# Main-branch pipeline (question 7a), first version (step 7.4). On every push to main it
+# builds the three images tagged with the short commit SHA, pushes them to ECR through
+# OpenID Connect (no AWS key is stored in GitHub), and commits the new tag to
+# shoplite-gitops; ArgoCD then deploys dev from Git. The pipeline never runs kubectl and
+# holds no cluster credentials. Linting, tests and the Trivy gate come in a later step.
+#
+# Settings of this repository (Settings > Secrets and variables > Actions):
+#   variable AWS_ROLE_ARN       the role from `terraform output ci_role_arn`
+#   variable AWS_REGION         the lab's region; ap-southeast-1 (Terraform's default) if unset
+#   variable LAB_ACTIVE         true while a lab session has the AWS account and ECR. Otherwise
+#                               the images are only built, so runs between sessions stay green
+#   secret   GITOPS_DEPLOY_KEY  private key of shoplite-gitops' deploy key (write access);
+#                               GITHUB_TOKEN cannot push to another repository
+name: main
+
+on:
+  push:
+    branches: [main]
+
+# One run at a time, in push order: an older run that finishes late must not write its tag
+# over a newer one.
+concurrency:
+  group: main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: build, push to ECR, commit the tag to shoplite-gitops
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # the OIDC token that AWS exchanges for the CI role's credentials
+    env:
+      SERVICES: web catalog-api order-worker
+    steps:
+      - name: Check out shoplite-app
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Image tag (the short commit SHA)
+        id: tag
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the images
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          for service in $SERVICES; do
+            docker build --target runtime -t "shoplite/$service:$TAG" "services/$service"
+          done
+
+      - name: AWS credentials through OIDC (the CI role)
+        if: vars.LAB_ACTIVE == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+
+      - name: Log in to ECR
+        id: ecr
+        if: vars.LAB_ACTIVE == 'true'
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - name: Push the images to ECR
+        if: vars.LAB_ACTIVE == 'true'
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          for service in $SERVICES; do
+            docker tag "shoplite/$service:$TAG" "$REGISTRY/shoplite/$service:$TAG"
+            docker push "$REGISTRY/shoplite/$service:$TAG"
+          done
+
+      - name: Check out shoplite-gitops with the deploy key
+        if: vars.LAB_ACTIVE == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: SaikatGeek/shoplite-gitops
+          ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
+          path: shoplite-gitops
+
+      - name: Commit the new image tag to shoplite-gitops (dev)
+        if: vars.LAB_ACTIVE == 'true'
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: bash scripts/update-gitops.sh shoplite-gitops dev "$REGISTRY" "$TAG"
+
+      - name: No lab session
+        if: vars.LAB_ACTIVE != 'true'
+        run: echo "::notice::LAB_ACTIVE is not true, so the images were only built; nothing was pushed to ECR or committed to shoplite-gitops."
