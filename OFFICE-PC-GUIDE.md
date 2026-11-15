@@ -89,10 +89,10 @@ git pull
 CLAUDE.md আর PROGRESS.md পড়ো। তারপর বলো এখন কোথায় আছি আর পরের step কী। আমি হ্যাঁ বললে সেই step শুরু করবে।
 ```
 
-**পরের step শুরু করাতে** (এখন পরের step 4.7b):
+**পরের step শুরু করাতে** (এখন পরের step 5.4):
 
 ```text
-4.7b শুরু করো
+5.4 শুরু করো
 ```
 
 **এক step শেষ হলে Claude নিজেই যা করবে (CLAUDE.md-তে লেখা আছে):**
@@ -138,7 +138,7 @@ docker compose down
 | ✅ | Q3-এর code: `linux/` folder (`3019a9a`), local-এ রিহার্সাল করা | হয়ে গেছে |
 | ✅ | Q4-এর code: Terraform (4.1–4.6), Ansible (4.7), lab-এর পদ্ধতি (4.8) | হয়ে গেছে |
 | ✅ | Q5-এর code: Helm chart আর Traefik (5.1–5.3) | হয়ে গেছে |
-| ✅ | Q7-এর GitOps-এর ভিত: 7.1 আর 7.2 (bootstrap, ArgoCD; local k3s-এ রিহার্সাল pass), 7.3 (GitHub OIDC-এর role), 7.4 (main pipeline v1, local-এ রিহার্সাল) | হয়ে গেছে |
+| ✅ | Q7-এর GitOps-এর ভিত: 7.1 আর 7.2 (bootstrap, ArgoCD; local k3s-এ রিহার্সাল pass), 7.3 (GitHub OIDC-এর role), 7.4 (main pipeline v1, local-এ রিহার্সাল), 7.5 (prod-এ তোলার `promote`) | হয়ে গেছে |
 | 1 | 5.4 (Q5-এর lab পদ্ধতি), তারপর Q6 আর Q7-এর বাকি code | যেকোনো PC |
 | 2 | Q3 থেকে Q8 চালানো আর প্রমাণ (Q3: `linux/evidence/commands.md` ধরে) | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
 
