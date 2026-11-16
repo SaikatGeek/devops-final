@@ -1,0 +1,43 @@
+# Metrics, alerting and dashboards of ShopLite's observability stack (question 6a):
+# kube-prometheus-stack (Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics)
+# in the namespace monitoring. Its settings are monitoring configuration, so they live in
+# shoplite-app (monitoring/stack/kube-prometheus-stack.yaml), read through the second source.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    # First, with Traefik (wave 0): ShopLite's ServiceMonitors (wave 1) need its CRDs.
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 92.17.0 # Prometheus Operator v0.94.2
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $app/monitoring/stack/kube-prometheus-stack.yaml
+    - repoURL: https://github.com/SaikatGeek/shoplite-app.git
+      targetRevision: main
+      ref: app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The Prometheus Operator's CRDs are too large for the annotation a client-side apply
+      # writes.
+      - ServerSideApply=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

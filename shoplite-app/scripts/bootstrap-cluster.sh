@@ -5,8 +5,10 @@
 #   1. namespaces shoplite (prod) and shoplite-dev (dev)
 #   2. the database Secret shoplite-db in each, with a random password, unless it exists
 #      already: PostgreSQL fixes the password on its first start, so a rerun keeps it
-#   3. ArgoCD from its pinned Helm chart, with shoplite-gitops/bootstrap/argocd-values.yaml
-#   4. shoplite-gitops/bootstrap/root-app.yaml; from then on ArgoCD builds the rest from Git
+#   3. namespace monitoring and Grafana's admin Secret grafana-admin, with a random password,
+#      unless it exists already (Grafana too keeps the password of its first start)
+#   4. ArgoCD from its pinned Helm chart, with shoplite-gitops/bootstrap/argocd-values.yaml
+#   5. shoplite-gitops/bootstrap/root-app.yaml; from then on ArgoCD builds the rest from Git
 # Nothing secret goes to Git or to the screen. Safe to run again.
 #
 # shoplite-gitops must be next to shoplite-app (as in devops-final, or both repositories
@@ -43,6 +45,16 @@ for ns in $NAMESPACES; do
   fi
 done
 
+step "namespace monitoring and Grafana's admin Secret"
+kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+if kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1; then
+  echo "monitoring: Secret grafana-admin exists, kept"
+else
+  kubectl -n monitoring create secret generic grafana-admin --from-literal=admin-user=admin \
+    --from-literal=admin-password="$(head -c 24 /dev/urandom | base64 | tr -d '+/=')" >/dev/null
+  echo "monitoring: Secret grafana-admin created (random password)"
+fi
+
 step "ArgoCD (chart $ARGOCD_CHART_VERSION)"
 helm upgrade --install argocd argo-cd --repo "$ARGOCD_CHART_REPO" --version "$ARGOCD_CHART_VERSION" \
   --namespace argocd --create-namespace -f "$GITOPS_DIR/bootstrap/argocd-values.yaml" \
@@ -55,3 +67,5 @@ kubectl apply -f "$GITOPS_DIR/bootstrap/root-app.yaml"
 echo
 echo "ArgoCD: http://<ALB DNS name>/argocd (terraform output app_urls), user admin. Password:"
 echo "  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo"
+echo "Grafana: http://<ALB DNS name>/grafana, user admin. Password:"
+echo "  kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d; echo"

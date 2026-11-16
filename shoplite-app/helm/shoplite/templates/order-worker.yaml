@@ -49,6 +49,22 @@ spec:
           resources:
             {{- toYaml .Values.orderWorker.resources | nindent 12 }}
 ---
+# Only for Prometheus: the worker's ServiceMonitor (servicemonitor.yaml) finds /metrics
+# through this Service (question 6.1). Nothing else connects to the worker.
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-worker
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  selector:
+    {{- include "shoplite.selectorLabels" $c | nindent 4 }}
+  ports:
+    - name: metrics
+      port: 8001
+      targetPort: metrics
+---
 # More workers while the queue keeps them busy: scaled on CPU (metrics-server, part of k3s).
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

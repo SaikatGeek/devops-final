@@ -3,7 +3,9 @@
 #   1. build the three images, start k3s in Docker and load the images into it
 #   2. helm lint with the dev and the prod values
 #   3. install Traefik exactly as shoplite-gitops/apps/traefik.yaml describes it (chart,
-#      version, values), then let the API server check every rendered prod manifest
+#      version, values) and the ServiceMonitor CRD of the kube-prometheus-stack chart that
+#      shoplite-gitops/apps/kube-prometheus-stack.yaml pins, then let the API server check
+#      every rendered prod manifest
 #   4. create each environment's database Secret (outside the chart, as in the lab) and
 #      install the chart twice: dev values into shoplite-dev, prod values into shoplite
 #   5. check: every pod ready, no container runs as root, every container has requests and
@@ -25,6 +27,7 @@ export MSYS_NO_PATHCONV=1 # Git Bash on Windows: leave container paths alone
 HOST_DIR=$(pwd -W 2>/dev/null || pwd)
 GITOPS_DIR=${SHOPLITE_GITOPS_DIR:-../shoplite-gitops}
 TRAEFIK_APP="$GITOPS_DIR/apps/traefik.yaml"
+KPS_APP="$GITOPS_DIR/apps/kube-prometheus-stack.yaml"
 K3S_IMAGE=rancher/k3s:v1.37.2-k3s1 # the version Ansible installs in the lab
 HELM_IMAGE=alpine/helm:4.3.1
 YQ_IMAGE=mikefarah/yq:4.54.1
@@ -47,10 +50,12 @@ helm() {
     -v "$WORK_HOST:/work" -e KUBECONFIG=/work/kubeconfig -w /helm "$HELM_IMAGE" "$@"
 }
 yq() { docker run --rm -i "$YQ_IMAGE" "$@" <"$TRAEFIK_APP"; }
+kps_app() { docker run --rm -i "$YQ_IMAGE" "$@" <"$KPS_APP"; }
 # curl from the k3s node's own network, like the ALB reaching a NodePort.
 node_curl() { docker run --rm --network "container:$NODE" --entrypoint curl shoplite/web:local "$@"; }
 
 [ -f "$TRAEFIK_APP" ] || fail "$TRAEFIK_APP not found (set SHOPLITE_GITOPS_DIR)"
+[ -f "$KPS_APP" ] || fail "$KPS_APP not found (set SHOPLITE_GITOPS_DIR)"
 
 step "building the three images"
 for s in web catalog-api order-worker; do
@@ -104,6 +109,15 @@ helm install traefik "$TRAEFIK_CHART" --repo "$TRAEFIK_REPO" --version "$TRAEFIK
   fail "Traefik did not become ready"
 kubectl -n traefik get service traefik
 
+step "the ServiceMonitor CRD (the chart's ServiceMonitors need it), from the chart shoplite-gitops pins"
+KPS_REPO=$(kps_app '.spec.sources[0].repoURL')
+KPS_CHART=$(kps_app '.spec.sources[0].chart')
+KPS_VERSION=$(kps_app '.spec.sources[0].targetRevision')
+helm pull "$KPS_CHART" --repo "$KPS_REPO" --version "$KPS_VERSION" --untar --untardir /work/kps >/dev/null
+kubectl apply --server-side -f - <"$WORK/kps/$KPS_CHART/charts/crds/crds/crd-servicemonitors.yaml" >/dev/null ||
+  fail "could not install the ServiceMonitor CRD"
+echo "ok    ServiceMonitor CRD of $KPS_CHART $KPS_VERSION"
+
 step "the API server checks every rendered prod manifest (server-side dry run)"
 kubectl create namespace shoplite-dryrun >/dev/null
 helm template shoplite shoplite -n shoplite-dryrun -f shoplite/values-prod.yaml |
@@ -123,7 +137,13 @@ for env in dev prod; do
     fail "the $env release did not become ready"
   fi
 done
-kubectl -n "$PROD" get statefulsets,deployments,services,ingresses,pdb,hpa,networkpolicies
+kubectl -n "$PROD" get statefulsets,deployments,services,ingresses,pdb,hpa,networkpolicies,servicemonitors
+for ns in $DEV $PROD; do
+  [ "$(kubectl -n "$ns" get servicemonitors -o name | sort | tr '\n' ' ')" = \
+    "servicemonitor.monitoring.coreos.com/catalog-api servicemonitor.monitoring.coreos.com/order-worker " ] ||
+    fail "$ns does not have the ServiceMonitors of catalog-api and order-worker"
+done
+echo "ok    both releases have the ServiceMonitors of catalog-api and order-worker"
 
 step "every pod ready, none as root, every container with requests and limits"
 for ns in $DEV $PROD; do

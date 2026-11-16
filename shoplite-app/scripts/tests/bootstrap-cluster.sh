@@ -7,15 +7,20 @@
 #      the test server; in the gitops copy only, point the Applications at that server
 #      instead of GitHub and write the image tag the way CI will (the images just built)
 #   3. run scripts/bootstrap-cluster.sh against the cluster, then once more: the rerun
-#      keeps both database Secrets unchanged
-#   4. check: root -> traefik -> shoplite-dev become Synced and Healthy on their own; the
-#      ShopLite Applications (wave 1) appear only after Traefik (wave 0) is available;
+#      keeps both database Secrets and Grafana's admin Secret unchanged
+#   4. check: root -> traefik and kube-prometheus-stack -> shoplite-dev become Synced and
+#      Healthy on their own; the ShopLite Applications (wave 1) appear only after the CRDs
+#      of wave 0 (Traefik's, the Prometheus Operator's);
 #      shoplite-prod stays OutOfSync, with nothing deployed, until it is synced by hand;
 #      ArgoCD answers at /argocd on the web NodePort (the ALB's port 80) and its API wants
 #      the admin login; the manual prod sync goes through that API, as the UI's Sync
-#      button does; orders through both NodePorts reach COMPLETED; a kubectl change in
-#      dev is reverted by self-heal (question 7d) while the same change in prod stays
-#      and shows as OutOfSync
+#      button does; orders through both NodePorts reach COMPLETED; Prometheus scrapes
+#      node-exporter, kube-state-metrics and catalog-api and order-worker of both
+#      environments through their ServiceMonitors, with every target up, has the six
+#      application metrics and trace_id exemplars on the latency histogram (question 6);
+#      Grafana answers at /grafana, wants a login, and queries Prometheus; a kubectl
+#      change in dev is reverted by self-heal (question 7d) while the same change in prod
+#      stays and shows as OutOfSync
 #   5. remove everything again
 # Needs Docker and internet (the charts and images of Traefik and ArgoCD). About 15
 # minutes. Run it from shoplite-app/, with shoplite-gitops next to it
@@ -94,7 +99,7 @@ place_order() {
   echo "$id"
 }
 
-for file in bootstrap/root-app.yaml bootstrap/argocd-values.yaml apps/traefik.yaml; do
+for file in bootstrap/root-app.yaml bootstrap/argocd-values.yaml apps/traefik.yaml apps/kube-prometheus-stack.yaml; do
   [ -f "$GITOPS_DIR/$file" ] || fail "$GITOPS_DIR/$file not found (set SHOPLITE_GITOPS_DIR)"
 done
 
@@ -159,14 +164,18 @@ for _ in $(seq 90); do
   sleep 2
 done
 kubectl get node "$NODE" --no-headers | grep -q ' Ready ' || fail "k3s did not become Ready"
+# node-exporter (question 6) mounts the node's / with HostToContainer propagation, so / must
+# be a shared mount, as systemd makes it on a real node; in a container it is private.
+docker exec "$NODE" mount --make-rshared /
 docker exec "$NODE" cat /etc/rancher/k3s/k3s.yaml >"$WORK/kube/config"
 # grep -c reads all of curl's output (grep -q could stop early and break curl's pipe).
 node_curl -sf "http://$GIT_IP/shoplite-gitops.git/info/refs?service=git-upload-pack" |
   grep -c refs/heads/main >/dev/null || fail "the test Git server does not answer from the cluster's network"
 echo "ok    the test Git server answers from the cluster's network: http://$GIT_IP/<repository>.git"
 
-step "loading the images into k3s (ShopLite, PostgreSQL, Redis, Traefik, ArgoCD)"
+step "loading the images into k3s (ShopLite, PostgreSQL, Redis, Traefik, ArgoCD, kube-prometheus-stack)"
 traefik_app() { yq "$1" <"$WORK/gitops/apps/traefik.yaml"; }
+kps_app() { yq "$1" <"$WORK/gitops/apps/kube-prometheus-stack.yaml"; }
 images="shoplite/web:local shoplite/catalog-api:local shoplite/order-worker:local postgres:16-alpine redis:7.4-alpine"
 images="$images traefik:$(docker run --rm "$HELM_IMAGE" show chart "$(traefik_app .spec.source.chart)" \
   --repo "$(traefik_app .spec.source.repoURL)" --version "$(traefik_app .spec.source.targetRevision)" |
@@ -174,6 +183,11 @@ images="$images traefik:$(docker run --rm "$HELM_IMAGE" show chart "$(traefik_ap
 argocd_chart=$(sed -n 's/^ARGOCD_CHART_VERSION=\([^ ]*\).*/\1/p' scripts/bootstrap-cluster.sh)
 images="$images $(docker run --rm -v "$WORK_HOST/gitops:/gitops:ro" "$HELM_IMAGE" template argocd argo-cd \
   --repo https://argoproj.github.io/argo-helm --version "$argocd_chart" -f /gitops/bootstrap/argocd-values.yaml |
+  sed -n 's/^ *image: *"\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' | sort -u | tr '\n' ' ')"
+images="$images $(docker run --rm -v "$HOST_DIR:/app:ro" "$HELM_IMAGE" template kube-prometheus-stack \
+  "$(kps_app '.spec.sources[0].chart')" --repo "$(kps_app '.spec.sources[0].repoURL')" \
+  --version "$(kps_app '.spec.sources[0].targetRevision')" --namespace monitoring \
+  -f /app/monitoring/stack/kube-prometheus-stack.yaml |
   sed -n 's/^ *image: *"\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' | sort -u | tr '\n' ' ')"
 for image in $images; do
   docker image inspect "$image" >/dev/null 2>&1 || docker pull -q "$image" >/dev/null
@@ -185,24 +199,27 @@ docker save --platform linux/amd64 $images | docker exec -i "$NODE" ctr --namesp
 step "running scripts/bootstrap-cluster.sh, as on the lab machine"
 lab_machine bash scripts/bootstrap-cluster.sh || fail "scripts/bootstrap-cluster.sh failed"
 
-step "running it again: it keeps both database Secrets"
+step "running it again: it keeps the database Secrets and Grafana's admin Secret"
 secret_versions() {
   for ns in shoplite shoplite-dev; do
     kubectl -n "$ns" get secret shoplite-db -o jsonpath='{.metadata.resourceVersion} '
   done
+  kubectl -n monitoring get secret grafana-admin -o jsonpath='{.metadata.resourceVersion}'
 }
 before=$(secret_versions)
 lab_machine bash scripts/bootstrap-cluster.sh >"$WORK/second-run.log" ||
   { cat "$WORK/second-run.log"; fail "the second run failed"; }
-grep 'Secret shoplite-db' "$WORK/second-run.log" || true
-[ "$(grep -c 'Secret shoplite-db exists, kept' "$WORK/second-run.log")" = 2 ] ||
-  fail "the second run did not keep both Secrets"
-[ "$(secret_versions)" = "$before" ] || fail "a database Secret changed on the second run"
-echo "ok    second run: both Secrets unchanged (PostgreSQL keeps the password of its first start)"
+grep 'Secret ' "$WORK/second-run.log" || true
+[ "$(grep -c -E 'Secret (shoplite-db|grafana-admin) exists, kept' "$WORK/second-run.log")" = 3 ] ||
+  fail "the second run did not keep all three Secrets"
+[ "$(secret_versions)" = "$before" ] || fail "a Secret changed on the second run"
+echo "ok    second run: the three Secrets unchanged (PostgreSQL and Grafana keep the password of their first start)"
 
-step "ArgoCD builds the rest from Git on its own: root -> traefik (wave 0) -> shoplite-dev (wave 1)"
+step "ArgoCD builds the rest from Git on its own: root -> traefik, kube-prometheus-stack (wave 0) -> shoplite-dev (wave 1)"
 wait_for_app traefik "Synced Healthy" 600 || fail "traefik did not become Synced and Healthy"
 echo "ok    traefik: Synced Healthy"
+wait_for_app kube-prometheus-stack "Synced Healthy" 900 || fail "kube-prometheus-stack did not become Synced and Healthy"
+echo "ok    kube-prometheus-stack: Synced Healthy"
 wait_for_app shoplite-dev "Synced Healthy" 600 || fail "shoplite-dev did not become Synced and Healthy"
 echo "ok    shoplite-dev: Synced Healthy, with no one syncing it (automated)"
 wait_for_app root "Synced *" 120 || fail "root is not Synced"
@@ -212,14 +229,17 @@ echo "ok    root: $(app_state root)"
 # the CRD, not with Traefik's pod: right after that sync ArgoCD may briefly report the
 # traefik Application as Healthy while its diff waits for the new CRD's schema.)
 crd_created=$(kubectl get crd middlewares.traefik.io -o jsonpath='{.metadata.creationTimestamp}')
+sm_crd_created=$(kubectl get crd servicemonitors.monitoring.coreos.com -o jsonpath='{.metadata.creationTimestamp}')
 traefik_ready=$(kubectl -n traefik get deployment traefik \
   -o jsonpath='{.status.conditions[?(@.type=="Available")].lastTransitionTime}')
 for app in shoplite-dev shoplite-prod; do
   created=$(kubectl -n argocd get application "$app" -o jsonpath='{.metadata.creationTimestamp}')
   [[ ! "$created" < "$crd_created" ]] ||
     fail "$app was created at $created, before Traefik's Middleware CRD ($crd_created)"
+  [[ ! "$created" < "$sm_crd_created" ]] ||
+    fail "$app was created at $created, before the ServiceMonitor CRD ($sm_crd_created)"
 done
-echo "ok    sync waves: Traefik's CRDs at $crd_created, Traefik available at $traefik_ready, the ShopLite Applications created at $created"
+echo "ok    sync waves: Traefik's CRDs at $crd_created, the ServiceMonitor CRD at $sm_crd_created, Traefik available at $traefik_ready, the ShopLite Applications created at $created"
 
 step "prod waits for a manual sync"
 wait_for_app shoplite-prod "OutOfSync *" 120 || fail "shoplite-prod is not OutOfSync"
@@ -258,6 +278,59 @@ echo "ok    dev (NodePort 30081, the ALB's port 8080): order $id COMPLETED"
 id=$(place_order http://127.0.0.1:30080)
 echo "ok    prod (NodePort 30080, the ALB's port 80): order $id COMPLETED"
 
+step "metrics (question 6.1): Prometheus scrapes the nodes, the cluster's state and both ShopLite environments"
+prom_ip=$(kubectl -n monitoring get service kube-prometheus-stack-prometheus -o jsonpath='{.spec.clusterIP}')
+# prom_query <PromQL>: one "<label>=<value>,... <sample value>" line per series of the
+# result, asked from the node's own network (the Service's cluster IP).
+prom_query() {
+  node_curl -sf --data-urlencode "query=$1" "http://$prom_ip:9090/api/v1/query" |
+    yq -p json '.data.result[] | ((.metric | to_entries | map(.key + "=" + .value) | join(",")) + " " + .value[1])'
+}
+wanted="job=catalog-api,namespace=shoplite job=catalog-api,namespace=shoplite-dev job=order-worker,namespace=shoplite
+  job=order-worker,namespace=shoplite-dev job=kube-state-metrics,namespace=monitoring job=node-exporter,namespace=monitoring"
+up="" missing=$wanted
+for _ in $(seq 36); do
+  up=$(prom_query 'count by (job, namespace) (up == 1)' || true)
+  missing=""
+  for want in $wanted; do grep -q "^$want " <<<"$up" || missing="$missing $want"; done
+  [ -z "$missing" ] && break
+  sleep 5
+done
+[ -z "$missing" ] || { echo "$up"; fail "Prometheus does not scrape:$missing"; }
+down=$(prom_query 'up == 0')
+[ -z "$down" ] || { echo "$down"; fail "some targets are down"; }
+echo "ok    every target is up, among them node-exporter, kube-state-metrics, and catalog-api and order-worker of both environments (targets per job):"
+while read -r line; do echo "        $line"; done <<<"$up"
+names=$(prom_query 'count by (__name__) ({namespace="shoplite", __name__=~"http_requests_total|http_request_duration_seconds_bucket|orders_created_total|orders_processed_total|order_queue_depth|order_processing_seconds_bucket"})' |
+  cut -d' ' -f1 | sed 's/^__name__=//' | LC_ALL=C sort | tr '\n' ' ')
+[ "$names" = "http_request_duration_seconds_bucket http_requests_total order_processing_seconds_bucket order_queue_depth orders_created_total orders_processed_total " ] ||
+  fail "prod's application metrics in Prometheus: $names"
+echo "ok    the six application metrics of prod are in Prometheus: $names"
+# Exemplars (question 6.4): the trace_id catalog-api attached to its latency observations.
+exemplar=""
+for _ in $(seq 18); do
+  exemplar=$(node_curl -sf --data-urlencode 'query=http_request_duration_seconds_bucket{namespace="shoplite"}' \
+    --data-urlencode "start=$(($(date +%s) - 1800))" --data-urlencode "end=$(date +%s)" \
+    "http://$prom_ip:9090/api/v1/query_exemplars" | yq -p json '[.data[].exemplars[].labels.trace_id] | .[0] // ""' || true)
+  [[ $exemplar =~ ^[0-9a-f]{32}$ ]] && break
+  sleep 5
+done
+[[ $exemplar =~ ^[0-9a-f]{32}$ ]] || fail "no exemplar with a trace_id on prod's http_request_duration_seconds"
+echo "ok    exemplars on http_request_duration_seconds, e.g. trace_id $exemplar"
+
+step "Grafana at /grafana through Traefik's web entrypoint (NodePort 30080, the ALB's port 80)"
+code=$(node_curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:30080/grafana/api/user)
+[ "$code" = 401 ] || fail "Grafana's API answered $code without a login"
+grafana_password=$(kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d)
+node_curl -sf -u "admin:$grafana_password" http://127.0.0.1:30080/grafana/api/user | grep -c '"login":"admin"' >/dev/null ||
+  fail "admin could not log in to Grafana with the cluster's password"
+node_curl -sf -u "admin:$grafana_password" --data-urlencode 'query=count(up{job="catalog-api"})' \
+  http://127.0.0.1:30080/grafana/api/datasources/proxy/uid/prometheus/api/v1/query | grep -c '"status":"success"' >/dev/null ||
+  fail "Grafana's Prometheus data source (uid prometheus) does not answer"
+node_curl -sf http://127.0.0.1:30080/grafana/login | grep -c '<base href="/grafana/"' >/dev/null ||
+  fail "Grafana's page is not served under /grafana/"
+echo "ok    Grafana's page under /grafana/; its API answers 401 without a login; admin logs in with the cluster's password; it queries Prometheus (data source uid prometheus)"
+
 step "self-heal (question 7d): a kubectl change in dev is put back; the same change in prod stays"
 dev_replicas=$(kubectl -n shoplite-dev get deployment web -o jsonpath='{.spec.replicas}')
 prod_replicas=$(kubectl -n shoplite get deployment web -o jsonpath='{.spec.replicas}')
@@ -279,4 +352,4 @@ echo "ok    prod: the change stays ($((prod_replicas + 2)) replicas) and shows a
 echo
 kubectl -n argocd get applications
 echo
-echo "PASS: bootstrap, app of apps with sync waves, automated dev, manual prod, self-heal and /argocd work"
+echo "PASS: bootstrap, app of apps with sync waves, automated dev, manual prod, the metrics stack (targets, metrics, exemplars, Grafana at /grafana), self-heal and /argocd work"

@@ -1,0 +1,92 @@
+# Values for kube-prometheus-stack 92.17.0 (question 6a): Prometheus, Alertmanager, Grafana,
+# node-exporter and kube-state-metrics, in the namespace monitoring. ArgoCD installs the chart
+# with this file (shoplite-gitops/apps/kube-prometheus-stack.yaml).
+
+# k3s runs the control plane's components inside its one server process; their metrics are not
+# reachable as on a kubeadm cluster, so they are not scraped.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+
+# Only ShopLite's own alerts (monitoring/alert-rules) and dashboard (monitoring/dashboards):
+# the chart's default rules and dashboards are not installed, so nothing else alerts.
+defaultRules:
+  create: false
+
+prometheus:
+  prometheusSpec:
+    # Every ServiceMonitor, PodMonitor, Probe, ScrapeConfig and PrometheusRule in the cluster,
+    # not only the chart's own: ShopLite's ServiceMonitors are in shoplite and shoplite-dev.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    # Exemplars (question 6.4): the trace_id that catalog-api and order-worker attach to their
+    # latency observations, so a point on a latency panel opens that request's trace.
+    enableFeatures:
+      - exemplar-storage
+    # A lab session lasts a few hours, and the data goes with the cluster.
+    retention: 1d
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits: { cpu: "1", memory: 1536Mi }
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { cpu: 100m, memory: 128Mi }
+
+prometheusOperator:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+  prometheusConfigReloader:
+    resources:
+      requests: { cpu: 10m, memory: 16Mi }
+      limits: { cpu: 100m, memory: 64Mi }
+
+grafana:
+  # admin's password is in the cluster only (Secret grafana-admin, made by
+  # scripts/bootstrap-cluster.sh with a random password), never in Git.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  defaultDashboardsEnabled: false
+  # Under the ALB's /grafana path, like ArgoCD under /argocd: no domain, so no host rule.
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/grafana/"
+      serve_from_sub_path: true
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      # Traefik's web entrypoint: the ALB's port 80 (NodePort 30080).
+      traefik.ingress.kubernetes.io/router.entrypoints: web
+    path: /grafana
+    pathType: Prefix
+    hosts: []
+  # Grafana's own metrics move under the sub path too.
+  serviceMonitor:
+    path: /grafana/metrics
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 384Mi }
+
+kube-state-metrics:
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 128Mi }
+
+prometheus-node-exporter:
+  resources:
+    requests: { cpu: 10m, memory: 16Mi }
+    limits: { cpu: 100m, memory: 64Mi }

@@ -1,0 +1,24 @@
+{{- /*
+Prometheus scrapes catalog-api and order-worker through these (question 6.1: application
+metrics through ServiceMonitor resources). kube-prometheus-stack's Prometheus picks up every
+ServiceMonitor in the cluster (monitoring/stack/kube-prometheus-stack.yaml). Each selects its
+component's Service in this release and namespace, and scrapes /metrics on the named port.
+*/}}
+{{- range $component, $port := dict "catalog-api" "http" "order-worker" "metrics" }}
+{{- $c := dict "root" $ "component" $component }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "shoplite.labels" $c | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "shoplite.selectorLabels" $c | nindent 6 }}
+  endpoints:
+    - port: {{ $port }}
+      path: /metrics
+      interval: 15s
+{{- end }}

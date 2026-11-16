@@ -16,7 +16,7 @@ each part are listed at its end; the files go in this folder.
 > evidence in the same session, and end it with [After the session](#after-the-session).
 
 Roughly: question 4's part 20–30 minutes; the main pipeline about 5 minutes (it runs while the
-cluster is bootstrapped); the bootstrap 5 minutes; promotion and prod's sync 2–3 minutes.
+cluster is bootstrapped); the bootstrap 5–8 minutes; promotion and prod's sync 2–3 minutes.
 
 ## 0. Once, before the first session
 
@@ -150,19 +150,20 @@ Once per cluster, the script creates:
 
 - namespaces `shoplite` and `shoplite-dev`;
 - the database Secret in each, with a random password made in the cluster (never in Git);
+- namespace `monitoring` and Grafana's admin Secret, also with a random password (question 6);
 - ArgoCD (chart 10.11.6, ArgoCD v3.5.6);
 - the root Application.
 
-From then on ArgoCD builds everything from Git: Traefik first (sync wave 0), then the
-ShopLite Applications (wave 1).
+From then on ArgoCD builds everything from Git: Traefik and the metrics stack first (sync
+wave 0), then the ShopLite Applications (wave 1).
 
 ```bash
 bash scripts/bootstrap-cluster.sh
 watch -n 5 kubectl -n argocd get applications
 ```
 
-Wait until `traefik` and `shoplite-dev` are `Synced` and `Healthy`: 3–5 minutes, and dev
-needs the tag from section 2. Ctrl+C ends `watch`.
+Wait until `traefik`, `kube-prometheus-stack` and `shoplite-dev` are `Synced` and `Healthy`:
+5–8 minutes, and dev needs the tag from section 2. Ctrl+C ends `watch`.
 
 `shoplite-prod` waits for a manual sync. It shows `OutOfSync`, or, before the first promotion
 ever, a ComparisonError `image.tag is required`, because prod's values in Git are still
@@ -183,7 +184,8 @@ The ALB's targets are healthy now that Traefik answers `/ping`: take question 4'
 Screenshots:
 - `04-bootstrap.png`: the script's output (the namespaces, `Secret shoplite-db created (random
   password)`, ArgoCD's deployments, the root Application).
-- `05-argocd-applications.png`: traefik and shoplite-dev `Synced Healthy`, prod waiting.
+- `05-argocd-applications.png`: traefik, kube-prometheus-stack and shoplite-dev `Synced
+  Healthy`, prod waiting.
 
 ## 4. Prod: promote, then sync by hand
 
