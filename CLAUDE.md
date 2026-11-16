@@ -100,6 +100,25 @@ Check later procedures with kubectl blocks the same way. No one-command lab scri
       - Ingress `/grafana` on Traefik's `web` entrypoint, without a host;
       - its ServiceMonitor path `/grafana/metrics`.
     - Requests and limits on everything.
+    - Grafana's data sources (6.2), with fixed uids `prometheus`, `loki`, `tempo` (the links go by uid):
+      - Prometheus: `grafana.sidecar.datasources.exemplarTraceIdDestinations` (label `trace_id` → tempo);
+      - Loki (`additionalDataSources`, `http://loki.monitoring.svc.cluster.local:3100`): derived field `trace_id`, regex `"trace_id": *"([0-9a-f]{32})"` on the line, url `$${__value.raw}` (`$$`: Grafana's provisioning reads `$` as an environment variable) → tempo;
+      - Tempo (`http://tempo.monitoring.svc.cluster.local:3200`): `tracesToLogsV2` → loki, tag `service.name` → label `service`, `filterByTraceID`, span time ±1m.
+  - `loki.yaml` (6.2): monolithic, one replica, `auth_enabled: false`, replication 1, filesystem storage on the chart's 10Gi PVC, schema v13 tsdb. Off: gateway, memcached caches, canary, Helm test, rules sidecar. write, read and backend replicas 0 (the chart refuses to render otherwise). Service `loki:3100`.
+  - `alloy.yaml` (6.2), a DaemonSet:
+    - `discovery.kubernetes` finds the pods of its own node (the chart sets `HOSTNAME` to the node name);
+    - labels namespace, pod and container;
+    - `loki.source.kubernetes` reads logs through the API (GA in Alloy 1.21), so it mounts no host folder and runs as the image's uid 473;
+    - `stage.json` and `stage.labels` make only `level` and `service` labels (trace_id stays in the line);
+    - it pushes to `loki:3100/loki/api/v1/push`.
+
+    Its RBAC is only pods (get, list, watch) and pods/log (get). The rules are split over `rbac.rules` and `rbac.clusterRules`, because an empty list breaks the chart's YAML. `crds.create: false`. Check the pipeline with `alloy fmt` from `grafana/alloy:v1.21.3`.
+  - `tempo.yaml` (6.2): single binary, only requests and limits.
+    - It keeps the chart's receivers (its Service template needs the Jaeger ones), among them OTLP/HTTP on 4318.
+    - Traces stay on the pod's disk for 24 h.
+    - The query API is on 3200 (`/api/v2/traces/<id>`); the image is distroless.
+  - Loki, Tempo and Alloy are in sync wave 0 with kube-prometheus-stack, so they run before ShopLite.
+  - The ShopLite chart's `config.otlpEndpoint` defaults to `http://tempo.monitoring.svc.cluster.local:4318` for both environments.
   - The chart's `templates/servicemonitor.yaml` scrapes `/metrics` every 15 s: catalog-api on port `http`, order-worker on port `metrics`. order-worker has a Service (port 8001) only for this.
   - Prometheus job names: `catalog-api`, `order-worker`, `node-exporter`, `kube-state-metrics`.
   - The Prometheus image is distroless (no shell, no wget). Query it from outside: the rehearsal curls its ClusterIP from the node's network.
@@ -127,12 +146,22 @@ Check later procedures with kubectl blocks the same way. No one-command lab scri
       - the six metrics in prod;
       - a 32-hex `trace_id` exemplar on prod's `http_request_duration_seconds_bucket`;
       - Grafana at `/grafana/`: 401 without login, admin login with the Secret's password, a query through the data source uid `prometheus`;
+    - Q6.2, everything through Grafana's data source proxy (`/grafana/api/datasources/proxy/uid/<uid>/...`):
+      - loki, tempo and alloy Synced Healthy;
+      - Loki has logs from argocd, kube-system, monitoring, shoplite, shoplite-dev and traefik;
+      - its labels include namespace, pod, container, level and service, but not trace_id; services web, catalog-api and order-worker;
+      - prod's "order created" line (LogQL `| json | order_id=...`) gives its trace_id through the Loki data source's own regex, and that data source links to uid tempo with `${__value.raw}`;
+      - that trace in Tempo (`/api/v2/traces/<id>`) has the API → queue → worker → database spans. The consumer's parent is the producer, and `deployment.environment` is prod;
+      - the Tempo data source's logs link (loki, `service.name=service`, by trace id) finds the worker's "order completed" line;
+      - the Prometheus data source's exemplar link, and the exemplar's trace in Tempo;
     - self-heal reverts a `kubectl scale` in dev, while prod keeps it and shows OutOfSync.
+  - The monitoring charts' images are preloaded by `stack_images` (chart and values from the Application); images pinned by digest are left to k3s.
   - The test k3s runs `mount --make-rshared /` after it is Ready. node-exporter mounts `/` with HostToContainer propagation, which a container's private `/` refuses.
-  - About 9 minutes on PC-01 with the metrics stack (12 the first time, for the images); more on the home PC.
-  - Passed in full on PC-01 on 15 Nov, first try (step 7.2 done), and with the metrics stack on 16 Nov (step 6.1).
+  - About 13 minutes on PC-01 with the whole monitoring stack; more on the home PC.
+  - Passed in full on PC-01 on 15 Nov, first try (step 7.2 done), with the metrics stack on 16 Nov (step 6.1), and with logs and traces on 16 Nov (step 6.2).
+  - To debug against a live cluster: run a copy with the `trap ... EXIT` line removed, placed in `scripts/tests/` (the script `cd`s from its own folder). Remove its containers, network and `/tmp/tmp.*` work folder by hand afterwards, and delete the copy.
 - Traefik (Q5d) lives in **shoplite-gitops** `apps/traefik.yaml` (the user's choice, per PLAN): an ArgoCD Application with Traefik's chart 42.2.0 (Traefik v3.7.16) and inline `valuesObject`: NodePort Service, entrypoint `web` → 30080 (prod, ALB 80) and `dev` (port 8001, exposed 8080) → 30081 (dev, ALB 8080), no websecure, `/ping` on web and dev through the chart's `ingressRoute.healthcheck` (the ALB health check), requests and limits, `ServerSideApply=true`. Traefik's Middleware CRD must exist before the shoplite chart is applied (sync Traefik first in Q7).
-- `helm/tests/run.sh` rehearses on a local `rancher/k3s:v1.37.2-k3s1` container (images loaded with `docker save | ctr import`; Helm `alpine/helm:4.3.1` and `curl` from the web image on the k3s container's network; `fail-cgroupv1=false` on cgroup v1 hosts). It installs Traefik exactly as `../shoplite-gitops/apps/traefik.yaml` says (read with `mikefarah/yq:4.54.1`; `SHOPLITE_GITOPS_DIR` overrides the path), and the ServiceMonitor CRD from the kube-prometheus-stack chart `apps/kube-prometheus-stack.yaml` pins (`charts/crds/crds/crd-servicemonitors.yaml` of the pulled chart). It then lints, dry-runs the prod manifests server-side, installs dev (`shoplite-dev`) and prod (`shoplite`), then checks ready pods, non-root uids, requests/limits, the seed, orders to `COMPLETED` (through web's proxy and through NodePorts 30080/30081, each landing in its own environment's database), `/ping` 200 on both NodePorts, NetworkPolicy (`nc -z` from the pods: catalog-api and order-worker reach `postgres:5432` and `redis:6379`, web does not, dev does not reach prod's), a setting change rolling only catalog-api and order-worker (Deployment `generation`), the HPA scaling out under 400 orders, and `kubectl drain` evicting one catalog-api pod per environment while the PDB refuses the second. About 10 minutes; extend it with every chart step.
+- `helm/tests/run.sh` rehearses on a local `rancher/k3s:v1.37.2-k3s1` container (images loaded with `docker save | ctr import`; Helm `alpine/helm:4.3.1` and `curl` from the web image on the k3s container's network; `fail-cgroupv1=false` on cgroup v1 hosts). It installs Traefik exactly as `../shoplite-gitops/apps/traefik.yaml` says (read with `mikefarah/yq:4.54.1`; `SHOPLITE_GITOPS_DIR` overrides the path), and the ServiceMonitor CRD from the kube-prometheus-stack chart `apps/kube-prometheus-stack.yaml` pins (`charts/crds/crds/crd-servicemonitors.yaml` of the pulled chart). It then lints, dry-runs the prod manifests server-side, installs dev (`shoplite-dev`) and prod (`shoplite`), then checks ready pods, non-root uids, requests/limits, the seed, orders to `COMPLETED` (through web's proxy and through NodePorts 30080/30081, each landing in its own environment's database), `/ping` 200 on both NodePorts, NetworkPolicy (`nc -z` from the pods: catalog-api and order-worker reach `postgres:5432` and `redis:6379`, web does not, dev does not reach prod's), a setting change rolling only catalog-api and order-worker (Deployment `generation`), the HPA scaling out under 400 orders, and `kubectl drain` evicting one catalog-api pod per environment while the PDB refuses the second. About 10 minutes (20 on 16 Nov, step 6.2); extend it with every chart step.
 - Config only from environment variables (`config.py`), validated at startup.
 - JSON logs on stdout with `timestamp, level, service, message, trace_id` (`logging_setup.py`, identical copy in both services).
 - Metrics: exact Q6.2 names/labels; `route` label is the route template; `/healthz`, `/readyz`, `/metrics` are excluded from HTTP metrics, traces and INFO logs.
@@ -171,7 +200,7 @@ MSYS_NO_PATHCONV=1 $TF -chdir=bootstrap init -backend=false && MSYS_NO_PATHCONV=
 MSYS_NO_PATHCONV=1 $TF init -backend=false && MSYS_NO_PATHCONV=1 $TF validate && MSYS_NO_PATHCONV=1 $TF test
 ```
 
-Helm chart rehearsal (Docker and internet; about 10 minutes; cleans up after itself; needs `../shoplite-gitops`): `bash helm/tests/run.sh`. GitOps rehearsal (Docker and internet; with the metrics stack about 9 minutes on PC-01, 12 the first time for the images, more on the home PC; cleans up after itself; needs `../shoplite-gitops`): `bash scripts/tests/bootstrap-cluster.sh`. Pipeline rehearsal (Docker and internet; about 20 seconds; cleans up after itself; needs `../shoplite-gitops`): `bash scripts/tests/pipeline.sh`. Ansible rehearsal (Docker and internet; 5–10 minutes, mostly the k3s download; cleans up after itself): `bash ansible/tests/run.sh`. Run it in the background and redirect its output to a file; the playbook's own log goes to a temp folder (`/tmp/tmp.*/run1.log`).
+Helm chart rehearsal (Docker and internet; 10–20 minutes; cleans up after itself; needs `../shoplite-gitops`): `bash helm/tests/run.sh`. GitOps rehearsal (Docker and internet; with the monitoring stack about 13 minutes on PC-01, more on the home PC; cleans up after itself; needs `../shoplite-gitops`): `bash scripts/tests/bootstrap-cluster.sh`. Pipeline rehearsal (Docker and internet; about 20 seconds; cleans up after itself; needs `../shoplite-gitops`): `bash scripts/tests/pipeline.sh`. Ansible rehearsal (Docker and internet; 5–10 minutes, mostly the k3s download; cleans up after itself): `bash ansible/tests/run.sh`. Run it in the background and redirect its output to a file; the playbook's own log goes to a temp folder (`/tmp/tmp.*/run1.log`).
 
 On PC-01 real `make` runs in WSL Ubuntu: `wsl.exe -d Ubuntu --cd /mnt/e/devops-final/shoplite-app -- make up` (see the WSL gotcha for anything longer).
 
@@ -241,7 +270,7 @@ At the split, `SaikatGeek/shoplite-app`'s placeholder `test.md` is replaced: the
 
 **Q6, in steps (PROGRESS section 6b; Q6 before the rest of Q7 was Claude's advice, and on 16 Nov the user said to go on):**
 - 6.1 is done (`cb6830f`; both rehearsals passed on PC-01, 16 Nov): metrics through kube-prometheus-stack, ServiceMonitors, exemplar storage, Grafana at `/grafana`.
-- 6.2: logs and traces: Loki, Alloy with JSON parsing, Tempo with OTLP. In Grafana, links log ↔ trace and exemplar → trace.
+- 6.2 is done (`289ea11`; the GitOps, chart and pipeline rehearsals passed on PC-01, 16 Nov): Loki, Alloy with JSON parsing, Tempo with OTLP. In Grafana: log → trace, trace → log, exemplar → trace.
 - 6.3: the "ShopLite — Golden Signals" dashboard, as JSON in Git.
 - 6.4: five alerts, runbooks, Alertmanager → Slack. It needs the user's Slack incoming webhook URL, which goes in a Secret, never in Git.
 - 6.5: the lab procedure `docs/evidence/q6/commands.md`.

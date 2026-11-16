@@ -19,7 +19,7 @@
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। বাকি শুধু lab-এ চালানো |
-| Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id)। 6.1-এ metrics stack: kube-prometheus-stack ArgoCD দিয়ে, ServiceMonitor, exemplar, Grafana `/grafana`-এ (local k3s-এ রিহার্সাল pass)। বাকি 6.2 (Loki, Alloy, Tempo), 6.3 dashboard, 6.4 alert, 6.5 পদ্ধতি |
+| Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id)। 6.1-এ metrics stack: kube-prometheus-stack ArgoCD দিয়ে, ServiceMonitor, exemplar, Grafana `/grafana`-এ। 6.2-এ Loki, Alloy (JSON parse), Tempo (OTLP), আর Grafana-য় log → trace, trace → log, exemplar → trace। দুটোই local k3s-এ রিহার্সাল pass। বাকি 6.3 dashboard, 6.4 alert, 6.5 পদ্ধতি |
 | Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 (root app, dev আর prod-এর Application, `envs` values), 7.2 (cluster-এর bootstrap, ArgoCD; local k3s-এ পুরো রিহার্সাল pass) 7.3 (GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push), 7.4 (main pipeline v1: build → OIDC দিয়ে ECR → gitops-এ tag; local-এ রিহার্সাল, আসল run repo ভাগের পরে) আর 7.5 (`promote`: dev-এর image Git দিয়ে prod-এ) শেষ; এরপর 5.4, তারপর Q7-এর বাকি অংশ |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
@@ -531,7 +531,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | Step | কাজ | প্রশ্নের অংশ | অবস্থা |
 |---|---|---|---|
 | 6.1 | Metrics: kube-prometheus-stack (Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics); catalog-api আর order-worker-এর ServiceMonitor; exemplar storage; Grafana ALB-র `/grafana`-এ | (a), (b) | ✅ `cb6830f` (lab-এ চালানো বাকি) |
-| 6.2 | Logs আর traces: Loki, Alloy (JSON parse), Tempo (OTLP); Grafana-তে log ↔ trace আর exemplar → trace | (a), (d) | ⬜ |
+| 6.2 | Logs আর traces: Loki, Alloy (JSON parse), Tempo (OTLP); Grafana-তে log ↔ trace আর exemplar → trace | (a), (d) | ✅ `289ea11` (lab-এ চালানো বাকি) |
 | 6.3 | "ShopLite — Golden Signals" dashboard, JSON Git-এ | (c) | ⬜ |
 | 6.4 | ৫টা alert (severity, `runbook_url`), ৫টা runbook, Alertmanager → Slack | (e) | ⬜ |
 | 6.5 | Lab-এর পদ্ধতি `docs/evidence/q6/commands.md` | সব | ⬜ |
@@ -598,6 +598,63 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
   - দুই release-এ catalog-api আর order-worker-এর ServiceMonitor;
   - আগের সব check আবার pass।
 - ⏳ Lab-এ: আসল EC2 node-এ node-exporter, ALB দিয়ে Grafana।
+
+**Step 6.2-এ কী হলো** (`289ea11`)
+- **shoplite-gitops-এ তিনটা নতুন Application** (`apps/loki.yaml`, `apps/tempo.yaml`, `apps/alloy.yaml`), kube-prometheus-stack-এর মতোই:
+  - namespace `monitoring`;
+  - দুই source: chart, আর shoplite-app থেকে values (`ref: app`);
+  - sync wave 0। ফলে ShopLite (wave 1) ওঠার আগেই log আর trace নেওয়ার জায়গা তৈরি থাকে।
+- **`monitoring/stack/loki.yaml`:** Loki একটা process-এ (monolithic), একটা replica।
+  - একটাই tenant (`auth_enabled: false`), replication 1।
+  - Storage pod-এর নিজের disk-এ (filesystem, chart-এর 10Gi PVC), object store নেই।
+  - Schema v13, tsdb।
+  - বন্ধ: gateway (nginx), memcached cache, canary, Helm test, rule-এর sidecar।
+  - Simple scalable mode-এর target-গুলোর (write, read, backend) replica 0। chart-এর default 3, আর monolithic-এর সাথে থাকলে chart render-ই করে না।
+- **`monitoring/stack/alloy.yaml`:** Alloy, প্রতি node-এ একটা pod (DaemonSet)।
+  - প্রতিটা pod নিজের node-এর pod-গুলো খোঁজে, আর তাদের log পড়ে Kubernetes API দিয়ে (`loki.source.kubernetes`)। Node-এর disk পড়ে না, তাই host-এর কোনো folder mount হয় না, আর চলে image-এর নিজের non-root user-এ (uid 473)।
+  - প্রতিটা stream-এর label: namespace, pod, container। এর সাথে Alloy নিজে দেয় `job` আর `instance`, আর Loki দেয় `service_name` (section 12)।
+  - JSON line থেকে `level` আর `service` label হয়। `trace_id` label হয় না, line-এই থাকে: প্রতি request-এ আলাদা মান, label হলে প্রতি request-এ একটা নতুন stream হতো।
+  - যে line JSON নয় (Postgres, Redis, Traefik ইত্যাদি), সেটা যেমন আছে তেমনই যায়।
+  - RBAC শুধু `pods` (get, list, watch) আর `pods/log` (get)। chart-এর default সব Secret আর ConfigMap-ও পড়তে পারত।
+  - PodLogs CRD বসে না (ব্যবহার হয় না)।
+- **`monitoring/stack/tempo.yaml`:** Tempo একটা process-এ, শুধু requests আর limits।
+  - Trace থাকে pod-এর disk-এ, chart-এর default ২৪ ঘণ্টা, Prometheus-এর data-র মতো।
+  - Receiver chart-এরই, তার মধ্যে OTLP/HTTP 4318। Jaeger-এর receiver সরানো যায় না, কারণ chart-এর Service template সেগুলো ধরে নেয় (section 12)।
+- **Grafana-র data source** (`monitoring/stack/kube-prometheus-stack.yaml`)। uid নির্দিষ্ট: `prometheus`, `loki`, `tempo`। নতুন cluster-এও link ঠিক থাকে।
+  - **Loki → Tempo:** derived field `trace_id`। regex `"trace_id": *"([0-9a-f]{32})"` line থেকে id নেয়, link খোলে Tempo-তে।
+  - **Tempo → Loki:** `tracesToLogsV2`। span-এর `service.name` মিলে যায় Loki-র `service` label-এর সাথে, আর line-এ থাকতে হয় trace-এর id (`filterByTraceID`)। সময় span-এর আগে-পরে ১ মিনিট।
+  - **Prometheus → Tempo:** exemplar-এর `trace_id` link খোলে Tempo-তে।
+  - Provisioning ফাইলে `${...}` Grafana environment variable হিসেবে পড়ে। তাই URL লেখা `$${__value.raw}`।
+- **chart (`helm/shoplite/values.yaml`):** `config.otlpEndpoint` এখন `http://tempo.monitoring.svc.cluster.local:4318`। দুই env-ই এখানে পাঠায়; trace-এ `deployment.environment` থেকে বোঝা যায় কোনটা dev, কোনটা prod।
+- **রিহার্সাল (`scripts/tests/bootstrap-cluster.sh`):** loki, tempo, alloy-এর image আগে থেকে load হয় (`stack_images`, chart আর values Application থেকে পড়ে)। নতুন check-গুলো নিচে যাচাইয়ে।
+- **Q5-এর পদ্ধতি:** bootstrap-এর অপেক্ষার তালিকায় loki, tempo, alloy; অপেক্ষা এখন ৫–১০ মিনিট।
+
+**যাচাই:**
+- ✅ তিনটা chart আমাদের values দিয়ে render হয়:
+  - Loki: একটা StatefulSet (10Gi PVC, non-root), config-এ filesystem আর `auth_enabled: false`;
+  - Tempo: একটা StatefulSet;
+  - Alloy: DaemonSet, ClusterRole-এ শুধু `pods` আর `pods/log`।
+- ✅ Alloy-র pipeline `grafana/alloy:v1.21.3`-এর `alloy fmt` আর GA stability-তে `alloy run`-এ গৃহীত। শুধু in-cluster config না পেয়ে থামে, যা cluster-এর বাইরে প্রত্যাশিত।
+- ✅ kubeconform `-strict`: ৮টা Application valid। shellcheck-এ আপত্তি নেই। chart-এর `helm lint --strict` দুই values-এ।
+- ✅ **GitOps রিহার্সাল** `PASS`, অফিসের PC-তে ১৩ মিনিটে। ArgoCD নিজে সব বসিয়েছে, তারপর:
+  - loki, tempo, alloy Synced Healthy। ShopLite-এর Application (wave 1) তৈরি হয়েছে 11:12:30Z-এ, ServiceMonitor-এর CRD-এর (11:11:04Z) পরে।
+  - Loki-তে ছয়টা namespace-এর log: argocd, kube-system, monitoring, shoplite, shoplite-dev, traefik।
+  - Label-এ `level` আর `service` আছে (মান web, catalog-api, order-worker); `trace_id` label নয়।
+  - prod-এর order 1-এর line পাওয়া গেছে LogQL দিয়ে: `| json | message="order created" | order_id="1"`।
+  - Grafana-র Loki data source-এর নিজের regex সেই line থেকে trace_id বের করে, আর link যায় uid `tempo`-তে।
+  - Tempo-তে সেই trace-এ ৭টা span:
+    - catalog-api: `POST /orders` (SERVER), `INSERT orders` (CLIENT), `send orders:pending` (PRODUCER);
+    - order-worker: `process orders:pending` (CONSUMER), `simulate work`, আর দুটো `UPDATE orders` (CLIENT)।
+
+    worker-এর span API-র queue span-এর child, আর `deployment.environment` prod।
+  - Tempo data source-এর link (uid `loki`, `service.name` → `service`, trace-এর id দিয়ে) worker-এর ২টা line পায়: `order processing started`, `order completed`।
+  - Prometheus data source-এর exemplar link যায় `tempo`-তে, আর exemplar-এর trace Tempo-তে আছে।
+  - আগের সব check আবার pass।
+- 🐞 প্রথম রানে `service=web` log পাওয়া যায়নি। web শুধু আসল request-এর log লেখে (`/healthz` বাদ), আর রিহার্সালের order যায় `/api`-তে, যা Traefik সরাসরি catalog-api-তে পাঠায়। এখন রিহার্সাল আগে দুই env-এর page একবার খোলে।
+- ✅ রিহার্সালের cluster রেখে দিয়ে দেখা হয়েছে: Alloy প্রতিটা container একবারই পড়ে (section 12)।
+- ✅ Pipeline-এর রিহার্সাল `PASS`।
+- ✅ **chart-এর রিহার্সাল** (`helm/tests/run.sh`) `PASS`, নতুন OTLP ঠিকানা নিয়ে। সেখানে Tempo নেই, তবু ২৯টা check-ই pass। এবার লেগেছে ২০ মিনিট (আগে ৪–১০)। কোন ধাপে সময় গেছে, log-এ সময় না থাকায় বলা যায় না।
+- ⏳ Lab-এ: তিনটা আসল node-এ Alloy, আর Grafana-র UI-তে link-গুলোতে click (6.5-এর পদ্ধতিতে)।
 
 ## 7. Q7: CI/CD আর GitOps
 
@@ -830,6 +887,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `7d4076a` | 2026-11-15 | Q7 step 7.5: `promote` workflow (dev-এর image Git দিয়ে prod-এ), রিহার্সালে দুই workflow |
 | `04305e8` | 2026-11-15 | Q5 step 5.4: lab-এ Q5 চালানোর পদ্ধতি (repo ভাগ, GitHub-এর setting, pipeline, bootstrap, promote, প্রমাণ) |
 | `cb6830f` | 2026-11-16 | Q6 step 6.1: metrics stack (kube-prometheus-stack ArgoCD দিয়ে), ServiceMonitor, exemplar, Grafana `/grafana`-এ |
+| `289ea11` | 2026-11-16 | Q6 step 6.2: Loki, Alloy (JSON parse), Tempo (OTLP) ArgoCD দিয়ে; Grafana-য় log → trace, trace → log, exemplar → trace |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -848,7 +906,7 @@ devops-final/
 │   ├── .github/workflows/main.yml        main pipeline: build → OIDC দিয়ে ECR → gitops-এ dev-এর tag (Q7a; repo ভাগের পরে চলে)
 │   ├── .github/workflows/promote.yml     "Run workflow" বোতাম: dev-এর image gitops-এ prod-এর values-এ (Q7, 7.5)
 │   ├── .env.example                      local-এর setting (WEB_PORT সহ); আসল .env Git-এ যায় না
-│   ├── monitoring/stack/                 Q6-এর chart-গুলোর values (এখন kube-prometheus-stack.yaml); ArgoCD shoplite-gitops-এর apps/ থেকে পড়ে
+│   ├── monitoring/stack/                 Q6-এর chart-গুলোর values: kube-prometheus-stack, loki, tempo, alloy (Alloy-র log pipeline সহ); ArgoCD shoplite-gitops-এর apps/ থেকে পড়ে
 │   ├── helm/shoplite/                    Q5-এর chart: Chart.yaml, values.yaml, values-dev.yaml, values-prod.yaml
 │   │   ├── files/init.sql                table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
 │   │   └── templates/                    web, catalog-api (+ PDB), order-worker (+ HPA, metrics-এর Service), postgres, redis, ingress, networkpolicy, servicemonitor, configmap, _helpers
@@ -909,7 +967,7 @@ devops-final/
 └── shoplite-gitops/                      ArgoCD-র desired state (শেষে আলাদা repo)
     ├── bootstrap/argocd-values.yaml      ArgoCD-র setting: /argocd, Git দেখা ৬০ সেকেন্ডে, Application-এর health
     ├── bootstrap/root-app.yaml           root Application ("app of apps"), bootstrap একবার বসায়
-    ├── apps/                             traefik আর kube-prometheus-stack (wave 0), shoplite-dev (auto-sync, self-heal), shoplite-prod (manual)
+    ├── apps/                             traefik, kube-prometheus-stack, loki, tempo, alloy (wave 0), shoplite-dev (auto-sync, self-heal), shoplite-prod (manual)
     └── envs/                             dev/values.yaml (CI লেখে image tag), prod/values.yaml (tag, Q8-এর flag)
 ```
 
@@ -978,7 +1036,7 @@ Helm chart-এর রিহার্সাল (Docker আর internet লাগ�
 bash helm/tests/run.sh
 ```
 
-GitOps-এর রিহার্সাল (Docker আর internet লাগে; local k3s-এ `scripts/bootstrap-cluster.sh` চালায়, তারপর ArgoCD নিজে Traefik, metrics stack, dev আর prod বসায়; যাচাই করে, শেষে সব মোছে; অফিসের PC-তে প্রায় ৯ মিনিট, প্রথমবার ১২; বাসার PC-তে আরও বেশি), `shoplite-app` থেকে:
+GitOps-এর রিহার্সাল (Docker আর internet লাগে; local k3s-এ `scripts/bootstrap-cluster.sh` চালায়, তারপর ArgoCD নিজে Traefik, monitoring stack (metrics, Loki, Tempo, Alloy), dev আর prod বসায়; যাচাই করে, শেষে সব মোছে; অফিসের PC-তে প্রায় ১৩ মিনিট; বাসার PC-তে আরও বেশি), `shoplite-app` থেকে:
 
 ```bash
 bash scripts/tests/bootstrap-cluster.sh
@@ -1131,6 +1189,15 @@ bash ansible/tests/run.sh
 - **order-worker-এর Service শুধু metrics-এর জন্য** (6.1)। প্রশ্ন চায় ServiceMonitor দিয়ে scrape, আর ServiceMonitor Service ধরে খোঁজে।
 - **Loki আর Tempo-র chart grafana-community থেকে** (6.1-এ বাছা, PLAN-এর কথামতো)। grafana-র নিজের `loki` chart এখন Enterprise Logs-এর, আর `tempo` chart deprecated।
 - **প্রতি session-এ promote, তারপর prod-এর sync** (5.4)। ECR প্রতি session-এ খালি থাকে, আর main-এর run শুধু সর্বশেষ commit-এর image push করে। তাই prod-এর পুরনো tag-এর image না-ও থাকতে পারে; promote prod-কে dev-এর tag-এ আনে।
+- **Loki, Tempo আর Alloy-ও wave 0-তে** (6.2)। ShopLite ওঠার আগেই log আর trace নেওয়ার জায়গা তৈরি থাকে, তাই শুরুর span হারায় না। খরচ: monitoring-এর কোনো অংশ Healthy না হলে ShopLite-ও বসে না। রিহার্সালে এটা প্রতিবার যাচাই হয়।
+- **Loki-র label: namespace, pod, container, আর JSON থেকে level আর service** (6.2)। PLAN-এর "label শুধু level আর service"-এর মানে ধরা হয়েছে JSON-এর field-এর মধ্যে শুধু এই দুটো।
+  - Kubernetes-এর label লাগে, কারণ Loki-র প্রতিটা stream-এ অন্তত একটা label থাকতে হয়, আর JSON নয় এমন log-এ level বা service থাকে না।
+  - namespace ছাড়া dev আর prod-এর log আলাদা করা যেত না।
+- **Alloy log পড়ে Kubernetes API দিয়ে, node-এর disk থেকে নয়** (6.2; Claude-এর বাছাই)। ফলে host-এর folder mount লাগে না, আর Alloy root ছাড়া চলে। `/var/log/pods` পড়তে হলে root লাগত। এই component (`loki.source.kubernetes`) Alloy 1.21-এ GA, অর্থাৎ stable।
+- **Alloy-র RBAC ছোট করা** (6.2)। chart-এর default সব namespace-এর Secret আর ConfigMap পড়তে দেয়; এখন শুধু `pods` আর `pods/log`।
+- **Tempo-র OTLP ঠিকানা chart-এর `values.yaml`-এ**, env-এর ফাইলে নয় (6.2)। এক cluster-এ এক Tempo, দুই env-এর জন্য একই ঠিকানা।
+  - chart-এর রিহার্সালে Tempo নেই, তাই export ব্যর্থ হয়। exporter-এর log আসে: WARNING `Transient error ...` আর ERROR `Failed to export spans batch ...`।
+  - App-এর কাজে প্রভাব পড়ে না। Tempo ছাড়া catalog-api আলাদা চালিয়ে দেখা হয়েছে: request চলে, আর SIGTERM-এ বন্ধ হয় ১ সেকেন্ডে।
 
 ## 12. জানা বিষয়
 
@@ -1199,13 +1266,18 @@ bash ansible/tests/run.sh
 - **Docker-এর ভেতরের k3s-এ node-exporter চালু হয় না, যদি না `/` shared mount হয়।** node-exporter `/` mount করে HostToContainer propagation দিয়ে। আসল node-এ systemd `/`-কে shared রাখে, container-এ সেটা private থাকে। রিহার্সাল তাই k3s চালুর পরে `mount --make-rshared /` চালায়।
 - **Grafana sub path-এ (`/grafana`) চললে তার নিজের metrics-ও `/grafana/metrics`-এ চলে যায়।** chart-এর ServiceMonitor `/metrics` পড়ে আর target down দেখায়, তাই path ঠিক করে দিতে হয়েছে।
 - **Prometheus-এর image distroless:** ভেতরে shell বা `wget` নেই। Query করতে হয় বাইরে থেকে; রিহার্সাল node-এর network থেকে ClusterIP-তে curl করে।
+- **Loki chart 20.2.1 monolithic mode-এ write, read আর backend-এর replica 0 চায়।** এদের default 3, আর `singleBinary.replicas`-এর default 0। দুটো না বদলালে chart render-ই হয় না ("more than zero replicas configured for both the monolithic and simple scalable targets")।
+- **Tempo chart 3.2.1-এ Jaeger receiver বাদ দেওয়া যায় না।** Service-এর template `tempo.receivers.jaeger.protocols.*` সরাসরি পড়ে, তাই `jaeger: null` দিলে render ভাঙে। Receiver তাই chart-এর default-এই থাকে।
+- **Alloy chart 1.15.0-এ `rbac.rules` বা `rbac.clusterRules` খালি তালিকা (`[]`) হলে ClusterRole-এর YAML ভেঙে যায়।** দুটো একসাথে লেখা হয় বলে খালিটা `[]` হয়ে rule-এর তালিকার মাঝে বসে। তাই দুটোতেই একটা করে rule।
+- **Grafana-র provisioning ফাইলে `$` environment variable বোঝায়।** Literal `$` লিখতে হয় `$$` দিয়ে (Grafana-র docs), তাই link-এর URL লেখা `$${__value.raw}`। রিহার্সাল দেখে, Grafana-র API-তে সেটা `${__value.raw}` হয়েই আসে।
+- **`loki.source.kubernetes` প্রতিটা container একবারই পড়ে,** যদিও `discovery.kubernetes` container-এর প্রতিটা port-এর জন্য আলাদা target দেয় (যেমন Loki-র নিজের ৩টা port)। রিহার্সালের cluster-এ Alloy-র API (`/api/v0/web/components/loki.source.kubernetes.pods`) দেখিয়েছে ৪৩টা target, প্রতিটা `instance` একবার।
+- **Loki 3 নিজে থেকে `service_name` label যোগ করে,** আর Alloy-র `loki.source.kubernetes` যোগ করে `job` আর `instance`। কোনোটাতেই নতুন stream বাড়ে না: মানগুলো আসে আগের label থেকেই, container-প্রতি একটা।
 
 ## 13. পরের কাজ
 
-Q5-এর code আর lab-এর পদ্ধতি শেষ (section 6); Q6-এর 6.1 শেষ (section 6b); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর, সবই নিজের PC-তে:
+Q5-এর code আর lab-এর পদ্ধতি শেষ (section 6); Q6-এর 6.1 আর 6.2 শেষ (section 6b); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর, সবই নিজের PC-তে:
 
 1. Q6-এর বাকি step (section 6b):
-   - 6.2: logs আর traces (Loki, Alloy, Tempo), আর Grafana-তে link;
    - 6.3: Golden Signals dashboard;
    - 6.4: alert, runbook আর Slack। এর জন্য user-এর Slack incoming webhook URL লাগবে, যা যাবে Secret-এ, Git-এ নয়;
    - 6.5: lab-এর পদ্ধতি।
