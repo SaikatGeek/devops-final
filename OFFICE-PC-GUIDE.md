@@ -89,10 +89,10 @@ git pull
 CLAUDE.md আর PROGRESS.md পড়ো। তারপর বলো এখন কোথায় আছি আর পরের step কী। আমি হ্যাঁ বললে সেই step শুরু করবে।
 ```
 
-**পরের step শুরু করাতে** (এখন পরের কাজ Q6-এর 6.3, অথবা Q7-এর বাকি অংশ):
+**পরের step শুরু করাতে** (এখন পরের কাজ: আগে 6.3-এর রিহার্সাল, তারপর Q6-এর 6.4, অথবা Q7-এর বাকি অংশ):
 
 ```text
-6.3 শুরু করো
+6.3-এর শেষ রিহার্সাল চালাও, pass করলে 6.3 শেষ করো, তারপর 6.4 শুরু করো
 ```
 
 **এক step শেষ হলে Claude নিজেই যা করবে (CLAUDE.md-তে লেখা আছে):**
@@ -139,8 +139,8 @@ docker compose down
 | ✅ | Q4-এর code: Terraform (4.1–4.6), Ansible (4.7), lab-এর পদ্ধতি (4.8) | হয়ে গেছে |
 | ✅ | Q5-এর code: Helm chart আর Traefik (5.1–5.3); lab-এর পদ্ধতি, repo ভাগ সহ (5.4) | হয়ে গেছে |
 | ✅ | Q7-এর GitOps-এর ভিত: 7.1 আর 7.2 (bootstrap, ArgoCD; local k3s-এ রিহার্সাল pass), 7.3 (GitHub OIDC-এর role), 7.4 (main pipeline v1, local-এ রিহার্সাল), 7.5 (prod-এ তোলার `promote`) | হয়ে গেছে |
-| ✅ | Q6: 6.1 (metrics stack) আর 6.2 (Loki, Alloy, Tempo, Grafana-র link); local k3s-এ রিহার্সাল pass | হয়ে গেছে |
-| 1 | Q6-এর বাকি (6.3 dashboard, 6.4 alert, 6.5 পদ্ধতি) আর Q7-এর বাকি code | যেকোনো PC |
+| ✅ | Q6: 6.1 (metrics stack), 6.2 (Loki, Alloy, Tempo, Grafana-র link) আর 6.3 (Golden Signals dashboard; শেষ রিহার্সাল বাকি); local k3s-এ রিহার্সাল pass | প্রায় শেষ |
+| 1 | Q6-এর বাকি (6.4 alert, 6.5 পদ্ধতি) আর Q7-এর বাকি code | যেকোনো PC |
 | 2 | Q3 থেকে Q8 চালানো আর প্রমাণ (Q3: `linux/evidence/commands.md` ধরে) | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
 
 ## ৮. সমস্যা হলে

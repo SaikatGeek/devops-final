@@ -19,7 +19,7 @@
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। বাকি শুধু lab-এ চালানো |
-| Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id)। 6.1-এ metrics stack: kube-prometheus-stack ArgoCD দিয়ে, ServiceMonitor, exemplar, Grafana `/grafana`-এ। 6.2-এ Loki, Alloy (JSON parse), Tempo (OTLP), আর Grafana-য় log → trace, trace → log, exemplar → trace। দুটোই local k3s-এ রিহার্সাল pass। বাকি 6.3 dashboard, 6.4 alert, 6.5 পদ্ধতি |
+| Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id)। 6.1-এ metrics stack: kube-prometheus-stack ArgoCD দিয়ে, ServiceMonitor, exemplar, Grafana `/grafana`-এ। 6.2-এ Loki, Alloy (JSON parse), Tempo (OTLP), আর Grafana-য় log → trace, trace → log, exemplar → trace। 6.3-এ "ShopLite — Golden Signals" dashboard (৮টা panel, আর Q8-এর জন্য restart, error log, deploy-এর দাগ) Git থেকে Kustomize দিয়ে। 6.1 আর 6.2 local k3s-এ রিহার্সাল pass; 6.3-এর শেষ সংস্করণের পুরো রিহার্সাল বাকি (বাসার PC-তে)। বাকি 6.4 alert, 6.5 পদ্ধতি |
 | Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 (root app, dev আর prod-এর Application, `envs` values), 7.2 (cluster-এর bootstrap, ArgoCD; local k3s-এ পুরো রিহার্সাল pass) 7.3 (GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push), 7.4 (main pipeline v1: build → OIDC দিয়ে ECR → gitops-এ tag; local-এ রিহার্সাল, আসল run repo ভাগের পরে) আর 7.5 (`promote`: dev-এর image Git দিয়ে prod-এ) শেষ; এরপর 5.4, তারপর Q7-এর বাকি অংশ |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
@@ -532,7 +532,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 |---|---|---|---|
 | 6.1 | Metrics: kube-prometheus-stack (Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics); catalog-api আর order-worker-এর ServiceMonitor; exemplar storage; Grafana ALB-র `/grafana`-এ | (a), (b) | ✅ `cb6830f` (lab-এ চালানো বাকি) |
 | 6.2 | Logs আর traces: Loki, Alloy (JSON parse), Tempo (OTLP); Grafana-তে log ↔ trace আর exemplar → trace | (a), (d) | ✅ `289ea11` (lab-এ চালানো বাকি) |
-| 6.3 | "ShopLite — Golden Signals" dashboard, JSON Git-এ | (c) | ⬜ |
+| 6.3 | "ShopLite — Golden Signals" dashboard, JSON Git-এ | (c) | 🟡 `cadd840` (শেষ সংস্করণের পুরো রিহার্সাল বাকি) |
 | 6.4 | ৫টা alert (severity, `runbook_url`), ৫টা runbook, Alertmanager → Slack | (e) | ⬜ |
 | 6.5 | Lab-এর পদ্ধতি `docs/evidence/q6/commands.md` | সব | ⬜ |
 
@@ -655,6 +655,45 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 - ✅ Pipeline-এর রিহার্সাল `PASS`।
 - ✅ **chart-এর রিহার্সাল** (`helm/tests/run.sh`) `PASS`, নতুন OTLP ঠিকানা নিয়ে। সেখানে Tempo নেই, তবু ২৯টা check-ই pass। এবার লেগেছে ২০ মিনিট (আগে ৪–১০)। কোন ধাপে সময় গেছে, log-এ সময় না থাকায় বলা যায় না।
 - ⏳ Lab-এ: তিনটা আসল node-এ Alloy, আর Grafana-র UI-তে link-গুলোতে click (6.5-এর পদ্ধতিতে)।
+
+**Step 6.3-এ কী হলো** (`cadd840`)
+- **`monitoring/dashboards/golden-signals.json`:** dashboard "ShopLite — Golden Signals" (uid `shoplite-golden-signals`)। উপরে Environment বাছাই: `shoplite` (prod, default) বা `shoplite-dev`। প্রতি ১০ সেকেন্ডে নিজে refresh হয়।
+  - প্রশ্নের ৭টা জিনিস, ৮টা panel-এ:
+    - Requests per second, route অনুযায়ী;
+    - HTTP 5xx error rate, route অনুযায়ী। কোনো error না থাকলেও ০ দেখায় (`or ... * 0`), ফাঁকা নয়;
+    - Worker replicas: available, আর HPA কতগুলো চায়;
+    - Request latency per route: p50, p95, p99। p99-এর query-তে exemplar চালু, তাই graph-এ বিন্দু আসে আর click করলে trace খোলে (6.2-এর link);
+    - Order queue depth (catalog-api-এর gauge, দুই replica-র `max`);
+    - Orders created vs processed (processed, result অনুযায়ী);
+    - CPU usage per pod আর Memory usage per pod (kubelet-এর cAdvisor থেকে, `metrics_path="/metrics/cadvisor"`)।
+  - Alert-এর সীমা লাল রেখা হিসেবে দেখায়: 5xx-এ 5%, latency-তে 1 s, queue-তে 50। ফলে 6.4-এর alert আর dashboard একই সংখ্যা দেখায়।
+  - Q8-এর জন্য বাড়তি ৩টা (user-এর সিদ্ধান্ত, 16 Nov; PLAN অনুযায়ী), আলাদা "Investigation" অংশে:
+    - **Restarted containers:** কোন container কতবার restart হয়েছে, আর শেষবার কেন বন্ধ হয়েছে (যেমন `OOMKilled`)। কিছু restart না হলে ফাঁকা।
+    - **Recent error logs:** Loki থেকে environment-এর `level="ERROR"` line। Line খুললে trace_id-এর link।
+    - **Deploy-এর দাগ:** panel নয়, dashboard-এর annotation। কোনো Deployment বদলালে (`kube_deployment_metadata_generation`) সব graph-এ বেগুনি দাগ পড়ে।
+  - সব panel data source ধরে uid দিয়ে (`prometheus`, `loki`)।
+- **`monitoring/kustomization.yaml`:** dashboard-এর JSON থেকে ConfigMap `shoplite-dashboards` বানায়, namespace `monitoring`-এ, label `grafana_dashboard: "1"`। Grafana-র sidecar এই label দেখে dashboard তোলে।
+  - নাম নির্দিষ্ট (hash suffix নেই), তাই Git-এ বদলালে একই ConfigMap বদলায়।
+  - Kustomize, Helm নয়: dashboard-এর JSON-এ `{{ }}` (Grafana-র legend) আছে, যা Helm নিজের template ভেবে ভেঙে ফেলত (PLAN)।
+- **`shoplite-gitops/apps/monitoring-config.yaml`:** ArgoCD-র Application, shoplite-app-এর `monitoring/` folder Kustomize দিয়ে বসায়। Wave 1, monitoring stack (wave 0)-এর পরে। 6.4-এর alert rule-ও এখানে যোগ হবে।
+- **রিহার্সাল (`scripts/tests/bootstrap-cluster.sh`):** monitoring-config Synced Healthy হওয়ার অপেক্ষা, তারপর নতুন check, নিচে যাচাইয়ে।
+
+**যাচাই:**
+- ✅ Kustomize v5.8.1 (`kubectl kustomize`, k3s-এর image থেকে) ConfigMap বানায়, label সহ। kubeconform `-strict`: ৯টা Application আর ConfigMap valid। shellcheck-এ আপত্তি নেই।
+- ✅ **GitOps রিহার্সাল** `PASS` (অফিসের PC, সাড়ে ১১ মিনিট), dashboard-এর প্রথম সংস্করণে। ArgoCD নিজে monitoring-config বসিয়েছে, তারপর:
+  - Grafana-র API-তে uid `shoplite-golden-signals`, নাম হুবহু "ShopLite — Golden Signals", প্রশ্নের ৮টা panel, latency panel-এ exemplar।
+  - প্রতিটা panel-এর query, আর deploy-এর দাগের query, prod-এর জন্য Grafana-র data source দিয়ে সফল।
+  - প্রশ্নের ৮টা panel-এ data আছে। যেমন CPU আর memory-তে ৭টা pod, orders processed-এ ৪টা result।
+  - আগের সব check আবার pass।
+- 🐞 সেই cluster রেখে দিয়ে আসল ঘটনা ঘটিয়ে দেখা হয়েছিল। তাতে ধরা পড়ে: restart-এর table-এ `reason` আসে না, কারণ `on (pod, container)` বাকি label বাদ দেয়। `group_left` যোগ করা হয়েছে (section 12)।
+- ✅ একই cluster-এ হাতে পরখ:
+  - `group_left`-সহ query দেখায় order-worker, কারণ `Completed`, restart 1 (dev-এ worker-এর process থামানোর পরে);
+  - dev-এ একটা অবৈধ queue message দিলে "Recent error logs"-এর query worker-এর `invalid queue message dropped` line পায়, trace_id সহ;
+  - prod-এর web scale করার ১৯ সেকেন্ড পরে deploy-এর দাগ আসে।
+
+  এই তিনটা পরীক্ষা এখন রিহার্সালেও আছে: dashboard-এর ধাপে, আর self-heal ধাপের `kubectl scale`-এর ঠিক পরে।
+- ⏳ **শেষ সংস্করণে পুরো GitOps রিহার্সাল বাকি।** অফিসে 18:06-এ শুরু হয়েছিল, user বের হওয়ার আগে শেষ হয়নি। বাসার PC-তে প্রথমে এটা চালাতে হবে; pass করলে 6.3 শেষ।
+- ⏳ Lab-এ: load চলা অবস্থায় dashboard (live demo-র checkpoint), আর UI-তে exemplar ও log থেকে trace-এ click।
 
 ## 7. Q7: CI/CD আর GitOps
 
@@ -888,6 +927,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `04305e8` | 2026-11-15 | Q5 step 5.4: lab-এ Q5 চালানোর পদ্ধতি (repo ভাগ, GitHub-এর setting, pipeline, bootstrap, promote, প্রমাণ) |
 | `cb6830f` | 2026-11-16 | Q6 step 6.1: metrics stack (kube-prometheus-stack ArgoCD দিয়ে), ServiceMonitor, exemplar, Grafana `/grafana`-এ |
 | `289ea11` | 2026-11-16 | Q6 step 6.2: Loki, Alloy (JSON parse), Tempo (OTLP) ArgoCD দিয়ে; Grafana-য় log → trace, trace → log, exemplar → trace |
+| `cadd840` | 2026-11-16 | Q6 step 6.3: "ShopLite — Golden Signals" dashboard (Kustomize, monitoring-config), Q8-এর restart, error log আর deploy-এর দাগ সহ |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -907,6 +947,8 @@ devops-final/
 │   ├── .github/workflows/promote.yml     "Run workflow" বোতাম: dev-এর image gitops-এ prod-এর values-এ (Q7, 7.5)
 │   ├── .env.example                      local-এর setting (WEB_PORT সহ); আসল .env Git-এ যায় না
 │   ├── monitoring/stack/                 Q6-এর chart-গুলোর values: kube-prometheus-stack, loki, tempo, alloy (Alloy-র log pipeline সহ); ArgoCD shoplite-gitops-এর apps/ থেকে পড়ে
+│   ├── monitoring/dashboards/            golden-signals.json: "ShopLite — Golden Signals" (Q6, 6.3)
+│   ├── monitoring/kustomization.yaml     dashboard থেকে ConfigMap (Grafana-র sidecar তোলে); ArgoCD-র monitoring-config পড়ে
 │   ├── helm/shoplite/                    Q5-এর chart: Chart.yaml, values.yaml, values-dev.yaml, values-prod.yaml
 │   │   ├── files/init.sql                table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
 │   │   └── templates/                    web, catalog-api (+ PDB), order-worker (+ HPA, metrics-এর Service), postgres, redis, ingress, networkpolicy, servicemonitor, configmap, _helpers
@@ -967,7 +1009,7 @@ devops-final/
 └── shoplite-gitops/                      ArgoCD-র desired state (শেষে আলাদা repo)
     ├── bootstrap/argocd-values.yaml      ArgoCD-র setting: /argocd, Git দেখা ৬০ সেকেন্ডে, Application-এর health
     ├── bootstrap/root-app.yaml           root Application ("app of apps"), bootstrap একবার বসায়
-    ├── apps/                             traefik, kube-prometheus-stack, loki, tempo, alloy (wave 0), shoplite-dev (auto-sync, self-heal), shoplite-prod (manual)
+    ├── apps/                             traefik, kube-prometheus-stack, loki, tempo, alloy (wave 0), shoplite-dev (auto-sync, self-heal), shoplite-prod (manual), monitoring-config (dashboard; wave 1)
     └── envs/                             dev/values.yaml (CI লেখে image tag), prod/values.yaml (tag, Q8-এর flag)
 ```
 
@@ -1198,6 +1240,10 @@ bash ansible/tests/run.sh
 - **Tempo-র OTLP ঠিকানা chart-এর `values.yaml`-এ**, env-এর ফাইলে নয় (6.2)। এক cluster-এ এক Tempo, দুই env-এর জন্য একই ঠিকানা।
   - chart-এর রিহার্সালে Tempo নেই, তাই export ব্যর্থ হয়। exporter-এর log আসে: WARNING `Transient error ...` আর ERROR `Failed to export spans batch ...`।
   - App-এর কাজে প্রভাব পড়ে না। Tempo ছাড়া catalog-api আলাদা চালিয়ে দেখা হয়েছে: request চলে, আর SIGTERM-এ বন্ধ হয় ১ সেকেন্ডে।
+- **Dashboard-এ Q8-এর জন্য বাড়তি ৩টা জিনিস** (user-এর সিদ্ধান্ত, 16 Nov; PLAN অনুযায়ী)। Restart আর শেষবার বন্ধের কারণ, সাম্প্রতিক ERROR log, আর deploy-এর দাগ। Q8-এ kubectl চলে না, তাই এগুলো Grafana-তেই থাকা দরকার। প্রশ্নের ৭টা উপরে থাকে, এগুলো আলাদা "Investigation" অংশে।
+- **Deploy-এর দাগ annotation হিসেবে** (6.3; Claude-এর বাছাই)। আলাদা panel-এর বদলে সব graph-এর ওপর একসাথে দেখায়, কখন deploy হলো আর তার পরে কী বদলাল।
+- **Environment বাছাই custom variable-এ** (`shoplite`, `shoplite-dev`; default prod), Prometheus থেকে খুঁজে নয়। মান দুটো নির্দিষ্ট।
+- **`monitoring-config` wave 1-এ** (6.3)। 6.4-এর PrometheusRule-এর CRD kube-prometheus-stack (wave 0) থেকে আসে।
 
 ## 12. জানা বিষয়
 
@@ -1272,13 +1318,14 @@ bash ansible/tests/run.sh
 - **Grafana-র provisioning ফাইলে `$` environment variable বোঝায়।** Literal `$` লিখতে হয় `$$` দিয়ে (Grafana-র docs), তাই link-এর URL লেখা `$${__value.raw}`। রিহার্সাল দেখে, Grafana-র API-তে সেটা `${__value.raw}` হয়েই আসে।
 - **`loki.source.kubernetes` প্রতিটা container একবারই পড়ে,** যদিও `discovery.kubernetes` container-এর প্রতিটা port-এর জন্য আলাদা target দেয় (যেমন Loki-র নিজের ৩টা port)। রিহার্সালের cluster-এ Alloy-র API (`/api/v0/web/components/loki.source.kubernetes.pods`) দেখিয়েছে ৪৩টা target, প্রতিটা `instance` একবার।
 - **Loki 3 নিজে থেকে `service_name` label যোগ করে,** আর Alloy-র `loki.source.kubernetes` যোগ করে `job` আর `instance`। কোনোটাতেই নতুন stream বাড়ে না: মানগুলো আসে আগের label থেকেই, container-প্রতি একটা।
+- **PromQL-এ `A * on (pod, container) B` ফলাফলে শুধু `pod` আর `container` রাখে।** বাঁ দিকের বাকি label (যেমন `reason`) রাখতে `group_left` লাগে। Restart-এর table-এ এই ভুল ধরা পড়েছিল শুধু আসল restart ঘটিয়ে দেখায়: ফাঁকা cluster-এ query সফল, কিন্তু ফল ফাঁকা।
 
 ## 13. পরের কাজ
 
-Q5-এর code আর lab-এর পদ্ধতি শেষ (section 6); Q6-এর 6.1 আর 6.2 শেষ (section 6b); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর, সবই নিজের PC-তে:
+Q5-এর code আর lab-এর পদ্ধতি শেষ (section 6); Q6-এর 6.1–6.3 শেষ (section 6b); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর, সবই নিজের PC-তে:
 
+0. 6.3 শেষ করা: শেষ সংস্করণে GitOps রিহার্সাল (`bash scripts/tests/bootstrap-cluster.sh`) চালানো। Pass করলে section 6b-র table-এ 6.3 ✅।
 1. Q6-এর বাকি step (section 6b):
-   - 6.3: Golden Signals dashboard;
    - 6.4: alert, runbook আর Slack। এর জন্য user-এর Slack incoming webhook URL লাগবে, যা যাবে Secret-এ, Git-এ নয়;
    - 6.5: lab-এর পদ্ধতি।
 2. Q7-এর বাকি অংশ: lint, test, Trivy, PR pipeline, Terraform plan-এর comment।

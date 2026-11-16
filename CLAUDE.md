@@ -119,6 +119,26 @@ Check later procedures with kubectl blocks the same way. No one-command lab scri
     - The query API is on 3200 (`/api/v2/traces/<id>`); the image is distroless.
   - Loki, Tempo and Alloy are in sync wave 0 with kube-prometheus-stack, so they run before ShopLite.
   - The ShopLite chart's `config.otlpEndpoint` defaults to `http://tempo.monitoring.svc.cluster.local:4318` for both environments.
+  - The dashboard (6.3), `monitoring/dashboards/golden-signals.json`:
+    - title "ShopLite — Golden Signals" (em dash), uid `shoplite-golden-signals`;
+    - custom variable `namespace` (label Environment: `shoplite` default, `shoplite-dev`);
+    - data sources by uid (`prometheus`, `loki`).
+    - The question's seven displays are eight panels:
+      - Requests per second, per route;
+      - HTTP 5xx error rate (`or ... * 0` shows 0 instead of no data);
+      - Worker replicas (available, and the HPA's desired count);
+      - Request latency per route: p50, p95, p99 (`exemplar: true` on p99);
+      - Order queue depth (`max`, one value per catalog-api replica);
+      - Orders created vs processed;
+      - CPU usage per pod and Memory usage per pod (cAdvisor, `metrics_path="/metrics/cadvisor"`).
+
+      Red threshold lines mark the alerts' limits: 5%, 1 s, 50.
+    - Under a row "Investigation", the user's choice for Q8 (16 Nov):
+      - a table of restarted containers with the last termination reason;
+      - a Loki logs panel of `level="ERROR"`;
+      - plus a dashboard annotation "Deploys", from changes in `kube_deployment_metadata_generation`.
+    - The panel titles are checked by the rehearsal; rename them in both places.
+  - `monitoring/kustomization.yaml`: `configMapGenerator` `shoplite-dashboards` (namespace monitoring, label `grafana_dashboard: "1"`, which kube-prometheus-stack's Grafana sidecar loads from every namespace, `disableNameSuffixHash`). Build it with `kubectl kustomize` from the k3s image (Kustomize v5.8.1). shoplite-gitops `apps/monitoring-config.yaml` (path `monitoring`, wave 1, automated) applies it; 6.4's PrometheusRule goes in the same Kustomization.
   - The chart's `templates/servicemonitor.yaml` scrapes `/metrics` every 15 s: catalog-api on port `http`, order-worker on port `metrics`. order-worker has a Service (port 8001) only for this.
   - Prometheus job names: `catalog-api`, `order-worker`, `node-exporter`, `kube-state-metrics`.
   - The Prometheus image is distroless (no shell, no wget). Query it from outside: the rehearsal curls its ClusterIP from the node's network.
@@ -154,6 +174,13 @@ Check later procedures with kubectl blocks the same way. No one-command lab scri
       - that trace in Tempo (`/api/v2/traces/<id>`) has the API → queue → worker → database spans. The consumer's parent is the producer, and `deployment.environment` is prod;
       - the Tempo data source's logs link (loki, `service.name=service`, by trace id) finds the worker's "order completed" line;
       - the Prometheus data source's exemplar link, and the exemplar's trace in Tempo;
+    - Q6.3:
+      - monitoring-config Synced Healthy;
+      - Grafana serves uid `shoplite-golden-signals` with the exact title and the eight required panel titles, and exemplars on the latency panel;
+      - every panel query and the Deploys annotation run for prod through Grafana's data sources (`$namespace` → shoplite, `$__rate_interval` → 5m) and succeed;
+      - the eight required panels return data;
+      - in dev, an unreadable queue message (`redis-cli LPUSH orders:pending 'not an order'`) and a stopped worker process (`kill 1`) show in "Recent error logs" and "Restarted containers" (with the reason);
+      - right after the self-heal step's `kubectl scale`, the Deploys annotation marks prod's web (it shows within about 20 s; its window is 2 minutes);
     - self-heal reverts a `kubectl scale` in dev, while prod keeps it and shows OutOfSync.
   - The monitoring charts' images are preloaded by `stack_images` (chart and values from the Application); images pinned by digest are left to k3s.
   - The test k3s runs `mount --make-rshared /` after it is Ready. node-exporter mounts `/` with HostToContainer propagation, which a container's private `/` refuses.
@@ -271,7 +298,7 @@ At the split, `SaikatGeek/shoplite-app`'s placeholder `test.md` is replaced: the
 **Q6, in steps (PROGRESS section 6b; Q6 before the rest of Q7 was Claude's advice, and on 16 Nov the user said to go on):**
 - 6.1 is done (`cb6830f`; both rehearsals passed on PC-01, 16 Nov): metrics through kube-prometheus-stack, ServiceMonitors, exemplar storage, Grafana at `/grafana`.
 - 6.2 is done (`289ea11`; the GitOps, chart and pipeline rehearsals passed on PC-01, 16 Nov): Loki, Alloy with JSON parsing, Tempo with OTLP. In Grafana: log → trace, trace → log, exemplar → trace.
-- 6.3: the "ShopLite — Golden Signals" dashboard, as JSON in Git.
+- 6.3 is pushed (`cadd840`) but not yet done: its first version passed the GitOps rehearsal on PC-01 (16 Nov); the fix (`group_left`) and the three new checks were tried by hand on that cluster, but the full run of the last version did not finish before the user left the office. **First thing on the home PC: run `bash scripts/tests/bootstrap-cluster.sh`; if it passes, mark 6.3 ✅ in PROGRESS (table and section 13) and here.** What it is: the "ShopLite — Golden Signals" dashboard as JSON in Git, through Kustomize and ArgoCD; eight panels for the question plus, the user's choice, restarts, error logs and deploy marks for Q8.
 - 6.4: five alerts, runbooks, Alertmanager → Slack. It needs the user's Slack incoming webhook URL, which goes in a Secret, never in Git.
 - 6.5: the lab procedure `docs/evidence/q6/commands.md`.
 
