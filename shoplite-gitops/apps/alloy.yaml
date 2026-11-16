@@ -1,0 +1,40 @@
+# The log collector of ShopLite's observability stack (question 6a): Grafana Alloy, one pod
+# per node (DaemonSet), in the namespace monitoring. It reads every pod's logs, parses the
+# JSON ones and pushes them to Loki (apps/loki.yaml). Its settings and pipeline live in
+# shoplite-app (monitoring/stack/alloy.yaml), read through the second source.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+  annotations:
+    # With the rest of the monitoring stack (wave 0), before ShopLite (wave 1).
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: alloy
+      targetRevision: 1.15.0 # Alloy v1.21.3
+      helm:
+        releaseName: alloy
+        valueFiles:
+          - $app/monitoring/stack/alloy.yaml
+    - repoURL: https://github.com/SaikatGeek/shoplite-app.git
+      targetRevision: main
+      ref: app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

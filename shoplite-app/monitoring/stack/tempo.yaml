@@ -1,0 +1,11 @@
+# Values for the tempo chart 3.2.1 (grafana-community; Tempo 3.1.1), question 6a: the trace
+# store, in the namespace monitoring, as one process (single binary). ArgoCD installs the
+# chart with this file (shoplite-gitops/apps/tempo.yaml). catalog-api and order-worker send
+# their spans to the chart's OTLP over HTTP receiver, port 4318 (helm/shoplite values.yaml,
+# config.otlpEndpoint); Grafana reads them through its data source uid tempo. Traces stay
+# on the pod's own disk for the chart's 24 hours, like Prometheus's data: a lab session is a
+# few hours.
+tempo:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: "1", memory: 1Gi }

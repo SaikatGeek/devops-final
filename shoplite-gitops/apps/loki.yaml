@@ -1,0 +1,39 @@
+# The log store of ShopLite's observability stack (question 6a): Loki, one process, in the
+# namespace monitoring. Alloy (apps/alloy.yaml) pushes every pod's logs to it. Its settings
+# live in shoplite-app (monitoring/stack/loki.yaml), read through the second source.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  annotations:
+    # With the rest of the monitoring stack (wave 0), before ShopLite (wave 1).
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  sources:
+    - repoURL: https://grafana-community.github.io/helm-charts
+      chart: loki
+      targetRevision: 20.2.1 # Loki 3.7.9
+      helm:
+        releaseName: loki
+        valueFiles:
+          - $app/monitoring/stack/loki.yaml
+    - repoURL: https://github.com/SaikatGeek/shoplite-app.git
+      targetRevision: main
+      ref: app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

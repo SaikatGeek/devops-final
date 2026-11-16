@@ -1,0 +1,55 @@
+# Values for the loki chart 20.2.1 (grafana-community; Loki 3.7.9), question 6a: the log
+# store, in the namespace monitoring. ArgoCD installs the chart with this file
+# (shoplite-gitops/apps/loki.yaml). Alloy (monitoring/stack/alloy.yaml) pushes every pod's
+# log lines here; Grafana reads them through its data source uid loki.
+
+# Every Loki component in one process (monolithic mode), one replica.
+deploymentMode: Monolithic
+
+loki:
+  # One tenant: Alloy pushes and Grafana reads without an X-Scope-OrgID header.
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  # Chunks and index on the pod's own volume (a PVC), no object store.
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2026-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+singleBinary:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+# The chart's default replicas for the simple scalable mode's targets.
+write:
+  replicas: 0
+read:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Off: the gateway (an nginx in front of Loki for several tenants), the memcached caches,
+# the canary that writes test logs, the Helm test, and the sidecar that loads alert rules
+# (ShopLite's alerts are Prometheus rules).
+gateway:
+  enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+sidecar:
+  rules:
+    enabled: false

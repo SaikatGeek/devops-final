@@ -1,0 +1,96 @@
+# Values for the alloy chart 1.15.0 (grafana; Alloy v1.21.3), question 6a: the log collector,
+# in the namespace monitoring. ArgoCD installs the chart with this file
+# (shoplite-gitops/apps/alloy.yaml). It runs as a DaemonSet (the chart's default), one pod
+# per node; each pod reads the logs of every pod on its own node through the Kubernetes API,
+# parses the JSON ones, and pushes them to Loki.
+alloy:
+  configMap:
+    content: |
+      // The pods on this node: the chart sets HOSTNAME to the node's name.
+      discovery.kubernetes "pods" {
+        role = "pod"
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + sys.env("HOSTNAME")
+        }
+      }
+
+      // Every stream is labelled with its namespace, pod and container (shoplite and
+      // shoplite-dev tell prod's logs from dev's).
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+      }
+
+      loki.source.kubernetes "pods" {
+        targets    = discovery.relabel.pods.output
+        forward_to = [loki.process.json.receiver]
+      }
+
+      // ShopLite's services write one JSON object per line: timestamp, level, service,
+      // message, trace_id. level and service become labels, so Grafana can filter on them.
+      // trace_id stays in the line: one value per request would make one stream per
+      // request. Grafana's Loki data source turns it into a link to the trace in Tempo.
+      // Lines that are not JSON pass unchanged.
+      loki.process "json" {
+        stage.json {
+          expressions = { level = "", service = "" }
+        }
+        stage.labels {
+          values = { level = "", service = "" }
+        }
+        forward_to = [loki.write.loki.receiver]
+      }
+
+      loki.write "loki" {
+        endpoint {
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+  # It reads logs through the API, not from the node's disk, so it mounts no host folder and
+  # runs as the image's own non-root user (alloy, uid 473).
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 473
+    runAsGroup: 473
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+
+# Only what the config above uses: find pods and read their logs. (The chart's default rules
+# also read every Secret and ConfigMap in the cluster.) Both lists go into one ClusterRole.
+rbac:
+  rules:
+    - apiGroups: [""]
+      resources: [pods]
+      verbs: [get, list, watch]
+  clusterRules:
+    - apiGroups: [""]
+      resources: [pods/log]
+      verbs: [get]
+
+# The PodLogs CRD belongs to another way of selecting logs, not used here.
+crds:
+  create: false
+
+# The sidecar that reloads Alloy when its ConfigMap changes in Git.
+configReloader:
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 64Mi }

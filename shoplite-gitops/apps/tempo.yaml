@@ -1,0 +1,40 @@
+# The trace store of ShopLite's observability stack (question 6a): Tempo, one process, in the
+# namespace monitoring. catalog-api and order-worker send their spans to it over OTLP/HTTP.
+# Its settings live in shoplite-app (monitoring/stack/tempo.yaml), read through the second
+# source.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+  annotations:
+    # With the rest of the monitoring stack (wave 0), before ShopLite (wave 1).
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  sources:
+    - repoURL: https://grafana-community.github.io/helm-charts
+      chart: tempo
+      targetRevision: 3.2.1 # Tempo 3.1.1
+      helm:
+        releaseName: tempo
+        valueFiles:
+          - $app/monitoring/stack/tempo.yaml
+    - repoURL: https://github.com/SaikatGeek/shoplite-app.git
+      targetRevision: main
+      ref: app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

@@ -10,6 +10,9 @@ shoplite-gitops/
 ├── apps/                     the ArgoCD Applications the root app manages
 │   ├── traefik.yaml          the ingress controller behind the ALB (Q5): chart, version, values (sync wave 0)
 │   ├── kube-prometheus-stack.yaml  Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics (Q6), namespace monitoring; values in shoplite-app's monitoring/stack/ (sync wave 0)
+│   ├── loki.yaml             Loki, the log store (Q6), namespace monitoring (wave 0)
+│   ├── tempo.yaml            Tempo, the trace store (Q6), namespace monitoring (wave 0)
+│   ├── alloy.yaml            Grafana Alloy, the log collector on every node (Q6), namespace monitoring (wave 0)
 │   ├── shoplite-dev.yaml     dev, namespace shoplite-dev: automated sync, prune, self-heal (wave 1)
 │   └── shoplite-prod.yaml    prod, namespace shoplite: manual sync (wave 1)
 └── envs/

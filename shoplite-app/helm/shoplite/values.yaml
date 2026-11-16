@@ -16,9 +16,11 @@ image:
 config:
   logLevel: INFO
   postgresDb: shoplite
-  # Tempo's OTLP/HTTP address (question 6). Empty: spans are created (trace_id in every
-  # log line) but not exported.
-  otlpEndpoint: ""
+  # Tempo's OTLP/HTTP address (question 6): the monitoring namespace's Tempo, which ArgoCD
+  # installs (shoplite-gitops apps/tempo.yaml). Both environments send to it; each trace
+  # carries deployment.environment. Empty: spans are created (trace_id in every log line)
+  # but not exported.
+  otlpEndpoint: http://tempo.monitoring.svc.cluster.local:4318
   # Fault injection of question 1.5, for the Q8 exercise. All off.
   chaos:
     latencyMs: 0

@@ -80,6 +80,48 @@ grafana:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 500m, memory: 384Mi }
+  # The links between the signals (question 6.4) go by data source uid, so the uids are
+  # fixed: prometheus (the chart's own data source), loki and tempo.
+  # Prometheus: an exemplar on a latency panel opens its trace in Tempo.
+  sidecar:
+    datasources:
+      exemplarTraceIdDestinations:
+        datasourceUid: tempo
+        traceIdLabelName: trace_id
+        urlDisplayLabel: View trace
+  additionalDataSources:
+    # Loki: a log line's trace_id opens its trace in Tempo.
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      access: proxy
+      jsonData:
+        derivedFields:
+          # The JSON field of ShopLite's log lines: "trace_id": "<32 hex digits>".
+          - name: trace_id
+            matcherType: regex
+            matcherRegex: '"trace_id": *"([0-9a-f]{32})"'
+            datasourceUid: tempo
+            # $$ stops Grafana from reading ${...} as an environment variable.
+            url: "$${__value.raw}"
+            urlDisplayLabel: View trace
+    # Tempo: a span opens its service's log lines that carry the trace's id.
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.monitoring.svc.cluster.local:3200
+      access: proxy
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          # The span's service.name is the log stream's service label.
+          tags:
+            - key: service.name
+              value: service
+          filterByTraceID: true
+          spanStartTimeShift: -1m
+          spanEndTimeShift: 1m
 
 kube-state-metrics:
   resources:
