@@ -1,0 +1,30 @@
+# ShopLite's own monitoring configuration (question 6): the Golden Signals dashboard (6.3),
+# in the namespace monitoring. ArgoCD builds shoplite-app's monitoring/ folder with Kustomize
+# (monitoring/kustomization.yaml): the dashboard JSON becomes a ConfigMap that Grafana loads.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-config
+  namespace: argocd
+  annotations:
+    # After the monitoring stack (wave 0), whose Grafana loads the dashboard.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  source:
+    repoURL: https://github.com/SaikatGeek/shoplite-app.git
+    targetRevision: main
+    path: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

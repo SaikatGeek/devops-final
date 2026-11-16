@@ -23,8 +23,10 @@
 #      order can be followed through Grafana's data sources: its log line -> (the Loki
 #      data source's trace_id link) -> its trace in Tempo, API -> queue -> worker ->
 #      database -> (the Tempo data source's logs link) -> the worker's lines, and a
-#      latency exemplar -> its trace; a kubectl change in dev is reverted by self-heal
-#      (question 7d) while the same change in prod stays and shows as OutOfSync
+#      latency exemplar -> its trace; Grafana has the Golden Signals dashboard from Git,
+#      where every query works and the question's panels show prod's data; a kubectl
+#      change in dev is reverted by self-heal (question 7d) while the same change in prod
+#      stays and shows as OutOfSync
 #   5. remove everything again
 # Needs Docker and internet (the charts and images of Traefik, ArgoCD and the monitoring
 # stack). About 15 minutes. Run it from shoplite-app/, with shoplite-gitops next to it
@@ -104,7 +106,7 @@ place_order() {
 }
 
 for file in bootstrap/root-app.yaml bootstrap/argocd-values.yaml apps/traefik.yaml \
-  apps/kube-prometheus-stack.yaml apps/loki.yaml apps/tempo.yaml apps/alloy.yaml; do
+  apps/kube-prometheus-stack.yaml apps/loki.yaml apps/tempo.yaml apps/alloy.yaml apps/monitoring-config.yaml; do
   [ -f "$GITOPS_DIR/$file" ] || fail "$GITOPS_DIR/$file not found (set SHOPLITE_GITOPS_DIR)"
 done
 
@@ -239,6 +241,8 @@ for app in loki tempo alloy; do
 done
 wait_for_app shoplite-dev "Synced Healthy" 600 || fail "shoplite-dev did not become Synced and Healthy"
 echo "ok    shoplite-dev: Synced Healthy, with no one syncing it (automated)"
+wait_for_app monitoring-config "Synced Healthy" 300 || fail "monitoring-config did not become Synced and Healthy"
+echo "ok    monitoring-config: Synced Healthy (shoplite-app's monitoring/ through Kustomize)"
 wait_for_app root "Synced *" 120 || fail "root is not Synced"
 echo "ok    root: $(app_state root)"
 # Without the health check for Applications (argocd-values.yaml), wave 1 would follow
@@ -465,11 +469,100 @@ grep -q '^catalog-api SERVER ' <<<"$(spans "$(tempo_trace "$exemplar")")" ||
   fail "the exemplar's trace $exemplar is not in Tempo"
 echo "ok    the Prometheus data source links an exemplar's trace_id to Tempo, where exemplar $exemplar's trace is"
 
+step "the Golden Signals dashboard (question 6.3): JSON in Git -> Kustomize's ConfigMap -> Grafana"
+# for_namespace <panel query> <namespace>: the query as Grafana runs it for that environment
+# ($__rate_interval taken as 5 minutes).
+# shellcheck disable=SC2016 # Grafana's variables, not the shell's
+for_namespace() {
+  local query=${1//'$namespace'/$2}
+  echo "${query//'$__rate_interval'/5m}"
+}
+dashboard=""
+for _ in $(seq 24); do
+  dashboard=$(grafana dashboards/uid/shoplite-golden-signals || true)
+  [ -n "$dashboard" ] && break
+  sleep 5
+done
+[ -n "$dashboard" ] || fail "Grafana has no dashboard with uid shoplite-golden-signals"
+title=$(yq -p json '.dashboard.title' <<<"$dashboard")
+[ "$title" = "ShopLite — Golden Signals" ] || fail "the dashboard is called '$title'"
+echo "ok    Grafana loaded '$title' from the ConfigMap shoplite-dashboards (label grafana_dashboard=1)"
+[ "$(yq -p json '[.dashboard.panels[] | select(.title == "Request latency per route: p50, p95, p99") | .targets[] | select(.exemplar == true)] | length' <<<"$dashboard")" -ge 1 ] ||
+  fail "the latency panel shows no exemplars"
+# The question's seven displays (CPU and memory per pod are two panels): every query of
+# these returns data for prod. The investigation panels and the deploy marks need only valid
+# queries: a healthy rehearsal has no restarts and no ERROR lines.
+required="Requests per second
+HTTP 5xx error rate
+Worker replicas
+Request latency per route: p50, p95, p99
+Order queue depth
+Orders created vs processed
+CPU usage per pod
+Memory usage per pod"
+titles=$(yq -p json '.dashboard.panels[].title' <<<"$dashboard")
+while read -r panel; do
+  grep -qxF "$panel" <<<"$titles" || fail "the dashboard has no panel '$panel'"
+done <<<"$required"
+# One "<panel title> TAB <data source uid> TAB <query>" line per query, the deploy marks last;
+# each query runs for prod through Grafana's data source, as the panel would.
+# shellcheck disable=SC2016 # $title is yq's variable; $namespace and $__rate_interval are Grafana's
+queries=$(yq -p json '(.dashboard.panels[] | select(.type != "row") | .title as $title | .targets[] | $title + "\t" + .datasource.uid + "\t" + .expr), (.dashboard.annotations.list[] | select(.name == "Deploys") | "Deploys (annotation)\tprometheus\t" + .target.expr)' <<<"$dashboard")
+while IFS=$'\t' read -r panel uid expr; do
+  query=$(for_namespace "$expr" shoplite)
+  if [ "$uid" = loki ]; then
+    result=$(loki query_range -G --data-urlencode "query=$query" --data-urlencode limit=10 || true)
+  else
+    result=$(grafana datasources/proxy/uid/prometheus/api/v1/query --data-urlencode "query=$query" || true)
+  fi
+  status=$(yq -p json '.status' <<<"$result" || true)
+  [ "$status" = success ] || fail "panel '$panel': the query fails: $query"
+  series=$(yq -p json '.data.result | length' <<<"$result")
+  if grep -qxF "$panel" <<<"$required"; then
+    [ "$series" -gt 0 ] || fail "panel '$panel' shows no data for prod: $query"
+  fi
+  echo "ok    $panel: $series series"
+done <<<"$queries"
+# The investigation panels, given something to show in dev: a message the worker cannot read
+# (it logs an ERROR line), then the worker's process stopped (Kubernetes restarts the
+# container).
+kubectl -n shoplite-dev exec deploy/redis -- redis-cli LPUSH orders:pending 'not an order' >/dev/null
+kubectl -n shoplite-dev exec deploy/order-worker -- kill 1
+# dev_query <panel title>: the panel's first query, for dev.
+dev_query() {
+  for_namespace "$(yq -p json ".dashboard.panels[] | select(.title == \"$1\") | .targets[0].expr" <<<"$dashboard")" shoplite-dev
+}
+errors=0 restarted=""
+for _ in $(seq 24); do
+  errors=$(loki_lines "$(dev_query "Recent error logs")" | grep -c 'invalid queue message dropped' || true)
+  restarted=$(grafana datasources/proxy/uid/prometheus/api/v1/query \
+    --data-urlencode "query=$(dev_query "Restarted containers: restarts and last termination reason")" |
+    yq -p json '.data.result[] | select(.metric.container == "order-worker") | "last reason " + .metric.reason + ", restarts " + .value[1]' || true)
+  [ "${errors:-0}" -gt 0 ] && [ -n "$restarted" ] && break
+  sleep 5
+done
+[ "${errors:-0}" -gt 0 ] || fail "the Recent error logs panel does not show dev's ERROR line"
+[ -n "$restarted" ] || fail "the Restarted containers panel does not show dev's restarted order-worker"
+echo "ok    Recent error logs, for dev: the worker's 'invalid queue message dropped' line"
+echo "ok    Restarted containers, for dev: order-worker, $restarted"
+
 step "self-heal (question 7d): a kubectl change in dev is put back; the same change in prod stays"
 dev_replicas=$(kubectl -n shoplite-dev get deployment web -o jsonpath='{.spec.replicas}')
 prod_replicas=$(kubectl -n shoplite get deployment web -o jsonpath='{.spec.replicas}')
 kubectl -n shoplite-dev scale deployment web --replicas=$((dev_replicas + 2)) >/dev/null
 kubectl -n shoplite scale deployment web --replicas=$((prod_replicas + 2)) >/dev/null
+# The Golden Signals dashboard's Deploys annotation marks the change in prod (its window is
+# two minutes, so it is checked at once).
+deploys=$(yq -p json '.dashboard.annotations.list[] | select(.name == "Deploys") | .target.expr' <<<"$dashboard")
+marked=""
+for _ in $(seq 24); do
+  marked=$(grafana datasources/proxy/uid/prometheus/api/v1/query --data-urlencode "query=$(for_namespace "$deploys" shoplite)" |
+    yq -p json '.data.result[].metric.deployment' || true)
+  grep -qx web <<<"$marked" && break
+  sleep 5
+done
+grep -qx web <<<"$marked" || fail "the dashboard's Deploys annotation does not mark prod's changed web Deployment"
+echo "ok    the dashboard's Deploys annotation marks the change of prod's web Deployment"
 replicas=""
 for _ in $(seq 24); do
   replicas=$(kubectl -n shoplite-dev get deployment web -o jsonpath='{.spec.replicas}')
@@ -486,4 +579,4 @@ echo "ok    prod: the change stays ($((prod_replicas + 2)) replicas) and shows a
 echo
 kubectl -n argocd get applications
 echo
-echo "PASS: bootstrap, app of apps with sync waves, automated dev, manual prod, the metrics stack (targets, metrics, exemplars, Grafana at /grafana), logs and traces linked in Grafana, self-heal and /argocd work"
+echo "PASS: bootstrap, app of apps with sync waves, automated dev, manual prod, the metrics stack (targets, metrics, exemplars, Grafana at /grafana), logs and traces linked in Grafana, the Golden Signals dashboard, self-heal and /argocd work"

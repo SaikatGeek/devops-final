@@ -1,0 +1,20 @@
+# ShopLite's monitoring configuration as Kubernetes objects (question 6), in the namespace
+# monitoring. ArgoCD builds it with Kustomize (shoplite-gitops/apps/monitoring-config.yaml).
+# Kustomize, not Helm: the dashboard's JSON is full of {{ }} (Grafana's legends), which
+# Helm would try to render.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+# The dashboards in dashboards/, as one ConfigMap. Grafana's sidecar loads every ConfigMap
+# labelled grafana_dashboard=1 (kube-prometheus-stack's default). A fixed name, so a change
+# in Git updates the same ConfigMap.
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+  - name: shoplite-dashboards
+    files:
+      - dashboards/golden-signals.json
+    options:
+      labels:
+        grafana_dashboard: "1"

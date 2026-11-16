@@ -13,6 +13,7 @@ shoplite-gitops/
 │   ├── loki.yaml             Loki, the log store (Q6), namespace monitoring (wave 0)
 │   ├── tempo.yaml            Tempo, the trace store (Q6), namespace monitoring (wave 0)
 │   ├── alloy.yaml            Grafana Alloy, the log collector on every node (Q6), namespace monitoring (wave 0)
+│   ├── monitoring-config.yaml  ShopLite's dashboard (Q6), from shoplite-app's monitoring/ through Kustomize (wave 1)
 │   ├── shoplite-dev.yaml     dev, namespace shoplite-dev: automated sync, prune, self-heal (wave 1)
 │   └── shoplite-prod.yaml    prod, namespace shoplite: manual sync (wave 1)
 └── envs/
