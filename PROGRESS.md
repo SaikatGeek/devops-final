@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-15, Q5 step 5.4 শেষ (lab-এ Q5 চালানোর পদ্ধতি); তার আগে Q7 step 7.5 (prod-এ তোলার `promote` workflow)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-16, Q6 step 6.1 শেষ (metrics stack: kube-prometheus-stack, ServiceMonitor, exemplar, Grafana)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -19,7 +19,7 @@
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। বাকি শুধু lab-এ চালানো |
-| Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id); Prometheus, Loki, Tempo, Grafana বসানো বাকি |
+| Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id)। 6.1-এ metrics stack: kube-prometheus-stack ArgoCD দিয়ে, ServiceMonitor, exemplar, Grafana `/grafana`-এ (local k3s-এ রিহার্সাল pass)। বাকি 6.2 (Loki, Alloy, Tempo), 6.3 dashboard, 6.4 alert, 6.5 পদ্ধতি |
 | Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 (root app, dev আর prod-এর Application, `envs` values), 7.2 (cluster-এর bootstrap, ArgoCD; local k3s-এ পুরো রিহার্সাল pass) 7.3 (GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push), 7.4 (main pipeline v1: build → OIDC দিয়ে ECR → gitops-এ tag; local-এ রিহার্সাল, আসল run repo ভাগের পরে) আর 7.5 (`promote`: dev-এর image Git দিয়ে prod-এ) শেষ; এরপর 5.4, তারপর Q7-এর বাকি অংশ |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
@@ -521,6 +521,84 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
   - Section 3 আর 4-এর kubectl-এর check-ও চলেছে (dev-এর curl NodePort 30081-এ)। শেষে container, network আর অস্থায়ী ফাইল মোছা হয়েছে।
 - ⏳ Lab-এ চালানো: GitHub-এর দুই workflow, ArgoCD-র UI, ALB, browser-এর checkpoint। আর ALB থেকে NodePort-এ যাওয়া UFW-এর routed allow পার হয় কিনা।
 
+## 6b. Q6: Observability
+
+Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প্রশ্ন)।
+- প্রতিটা chart-এর setting থাকে shoplite-app-এর `monitoring/stack/`-এ, কারণ প্রশ্ন বলে monitoring configuration shoplite-app-এ।
+- ArgoCD-র Application থাকে shoplite-gitops-এর `apps/`-এ।
+- যাচাই হয় GitOps-এর রিহার্সালে: local k3s-এ ArgoCD নিজে Git থেকে বসায়।
+
+| Step | কাজ | প্রশ্নের অংশ | অবস্থা |
+|---|---|---|---|
+| 6.1 | Metrics: kube-prometheus-stack (Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics); catalog-api আর order-worker-এর ServiceMonitor; exemplar storage; Grafana ALB-র `/grafana`-এ | (a), (b) | ✅ `cb6830f` (lab-এ চালানো বাকি) |
+| 6.2 | Logs আর traces: Loki, Alloy (JSON parse), Tempo (OTLP); Grafana-তে log ↔ trace আর exemplar → trace | (a), (d) | ⬜ |
+| 6.3 | "ShopLite — Golden Signals" dashboard, JSON Git-এ | (c) | ⬜ |
+| 6.4 | ৫টা alert (severity, `runbook_url`), ৫টা runbook, Alertmanager → Slack | (e) | ⬜ |
+| 6.5 | Lab-এর পদ্ধতি `docs/evidence/q6/commands.md` | সব | ⬜ |
+
+**Chart-এর version** (16 Nov বাছা; দুই সপ্তাহের বেশি পুরনো সর্বশেষ release):
+- kube-prometheus-stack **92.17.0**, prometheus-community থেকে। এতে Prometheus Operator v0.94.2, Prometheus v3.15.1, আর Grafana chart 14.3.0।
+- loki **20.2.1** (Loki 3.7.9) আর tempo **3.2.1** (Tempo 3.1.1), দুটোই **grafana-community** থেকে। grafana-র নিজের `loki` chart এখন Enterprise Logs-এর, আর তার `tempo` chart deprecated।
+- alloy **1.15.0** (Alloy v1.21.3), grafana থেকে।
+
+**Step 6.1-এ কী হলো** (`cb6830f`)
+- **`shoplite-gitops/apps/kube-prometheus-stack.yaml`:** ArgoCD-র Application, namespace `monitoring`।
+  - Sync wave 0, Traefik-এর সাথে, কারণ ShopLite-এর ServiceMonitor (wave 1)-এর CRD এখান থেকে আসে।
+  - দুই source: chart আসে prometheus-community থেকে, values আসে shoplite-app থেকে (`ref: app`)।
+  - `ServerSideApply`, কারণ Prometheus Operator-এর CRD বড়।
+- **`shoplite-app/monitoring/stack/kube-prometheus-stack.yaml`:** chart-এর values।
+  - k3s-এর control plane-এর অংশগুলো (controller-manager, scheduler, proxy, etcd) scrape হয় না। k3s এগুলো এক process-এ চালায়, আলাদা করে পাওয়া যায় না।
+  - chart-এর default rule আর dashboard বন্ধ। Alert থাকবে শুধু আমাদের ৫টা (6.4), dashboard শুধু আমাদেরটা (6.3)।
+  - Prometheus cluster-এর সব ServiceMonitor, PodMonitor আর rule ধরে (selector `{}`), শুধু chart-এর নিজেরগুলো নয়।
+  - `exemplar-storage` চালু (6.4-এর exemplar)। Retention ১ দিন, কারণ session কয়েক ঘণ্টার।
+  - Grafana:
+    - admin-এর password cluster-এর Secret `grafana-admin`-এ;
+    - ALB-র `/grafana` path-এ (`serve_from_sub_path`), Traefik-এর `web` entrypoint-এ, host ছাড়া, ArgoCD-র `/argocd`-এর মতো;
+    - তার নিজের metrics-ও তাই `/grafana/metrics`-এ।
+  - প্রতিটা অংশে requests আর limits।
+- **chart (`helm/shoplite`):**
+  - `templates/servicemonitor.yaml`: catalog-api (port `http`) আর order-worker (port `metrics`)-এর ServiceMonitor। `/metrics` পড়ে প্রতি ১৫ সেকেন্ডে।
+  - order-worker-এর নতুন Service (port 8001), শুধু ServiceMonitor-এর জন্য। আর কেউ worker-এ connect করে না।
+- **`scripts/bootstrap-cluster.sh`:** namespace `monitoring` আর Secret `grafana-admin` বানায় (user admin, random password)।
+  - Secret আগে থেকে থাকলে রেখে দেয়, কারণ Grafana প্রথম চালুর password-ই রাখে।
+  - শেষে Grafana-র ঠিকানা আর password পড়ার command দেখায়।
+- **রিহার্সাল:**
+  - GitOps (`scripts/tests/bootstrap-cluster.sh`):
+    - ArgoCD নিজে kube-prometheus-stack বসায়; তার image আগে থেকে k3s-এ load করা থাকে।
+    - test-এর k3s-এ `/`-কে shared mount করা হয় (section 12)।
+    - নতুন check-গুলো নিচে যাচাইয়ে।
+  - chart (`helm/tests/run.sh`): gitops-এ pin করা chart থেকে ServiceMonitor-এর CRD বসিয়ে নেয়। তারপর দেখে দুই release-এই দুটো ServiceMonitor আছে।
+- **Q5-এর পদ্ধতি:** bootstrap-এর তালিকায় Grafana-র Secret যোগ হয়েছে। dev ওঠে kube-prometheus-stack Healthy হওয়ার পরে, তাই অপেক্ষা এখন ৫–৮ মিনিট।
+
+**যাচাই:**
+- ✅ chart-এর `helm lint --strict` দুই values-এ। kube-prometheus-stack আমাদের values দিয়ে render হয়:
+  - Grafana-র Ingress host ছাড়া, `/grafana`-এ;
+  - Prometheus-এ `exemplar-storage` আর সব selector `{}`।
+- ✅ kubeconform v0.8.0 `-strict`: নতুন Application valid। shellcheck-এ কোনো আপত্তি নেই।
+- ✅ **GitOps রিহার্সাল** `PASS`, অফিসের PC-তে ৯ মিনিটে (প্রথমবার image নামাতে ১২ মিনিট)। ArgoCD নিজে সব বসিয়েছে:
+  - kube-prometheus-stack Synced Healthy।
+  - ShopLite-এর Application তৈরি হয়েছে ServiceMonitor-এর CRD-এর (05:56:48Z) পরে, 05:56:53Z-এ।
+  - Prometheus-এর ১৩টা job-এর সব target `up`, একটাও down নেই। তাদের মধ্যে:
+    - node-exporter;
+    - kube-state-metrics;
+    - catalog-api (দুই env-এ ২টা করে) আর order-worker (১টা করে);
+    - kubelet, apiserver, coredns।
+  - prod-এর ছয়টা metric Prometheus-এ।
+  - latency histogram-এ trace_id-সহ exemplar (যেমন `34ae1079…`)।
+  - Grafana `/grafana/`-এ:
+    - login ছাড়া API 401;
+    - cluster-এর password দিয়ে admin login;
+    - data source uid `prometheus` দিয়ে query।
+  - আগের সব check আবার pass: bootstrap দুইবার (তিনটা Secret অপরিবর্তিত), `/argocd`, prod-এর manual sync, দুই env-এ order `COMPLETED`, dev-এর self-heal।
+- 🐞 প্রথম রানে Grafana-র নিজের target down ছিল (`/metrics` 404)। Grafana sub path-এ চলে বলে তার metrics `/grafana/metrics`-এ। path ঠিক করার পরে সব `up`।
+- ✅ Pipeline-এর রিহার্সাল `PASS` (chart-এ ServiceMonitor যোগের পরেও dev আর prod-এর image ঠিক)।
+- ✅ **chart-এর রিহার্সাল** (`helm/tests/run.sh`) `PASS`, সাড়ে ৩ মিনিটে, image cache-এ থাকায়:
+  - pin করা chart থেকে ServiceMonitor-এর CRD বসেছে;
+  - নতুন ServiceMonitor সহ prod-এর সব manifest server-side dry run-এ গৃহীত;
+  - দুই release-এ catalog-api আর order-worker-এর ServiceMonitor;
+  - আগের সব check আবার pass।
+- ⏳ Lab-এ: আসল EC2 node-এ node-exporter, ALB দিয়ে Grafana।
+
 ## 7. Q7: CI/CD আর GitOps
 
 **Repo-র ব্যবস্থা (user-এর সিদ্ধান্ত, 14 Nov):** কাজের সুবিধার জন্য `shoplite-app` আর `shoplite-gitops` এখন `devops-final`-এর দুটো folder। শেষে দুটো আলাদা GitHub repo-তে push হবে (`SaikatGeek/shoplite-app`, যেখানে এখন শুধু একটা `test.md`, আর `SaikatGeek/shoplite-gitops`, যা এখনো নেই)।
@@ -751,6 +829,7 @@ Lab-এ Q4 চালানোর পুরো পদ্ধতি, ইংরে�
 | `2e538cc` | 2026-11-15 | Q7 step 7.4: pipeline-এ "Run workflow" বোতাম (`workflow_dispatch`), রিহার্সালে trigger-এর check |
 | `7d4076a` | 2026-11-15 | Q7 step 7.5: `promote` workflow (dev-এর image Git দিয়ে prod-এ), রিহার্সালে দুই workflow |
 | `04305e8` | 2026-11-15 | Q5 step 5.4: lab-এ Q5 চালানোর পদ্ধতি (repo ভাগ, GitHub-এর setting, pipeline, bootstrap, promote, প্রমাণ) |
+| `cb6830f` | 2026-11-16 | Q6 step 6.1: metrics stack (kube-prometheus-stack ArgoCD দিয়ে), ServiceMonitor, exemplar, Grafana `/grafana`-এ |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -769,9 +848,10 @@ devops-final/
 │   ├── .github/workflows/main.yml        main pipeline: build → OIDC দিয়ে ECR → gitops-এ dev-এর tag (Q7a; repo ভাগের পরে চলে)
 │   ├── .github/workflows/promote.yml     "Run workflow" বোতাম: dev-এর image gitops-এ prod-এর values-এ (Q7, 7.5)
 │   ├── .env.example                      local-এর setting (WEB_PORT সহ); আসল .env Git-এ যায় না
+│   ├── monitoring/stack/                 Q6-এর chart-গুলোর values (এখন kube-prometheus-stack.yaml); ArgoCD shoplite-gitops-এর apps/ থেকে পড়ে
 │   ├── helm/shoplite/                    Q5-এর chart: Chart.yaml, values.yaml, values-dev.yaml, values-prod.yaml
 │   │   ├── files/init.sql                table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
-│   │   └── templates/                    web, catalog-api (+ PDB), order-worker (+ HPA), postgres, redis, ingress, networkpolicy, configmap, _helpers
+│   │   └── templates/                    web, catalog-api (+ PDB), order-worker (+ HPA, metrics-এর Service), postgres, redis, ingress, networkpolicy, servicemonitor, configmap, _helpers
 │   ├── helm/tests/run.sh                 chart-এর রিহার্সাল: local k3s-এ install, যাচাই, শেষে সব মোছে
 │   ├── docs/evidence/q4/commands.md      Q4 lab-এ চালানোর পদ্ধতি, প্রমাণ আর screenshot-এর তালিকা (screenshot-ও এখানে)
 │   ├── docs/evidence/q5/commands.md      Q5-এর পদ্ধতি: একবার repo ভাগ আর GitHub-এর setting; প্রতি session-এ pipeline, bootstrap, promote, prod-এর sync, প্রমাণ
@@ -829,7 +909,7 @@ devops-final/
 └── shoplite-gitops/                      ArgoCD-র desired state (শেষে আলাদা repo)
     ├── bootstrap/argocd-values.yaml      ArgoCD-র setting: /argocd, Git দেখা ৬০ সেকেন্ডে, Application-এর health
     ├── bootstrap/root-app.yaml           root Application ("app of apps"), bootstrap একবার বসায়
-    ├── apps/                             traefik (wave 0), shoplite-dev (auto-sync, self-heal), shoplite-prod (manual)
+    ├── apps/                             traefik আর kube-prometheus-stack (wave 0), shoplite-dev (auto-sync, self-heal), shoplite-prod (manual)
     └── envs/                             dev/values.yaml (CI লেখে image tag), prod/values.yaml (tag, Q8-এর flag)
 ```
 
@@ -898,7 +978,7 @@ Helm chart-এর রিহার্সাল (Docker আর internet লাগ�
 bash helm/tests/run.sh
 ```
 
-GitOps-এর রিহার্সাল (Docker আর internet লাগে; local k3s-এ `scripts/bootstrap-cluster.sh` চালায়, তারপর ArgoCD নিজে Traefik, dev আর prod বসায়; যাচাই করে, শেষে সব মোছে; প্রায় ১৫ মিনিট), `shoplite-app` থেকে:
+GitOps-এর রিহার্সাল (Docker আর internet লাগে; local k3s-এ `scripts/bootstrap-cluster.sh` চালায়, তারপর ArgoCD নিজে Traefik, metrics stack, dev আর prod বসায়; যাচাই করে, শেষে সব মোছে; অফিসের PC-তে প্রায় ৯ মিনিট, প্রথমবার ১২; বাসার PC-তে আরও বেশি), `shoplite-app` থেকে:
 
 ```bash
 bash scripts/tests/bootstrap-cluster.sh
@@ -1042,6 +1122,14 @@ bash ansible/tests/run.sh
   - prod-এর chaos flag ছোঁয় না; Q8-এর peer-এর commit থাকে।
 - **Repo ভাগের সময় shoplite-app-এর `test.md` বদলে যাবে** (user-এর সিদ্ধান্ত, 15 Nov)। Force push করা হবে `git subtree split`-এর history দিয়ে। GitHub-এর shoplite-app-এ থাকবে শুধু আমাদের code আর তার history।
 - **দুই repo public** (5.4)। ArgoCD-তে repo-র কোনো credential রাখা হয়নি, তাই সে GitHub থেকে credential ছাড়াই পড়ে। Private রাখতে চাইলে ArgoCD-কে একটা read-only deploy key দিতে হবে; সেটা এখন নেই।
+- **Monitoring-এর setting shoplite-app-এ, Application shoplite-gitops-এ** (6.1; প্রশ্ন বলে monitoring configuration shoplite-app-এ)।
+  - প্রতিটা chart-এর values থাকে `monitoring/stack/`-এ।
+  - ArgoCD-র Application দুই source থেকে পড়ে: chart আর shoplite-app (`ref: app`)।
+- **chart-এর default alert আর dashboard বন্ধ** (6.1)। প্রশ্ন চায় ৫টা alert আর একটা dashboard। Default-গুলো থাকলে Slack-এ অপ্রয়োজনীয় alert যেত।
+- **kube-prometheus-stack wave 0-তে** (6.1), কারণ ShopLite-এর ServiceMonitor-এর জন্য তার CRD আগে লাগে। ফলে ShopLite বসে metrics stack Healthy হওয়ার পরে।
+- **Grafana ALB-র `/grafana`-এ, admin-এর password cluster-এর Secret-এ** (6.1), ArgoCD-র মতো। Bootstrap Secret-টা একবার বানায়, Git-এর বাইরে। chart নিজে password বানালে ArgoCD প্রতিবার render করার সময় নতুন random password পেত, কারণ সে cluster না দেখেই render করে।
+- **order-worker-এর Service শুধু metrics-এর জন্য** (6.1)। প্রশ্ন চায় ServiceMonitor দিয়ে scrape, আর ServiceMonitor Service ধরে খোঁজে।
+- **Loki আর Tempo-র chart grafana-community থেকে** (6.1-এ বাছা, PLAN-এর কথামতো)। grafana-র নিজের `loki` chart এখন Enterprise Logs-এর, আর `tempo` chart deprecated।
 - **প্রতি session-এ promote, তারপর prod-এর sync** (5.4)। ECR প্রতি session-এ খালি থাকে, আর main-এর run শুধু সর্বশেষ commit-এর image push করে। তাই prod-এর পুরনো tag-এর image না-ও থাকতে পারে; promote prod-কে dev-এর tag-এ আনে।
 
 ## 12. জানা বিষয়
@@ -1104,13 +1192,25 @@ bash ansible/tests/run.sh
 - **অফিসের network থেকে GitHub-এর REST API token ছাড়া 403 দেয় (rate limit)।** Release-এর tag, commit SHA আর তারিখ git দিয়ে পাওয়া যায়: `git ls-remote --tags`, আর `git fetch --depth=1 <repo> refs/tags/<tag>`।
 - **actionlint 1.7.12 নতুন release-এর input চেনে না।** configure-aws-credentials v6.3.0-তে `aws-regoin` বানান ভুল ধরেনি। Pipeline-এর রিহার্সাল তাই pin করা commit-এর `action.yml` থেকে মেলায়।
 - **yq-তে `strenv()` string রাখে, `env()` রাখে না।** `strenv()` `0123456`/`1e23456`-কে quote করে লেখে; `env()` YAML-কে type ঠিক করতে দেয়, তখন এগুলো number হয়ে যায়।
+- **ঠিকভাবে বন্ধ না হলে PC-01-এ Docker Desktop শুরুতেই crash করে (16 Nov)।**
+  - Log (`%LOCALAPPDATA%\Docker\log\host\com.docker.backend.exe.log`) বলে `backend crashed ... remove ...\Docker\run\dockerInference: The file cannot be accessed by the system`। পরের বার একই কথা বলে `docker-secrets-engine\engine.sock` নিয়ে।
+  - এগুলো socket ফাইল। Docker, `Remove-Item`, `del` কেউই মুছতে পারে না।
+  - সমাধান: যে folder-এ এগুলো আছে (`%LOCALAPPDATA%\Docker\run`, `%LOCALAPPDATA%\docker-secrets-engine`), তার নাম বদলে `*.stale-<তারিখ>` রাখো, তারপর Docker আবার চালু করো। Docker নতুন folder বানায়। পুরনোগুলো PC restart-এর পরে মোছা যায়।
+- **Docker-এর ভেতরের k3s-এ node-exporter চালু হয় না, যদি না `/` shared mount হয়।** node-exporter `/` mount করে HostToContainer propagation দিয়ে। আসল node-এ systemd `/`-কে shared রাখে, container-এ সেটা private থাকে। রিহার্সাল তাই k3s চালুর পরে `mount --make-rshared /` চালায়।
+- **Grafana sub path-এ (`/grafana`) চললে তার নিজের metrics-ও `/grafana/metrics`-এ চলে যায়।** chart-এর ServiceMonitor `/metrics` পড়ে আর target down দেখায়, তাই path ঠিক করে দিতে হয়েছে।
+- **Prometheus-এর image distroless:** ভেতরে shell বা `wget` নেই। Query করতে হয় বাইরে থেকে; রিহার্সাল node-এর network থেকে ClusterIP-তে curl করে।
 
 ## 13. পরের কাজ
 
-Q5-এর code আর lab-এর পদ্ধতি শেষ (section 6); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর:
+Q5-এর code আর lab-এর পদ্ধতি শেষ (section 6); Q6-এর 6.1 শেষ (section 6b); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর, সবই নিজের PC-তে:
 
-1. Q6-এর dashboard, alert আর runbook, আর Q7-এর বাকি অংশ (lint, test, Trivy, PR pipeline, Terraform plan-এর comment), সবই নিজের PC-তে।
-2. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
+1. Q6-এর বাকি step (section 6b):
+   - 6.2: logs আর traces (Loki, Alloy, Tempo), আর Grafana-তে link;
+   - 6.3: Golden Signals dashboard;
+   - 6.4: alert, runbook আর Slack। এর জন্য user-এর Slack incoming webhook URL লাগবে, যা যাবে Secret-এ, Git-এ নয়;
+   - 6.5: lab-এর পদ্ধতি।
+2. Q7-এর বাকি অংশ: lint, test, Trivy, PR pipeline, Terraform plan-এর comment।
+3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
    - Q4: `docs/evidence/q4/commands.md`।
    - Q5: `docs/evidence/q5/commands.md`। তার আগে একবার দুই repo ভাগ আর GitHub-এর setting (ওই ফাইলের section 0)।
