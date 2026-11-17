@@ -1,0 +1,68 @@
+# ShopLite's five alerts (question 6.5), as a PrometheusRule in the namespace monitoring.
+# ArgoCD applies it with the dashboard (monitoring/kustomization.yaml); Prometheus loads every
+# PrometheusRule in the cluster (monitoring/stack/kube-prometheus-stack.yaml), and
+# Alertmanager sends what fires to Slack. Each alert has a severity label and a runbook_url to
+# its runbook in monitoring/runbooks/. Both environments are watched; the namespace label
+# says which one (shoplite is prod, shoplite-dev is dev). The error and latency alerts are
+# measured per route, so one failing route is not hidden in the average of the others.
+# Unit tests: monitoring/alert-rules/tests/ (promtool).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: shoplite-alerts
+spec:
+  groups:
+    - name: shoplite
+      rules:
+        - alert: HighErrorRate
+          expr: |
+            sum by (namespace, route) (rate(http_requests_total{status=~"5.."}[5m]))
+              / sum by (namespace, route) (rate(http_requests_total[5m]))
+              > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.route }} in {{ $labels.namespace }} answers more than 5% of requests with 5xx"
+            description: "{{ $value | humanizePercentage }} of the requests to {{ $labels.route }} in {{ $labels.namespace }} failed with a 5xx status over the last 5 minutes."
+            runbook_url: https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/HighErrorRate.md
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (namespace, route, le) (rate(http_request_duration_seconds_bucket[5m]))
+            ) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "p95 latency of {{ $labels.route }} in {{ $labels.namespace }} is above 1 s"
+            description: "The 95th percentile of {{ $labels.route }}'s latency in {{ $labels.namespace }} has been above 1 second for 5 minutes."
+            runbook_url: https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/HighLatency.md
+        - alert: QueueBacklog
+          expr: max by (namespace) (order_queue_depth) > 50
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "More than 50 orders wait in the queue in {{ $labels.namespace }}"
+            description: "{{ $value }} orders are waiting for order-worker in {{ $labels.namespace }}, and the queue has been above 50 for 10 minutes."
+            runbook_url: https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/QueueBacklog.md
+        - alert: PodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total[10m]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: "Container {{ $labels.container }} of pod {{ $labels.pod }} in {{ $labels.namespace }} is restarting"
+            description: "Container {{ $labels.container }} of pod {{ $labels.pod }} in {{ $labels.namespace }} restarted in the last 10 minutes."
+            runbook_url: https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/PodCrashLooping.md
+        - alert: NodeDiskFilling
+          expr: |
+            1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}
+              > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "The root disk of {{ $labels.instance }} is more than 85% full"
+            description: "{{ $value | humanizePercentage }} of the root filesystem on {{ $labels.instance }} is used."
+            runbook_url: https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/NodeDiskFilling.md

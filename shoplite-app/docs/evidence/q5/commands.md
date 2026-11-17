@@ -82,6 +82,13 @@ cat shoplite-gitops-deploy.pub
 Screenshot `01-github-settings.png`: the deploy key with write access on shoplite-gitops, and
 the secret `GITOPS_DEPLOY_KEY` on shoplite-app (GitHub never shows a secret's value).
 
+### 0.3 A Slack incoming webhook (for question 6's alerts)
+
+Alertmanager sends the alerts to a Slack channel through an incoming webhook. In Slack: Apps →
+create an app for your workspace → Incoming Webhooks → on → Add New Webhook to Workspace →
+pick the channel → copy the URL (`https://hooks.slack.com/services/...`). Keep it like a
+password: the bootstrap (section 3) asks for it and stores it only in the cluster.
+
 ## 1. Every session: the cluster and the GitHub variables
 
 1. Clone both repositories side by side (`scripts/bootstrap-cluster.sh` reads
@@ -151,20 +158,28 @@ Once per cluster, the script creates:
 - namespaces `shoplite` and `shoplite-dev`;
 - the database Secret in each, with a random password made in the cluster (never in Git);
 - namespace `monitoring` and Grafana's admin Secret, also with a random password (question 6);
+- Alertmanager's Secret `alertmanager-slack`, with the Slack webhook from section 0.3
+  (question 6);
 - ArgoCD (chart 10.11.6, ArgoCD v3.5.6);
 - the root Application.
 
 From then on ArgoCD builds everything from Git: Traefik and the monitoring stack first (sync
-wave 0: kube-prometheus-stack, Loki, Tempo, Alloy), then the ShopLite Applications (wave 1).
+wave 0: kube-prometheus-stack, Loki, Tempo, Alloy), then the ShopLite Applications and the
+dashboard and alerts (wave 1).
+
+Paste the webhook URL at the prompt; `read -s` keeps it off the screen and out of the shell's
+history:
 
 ```bash
+read -rsp 'Slack webhook URL: ' SLACK_WEBHOOK_URL; echo
+export SLACK_WEBHOOK_URL
 bash scripts/bootstrap-cluster.sh
 watch -n 5 kubectl -n argocd get applications
 ```
 
-Wait until `traefik`, `kube-prometheus-stack`, `loki`, `tempo`, `alloy` and `shoplite-dev`
-are `Synced` and `Healthy`: 5–10 minutes, and dev needs the tag from section 2. Ctrl+C ends
-`watch`.
+Wait until `traefik`, `kube-prometheus-stack`, `loki`, `tempo`, `alloy`, `shoplite-dev` and
+`monitoring-config` are `Synced` and `Healthy`: 5–10 minutes, and dev needs the tag from
+section 2. Ctrl+C ends `watch`.
 
 `shoplite-prod` waits for a manual sync. It shows `OutOfSync`, or, before the first promotion
 ever, a ComparisonError `image.tag is required`, because prod's values in Git are still

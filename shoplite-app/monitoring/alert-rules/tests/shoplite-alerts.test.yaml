@@ -1,0 +1,165 @@
+# promtool unit tests of monitoring/alert-rules/shoplite-alerts.yaml (run.sh extracts its
+# spec into shoplite-alerts.rules.yaml). Each alert must fire, with exactly these labels and
+# annotations, only once its condition has held for its time; a healthy series next to it
+# must stay quiet.
+rule_files:
+  - shoplite-alerts.rules.yaml
+evaluation_interval: 1m
+
+tests:
+  - name: HighErrorRate fires for the failing route after 5 minutes, not for the healthy one
+    interval: 1m
+    input_series:
+      # /orders: 10 of 100 requests a minute fail (10%); /products: none fail.
+      - series: 'http_requests_total{namespace="shoplite", route="/orders", status="500"}'
+        values: '0+10x30'
+      - series: 'http_requests_total{namespace="shoplite", route="/orders", status="201"}'
+        values: '0+90x30'
+      - series: 'http_requests_total{namespace="shoplite", route="/products", status="200"}'
+        values: '0+100x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HighErrorRate
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              namespace: shoplite
+              route: /orders
+            exp_annotations:
+              summary: "/orders in shoplite answers more than 5% of requests with 5xx"
+              description: "10% of the requests to /orders in shoplite failed with a 5xx status over the last 5 minutes."
+              runbook_url: https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/HighErrorRate.md
+
+  - name: HighErrorRate stays quiet at 4%
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{namespace="shoplite", route="/orders", status="500"}'
+        values: '0+4x30'
+      - series: 'http_requests_total{namespace="shoplite", route="/orders", status="201"}'
+        values: '0+96x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HighErrorRate
+        exp_alerts: []
+
+  - name: HighLatency fires for the slow route after 5 minutes, not for the fast one
+    interval: 1m
+    input_series:
+      # /products/{id}: 1 request in 10 takes between 1 s and 2.5 s, so p95 is above 1 s while
+      # the median is not; /products: every request under 0.5 s.
+      - series: 'http_request_duration_seconds_bucket{namespace="shoplite", route="/products/{id}", le="0.5"}'
+        values: '0+9x30'
+      - series: 'http_request_duration_seconds_bucket{namespace="shoplite", route="/products/{id}", le="1"}'
+        values: '0+9x30'
+      - series: 'http_request_duration_seconds_bucket{namespace="shoplite", route="/products/{id}", le="2.5"}'
+        values: '0+10x30'
+      - series: 'http_request_duration_seconds_bucket{namespace="shoplite", route="/products/{id}", le="+Inf"}'
+        values: '0+10x30'
+      - series: 'http_request_duration_seconds_bucket{namespace="shoplite", route="/products", le="0.5"}'
+        values: '0+10x30'
+      - series: 'http_request_duration_seconds_bucket{namespace="shoplite", route="/products", le="1"}'
+        values: '0+10x30'
+      - series: 'http_request_duration_seconds_bucket{namespace="shoplite", route="/products", le="2.5"}'
+        values: '0+10x30'
+      - series: 'http_request_duration_seconds_bucket{namespace="shoplite", route="/products", le="+Inf"}'
+        values: '0+10x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HighLatency
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: HighLatency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: shoplite
+              route: /products/{id}
+            exp_annotations:
+              summary: "p95 latency of /products/{id} in shoplite is above 1 s"
+              description: "The 95th percentile of /products/{id}'s latency in shoplite has been above 1 second for 5 minutes."
+              runbook_url: https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/HighLatency.md
+
+  - name: QueueBacklog fires after 10 minutes above 50, not for a short peak
+    interval: 1m
+    input_series:
+      # Both catalog-api replicas of prod report the same depth; dev has a 3-minute peak.
+      - series: 'order_queue_depth{namespace="shoplite", pod="catalog-api-a"}'
+        values: '60x30'
+      - series: 'order_queue_depth{namespace="shoplite", pod="catalog-api-b"}'
+        values: '60x30'
+      - series: 'order_queue_depth{namespace="shoplite-dev", pod="catalog-api-c"}'
+        values: '0 100 100 100 0x26'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: QueueBacklog
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: QueueBacklog
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: shoplite
+            exp_annotations:
+              summary: "More than 50 orders wait in the queue in shoplite"
+              description: "60 orders are waiting for order-worker in shoplite, and the queue has been above 50 for 10 minutes."
+              runbook_url: https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/QueueBacklog.md
+
+  - name: PodCrashLooping fires as soon as a container restarts, and clears 10 minutes later
+    interval: 1m
+    input_series:
+      # order-worker restarts once, at minute 6; web never restarts.
+      - series: 'kube_pod_container_status_restarts_total{namespace="shoplite-dev", pod="order-worker-x", container="order-worker"}'
+        values: '0x5 1x20'
+      - series: 'kube_pod_container_status_restarts_total{namespace="shoplite", pod="web-y", container="web"}'
+        values: '0x25'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PodCrashLooping
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: PodCrashLooping
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              namespace: shoplite-dev
+              pod: order-worker-x
+              container: order-worker
+            exp_annotations:
+              summary: "Container order-worker of pod order-worker-x in shoplite-dev is restarting"
+              description: "Container order-worker of pod order-worker-x in shoplite-dev restarted in the last 10 minutes."
+              runbook_url: https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/PodCrashLooping.md
+      - eval_time: 20m
+        alertname: PodCrashLooping
+        exp_alerts: []
+
+  - name: NodeDiskFilling fires after 5 minutes above 85%, for the full node only
+    interval: 1m
+    input_series:
+      # One node's root disk is 90% full, the other's 50%.
+      - series: 'node_filesystem_size_bytes{instance="10.0.10.5:9100", mountpoint="/", fstype="ext4"}'
+        values: '100x20'
+      - series: 'node_filesystem_avail_bytes{instance="10.0.10.5:9100", mountpoint="/", fstype="ext4"}'
+        values: '10x20'
+      - series: 'node_filesystem_size_bytes{instance="10.0.11.6:9100", mountpoint="/", fstype="ext4"}'
+        values: '100x20'
+      - series: 'node_filesystem_avail_bytes{instance="10.0.11.6:9100", mountpoint="/", fstype="ext4"}'
+        values: '50x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: NodeDiskFilling
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: NodeDiskFilling
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: 10.0.10.5:9100
+              mountpoint: /
+              fstype: ext4
+            exp_annotations:
+              summary: "The root disk of 10.0.10.5:9100 is more than 85% full"
+              description: "90% of the root filesystem on 10.0.10.5:9100 is used."
+              runbook_url: https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/NodeDiskFilling.md

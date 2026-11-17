@@ -6,7 +6,9 @@
 #   2. the database Secret shoplite-db in each, with a random password, unless it exists
 #      already: PostgreSQL fixes the password on its first start, so a rerun keeps it
 #   3. namespace monitoring and Grafana's admin Secret grafana-admin, with a random password,
-#      unless it exists already (Grafana too keeps the password of its first start)
+#      unless it exists already (Grafana too keeps the password of its first start); and
+#      Alertmanager's Secret alertmanager-slack with the Slack incoming webhook's URL, from
+#      SLACK_WEBHOOK_URL (needed on the first run; a rerun without it keeps the Secret)
 #   4. ArgoCD from its pinned Helm chart, with shoplite-gitops/bootstrap/argocd-values.yaml
 #   5. shoplite-gitops/bootstrap/root-app.yaml; from then on ArgoCD builds the rest from Git
 # Nothing secret goes to Git or to the screen. Safe to run again.
@@ -31,6 +33,15 @@ for file in bootstrap/argocd-values.yaml bootstrap/root-app.yaml; do
   [ -f "$GITOPS_DIR/$file" ] || fail "$GITOPS_DIR/$file not found (set SHOPLITE_GITOPS_DIR)"
 done
 kubectl get nodes >/dev/null || fail "kubectl cannot reach the cluster (kubeconfig, SSM tunnel?)"
+# The alerts' Slack webhook (question 6), checked before anything changes.
+if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
+  case $SLACK_WEBHOOK_URL in
+    https://* | http://*) ;;
+    *) fail "SLACK_WEBHOOK_URL is not a URL" ;;
+  esac
+elif ! kubectl -n monitoring get secret alertmanager-slack >/dev/null 2>&1; then
+  fail "set SLACK_WEBHOOK_URL to the Slack incoming webhook for the alerts (it goes into the cluster's Secret alertmanager-slack, never into Git)"
+fi
 
 step "namespaces and database Secrets"
 for ns in $NAMESPACES; do
@@ -53,6 +64,13 @@ else
   kubectl -n monitoring create secret generic grafana-admin --from-literal=admin-user=admin \
     --from-literal=admin-password="$(head -c 24 /dev/urandom | base64 | tr -d '+/=')" >/dev/null
   echo "monitoring: Secret grafana-admin created (random password)"
+fi
+if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
+  kubectl -n monitoring create secret generic alertmanager-slack --from-literal=webhook-url="$SLACK_WEBHOOK_URL" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  echo "monitoring: Secret alertmanager-slack set from SLACK_WEBHOOK_URL"
+else
+  echo "monitoring: Secret alertmanager-slack exists, kept"
 fi
 
 step "ArgoCD (chart $ARGOCD_CHART_VERSION)"

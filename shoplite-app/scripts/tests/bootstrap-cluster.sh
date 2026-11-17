@@ -24,9 +24,11 @@
 #      data source's trace_id link) -> its trace in Tempo, API -> queue -> worker ->
 #      database -> (the Tempo data source's logs link) -> the worker's lines, and a
 #      latency exemplar -> its trace; Grafana has the Golden Signals dashboard from Git,
-#      where every query works and the question's panels show prod's data; a kubectl
-#      change in dev is reverted by self-heal (question 7d) while the same change in prod
-#      stays and shows as OutOfSync
+#      where every query works and the question's panels show prod's data; Prometheus has
+#      the five alerts, Alertmanager reads the Slack webhook from its Secret, and a firing
+#      alert reaches a stand-in for Slack's webhook (question 6.5); a kubectl change in dev
+#      is reverted by self-heal (question 7d) while the same change in prod stays and shows
+#      as OutOfSync
 #   5. remove everything again
 # Needs Docker and internet (the charts and images of Traefik, ArgoCD and the monitoring
 # stack). About 15 minutes. Run it from shoplite-app/, with shoplite-gitops next to it
@@ -43,17 +45,21 @@ HELM_IMAGE=alpine/helm:4.3.1
 YQ_IMAGE=mikefarah/yq:4.54.1
 NODE=shoplite-gitops-test
 GIT=shoplite-gitops-test-git
+SLACK=shoplite-gitops-test-slack
 NET=shoplite-gitops-test
-# k3s's CoreDNS cannot resolve Docker's container names, so the Git server gets a fixed IP.
+# k3s's CoreDNS cannot resolve Docker's container names, so the Git server and the stand-in
+# for Slack's incoming webhook get fixed IPs.
 SUBNET=172.30.0.0/24
 GIT_IP=172.30.0.10
+SLACK_IP=172.30.0.11
+SLACK_URL=http://$SLACK_IP:8080/services/T0REHEARSAL/B0REHEARSAL/rehearsal
 APP_URL=https://github.com/SaikatGeek/shoplite-app.git
 GITOPS_URL=https://github.com/SaikatGeek/shoplite-gitops.git
 WORK=$(mktemp -d)
 WORK_HOST=$(cd "$WORK" && (pwd -W 2>/dev/null || pwd))
 
 remove_containers() {
-  docker rm -f -v "$NODE" "$GIT" >/dev/null 2>&1 || true
+  docker rm -f -v "$NODE" "$GIT" "$SLACK" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
 trap 'remove_containers; rm -rf "$WORK"' EXIT
@@ -70,7 +76,7 @@ node_curl() { docker run --rm --network "container:$NODE" --entrypoint curl shop
 lab_machine() {
   docker run --rm -i --network "container:$NODE" -v "$HOST_DIR:/work/shoplite-app:ro" \
     -v "$WORK_HOST/gitops:/work/shoplite-gitops:ro" -v "$WORK_HOST/kube:/kube:ro" \
-    -e KUBECONFIG=/kube/config -w /work/shoplite-app shoplite/gitops-test-tools "$@"
+    -e KUBECONFIG=/kube/config -e SLACK_WEBHOOK_URL="$SLACK_URL" -w /work/shoplite-app shoplite/gitops-test-tools "$@"
 }
 # app_state <name>: "<sync status> <health status>" of an ArgoCD Application.
 app_state() {
@@ -116,13 +122,29 @@ for s in web catalog-api order-worker; do
 done
 docker build -q -t shoplite/gitops-test-git -f scripts/tests/gitserver.Dockerfile scripts/tests >/dev/null
 docker build -q -t shoplite/gitops-test-tools -f scripts/tests/tools.Dockerfile scripts/tests >/dev/null
-for image in postgres:16-alpine redis:7.4-alpine "$HELM_IMAGE" "$K3S_IMAGE" "$YQ_IMAGE"; do
+for image in postgres:16-alpine redis:7.4-alpine python:3.12-alpine "$HELM_IMAGE" "$K3S_IMAGE" "$YQ_IMAGE"; do
   docker image inspect "$image" >/dev/null 2>&1 || docker pull -q "$image" >/dev/null
 done
 
 step "publishing shoplite-app and shoplite-gitops as two repositories on the test Git server"
 docker network create --subnet "$SUBNET" "$NET" >/dev/null
 docker run -d --name "$GIT" --network "$NET" --ip "$GIT_IP" shoplite/gitops-test-git >/dev/null
+# A stand-in for Slack's incoming webhook: it answers 200 and prints every message posted to it.
+docker run -d --name "$SLACK" --network "$NET" --ip "$SLACK_IP" python:3.12-alpine python -u -c '
+import http.server
+
+class Webhook(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        print(self.path, body.decode(), flush=True)
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+
+    def log_message(self, *args):
+        pass
+
+http.server.HTTPServer(("", 8080), Webhook).serve_forever()' >/dev/null
 # publish <folder> <repository name>: the folder's files as Git sees them (tracked and new,
 # not ignored), committed on main in a bare repository inside the Git server's container.
 # Not on the host's disk: there a cleaner of empty temp folders once deleted refs/ and broke
@@ -214,12 +236,13 @@ docker save --platform linux/amd64 $images | docker exec -i "$NODE" ctr --namesp
 step "running scripts/bootstrap-cluster.sh, as on the lab machine"
 lab_machine bash scripts/bootstrap-cluster.sh || fail "scripts/bootstrap-cluster.sh failed"
 
-step "running it again: it keeps the database Secrets and Grafana's admin Secret"
+step "running it again: it keeps the database Secrets, Grafana's admin Secret and the Slack webhook's"
 secret_versions() {
   for ns in shoplite shoplite-dev; do
     kubectl -n "$ns" get secret shoplite-db -o jsonpath='{.metadata.resourceVersion} '
   done
-  kubectl -n monitoring get secret grafana-admin -o jsonpath='{.metadata.resourceVersion}'
+  kubectl -n monitoring get secret grafana-admin -o jsonpath='{.metadata.resourceVersion} '
+  kubectl -n monitoring get secret alertmanager-slack -o jsonpath='{.metadata.resourceVersion}'
 }
 before=$(secret_versions)
 lab_machine bash scripts/bootstrap-cluster.sh >"$WORK/second-run.log" ||
@@ -227,8 +250,11 @@ lab_machine bash scripts/bootstrap-cluster.sh >"$WORK/second-run.log" ||
 grep 'Secret ' "$WORK/second-run.log" || true
 [ "$(grep -c -E 'Secret (shoplite-db|grafana-admin) exists, kept' "$WORK/second-run.log")" = 3 ] ||
   fail "the second run did not keep all three Secrets"
+grep -q 'Secret alertmanager-slack set from SLACK_WEBHOOK_URL' "$WORK/second-run.log" ||
+  fail "the second run did not set the Slack webhook's Secret"
 [ "$(secret_versions)" = "$before" ] || fail "a Secret changed on the second run"
-echo "ok    second run: the three Secrets unchanged (PostgreSQL and Grafana keep the password of their first start)"
+grep -qF "$SLACK_URL" "$WORK/second-run.log" && fail "the bootstrap printed the Slack webhook's URL"
+echo "ok    second run: the four Secrets unchanged (PostgreSQL and Grafana keep the password of their first start; the same webhook again changes nothing), and the webhook's URL never printed"
 
 step "ArgoCD builds the rest from Git on its own: root -> traefik, the monitoring stack (wave 0) -> shoplite-dev (wave 1)"
 wait_for_app traefik "Synced Healthy" 600 || fail "traefik did not become Synced and Healthy"
@@ -345,9 +371,14 @@ code=$(node_curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:30080/grafan
 grafana_password=$(kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d)
 node_curl -sf -u "admin:$grafana_password" http://127.0.0.1:30080/grafana/api/user | grep -c '"login":"admin"' >/dev/null ||
   fail "admin could not log in to Grafana with the cluster's password"
-node_curl -sf -u "admin:$grafana_password" --data-urlencode 'query=count(up{job="catalog-api"})' \
-  http://127.0.0.1:30080/grafana/api/datasources/proxy/uid/prometheus/api/v1/query | grep -c '"status":"success"' >/dev/null ||
+answer=$(node_curl -s -w '\nHTTP %{http_code}' -u "admin:$grafana_password" --data-urlencode 'query=count(up{job="catalog-api"})' \
+  http://127.0.0.1:30080/grafana/api/datasources/proxy/uid/prometheus/api/v1/query || true)
+if ! grep -q '"status":"success"' <<<"$answer"; then
+  tail -c 600 <<<"$answer"
+  echo
+  kubectl -n monitoring get pods -o wide
   fail "Grafana's Prometheus data source (uid prometheus) does not answer"
+fi
 node_curl -sf http://127.0.0.1:30080/grafana/login | grep -c '<base href="/grafana/"' >/dev/null ||
   fail "Grafana's page is not served under /grafana/"
 echo "ok    Grafana's page under /grafana/; its API answers 401 without a login; admin logs in with the cluster's password; it queries Prometheus (data source uid prometheus)"
@@ -546,6 +577,44 @@ done
 echo "ok    Recent error logs, for dev: the worker's 'invalid queue message dropped' line"
 echo "ok    Restarted containers, for dev: order-worker, $restarted"
 
+step "alerts (question 6.5): Prometheus has the five rules, and a firing alert reaches Slack (the stand-in webhook)"
+# name, severity and runbook of every alerting rule in the group shoplite, as Prometheus
+# loaded it from the PrometheusRule.
+rules=""
+for _ in $(seq 24); do
+  rules=$(node_curl -sf "http://$prom_ip:9090/api/v1/rules?type=alert" |
+    yq -p json '.data.groups[] | select(.name == "shoplite") | .rules[] | .name + " " + .labels.severity + " " + .annotations.runbook_url' || true)
+  [ "$(grep -c . <<<"$rules")" = 5 ] && break
+  sleep 5
+done
+[ "$(cut -d' ' -f1,2 <<<"$rules")" = "HighErrorRate critical
+HighLatency warning
+QueueBacklog warning
+PodCrashLooping critical
+NodeDiskFilling warning" ] || { echo "$rules"; fail "Prometheus does not have the five alerts with their severities"; }
+while read -r alert _ url; do
+  [ "$url" = "https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/$alert.md" ] ||
+    fail "$alert's runbook_url in Prometheus is $url"
+done <<<"$rules"
+echo "ok    Prometheus evaluates the five alerts, each with its severity and runbook_url:"
+while read -r line; do echo "        $line"; done <<<"$rules"
+# Alertmanager's configuration from Git names only the file of the webhook's Secret.
+amconfig=$(kubectl -n monitoring get secret alertmanager-kube-prometheus-stack-alertmanager -o jsonpath='{.data.alertmanager\.yaml}' | base64 -d)
+grep -q 'api_url_file: /etc/alertmanager/secrets/alertmanager-slack/webhook-url' <<<"$amconfig" ||
+  { echo "$amconfig"; fail "Alertmanager's Slack receiver does not read the webhook from the Secret's file"; }
+if grep -qF "$SLACK_URL" <<<"$amconfig"; then fail "the webhook's URL is in Alertmanager's configuration"; fi
+# The dashboard's step restarted dev's order-worker, so PodCrashLooping fires; Alertmanager
+# posts it to the webhook, with its runbook.
+posted=""
+for _ in $(seq 36); do
+  posted=$(docker logs "$SLACK" 2>&1 | grep 'PodCrashLooping' | grep 'shoplite-dev' | head -n 1 || true)
+  [ -n "$posted" ] && break
+  sleep 5
+done
+[ -n "$posted" ] || { docker logs "$SLACK" 2>&1 | tail -n 5; fail "no PodCrashLooping message for shoplite-dev reached the Slack webhook"; }
+grep -q 'monitoring/runbooks/PodCrashLooping.md' <<<"$posted" || fail "the Slack message has no runbook link: $posted"
+echo "ok    the Slack webhook got: $(cut -c1-220 <<<"$posted")"
+
 step "self-heal (question 7d): a kubectl change in dev is put back; the same change in prod stays"
 dev_replicas=$(kubectl -n shoplite-dev get deployment web -o jsonpath='{.spec.replicas}')
 prod_replicas=$(kubectl -n shoplite get deployment web -o jsonpath='{.spec.replicas}')
@@ -579,4 +648,10 @@ echo "ok    prod: the change stays ($((prod_replicas + 2)) replicas) and shows a
 echo
 kubectl -n argocd get applications
 echo
-echo "PASS: bootstrap, app of apps with sync waves, automated dev, manual prod, the metrics stack (targets, metrics, exemplars, Grafana at /grafana), logs and traces linked in Grafana, the Golden Signals dashboard, self-heal and /argocd work"
+# Every container that restarted during the run, with its restarts and last reason (the
+# rehearsal itself stopped dev's order-worker once).
+echo "containers that restarted during the run (container=restarts/last reason):"
+kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}:{range .status.containerStatuses[*]} {.name}={.restartCount}/{.lastState.terminated.reason}{end}{"\n"}{end}' |
+  grep -E '=[1-9]' | sed 's/^/  /' || true
+echo
+echo "PASS: bootstrap, app of apps with sync waves, automated dev, manual prod, the metrics stack (targets, metrics, exemplars, Grafana at /grafana), logs and traces linked in Grafana, the Golden Signals dashboard, the alerts to Slack, self-heal and /argocd work"
