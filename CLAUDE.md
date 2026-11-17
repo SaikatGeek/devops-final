@@ -37,7 +37,7 @@ Course capstone (Poridhi "Mastering DevOps and AWS", Batch 03), deadline **17 No
   - shoplite-gitops is changed only in its own clone or GitHub's web editor (CI commits to it); its folder here is no longer the source.
   - Code uses the final URLs (`https://github.com/SaikatGeek/shoplite-app.git`, `https://github.com/SaikatGeek/shoplite-gitops.git`). Workflows go in `shoplite-app/.github/workflows/` (the split repo's root).
   - Before publishing CI changes, run `scripts/ci.sh`'s stages on Linux (WSL Ubuntu, `wsl.exe -d Ubuntu -- bash <file>`): the first real run failed on a permission that Docker Desktop on Windows ignores.
-- Root keeps course docs: `project.md`, `PLAN.md`, `PROGRESS.md`, `architecture-diagram.*`, `OFFICE-PC-GUIDE.md`.
+- Root keeps course docs: `project.md`, `PLAN.md`, `PROGRESS.md`, `OFFICE-PC-GUIDE.md`. The architecture diagram moved to `shoplite-app/docs/` on 17 Nov (`architecture-diagram.md`, English, three mermaid pictures, and their three PNGs); the RCA is `shoplite-app/docs/RCA.md`.
 - Target structure of both repos: `project.md` section 2.1 and `PLAN.md` section 3.
 - Lab procedures, in English for the grader: `shoplite-app/docs/evidence/qN/commands.md` (the steps, what each should show, the screenshot names; the screenshots go in the same folder). Q3's is `linux/evidence/commands.md` because the question names that folder. Q4's (step 4.8) is checked without AWS: its tools block ran on a fresh `ubuntu:24.04`, every `--query` was evaluated with jmespath 1.0.1 on API-shaped samples, and every `aws` command was run without credentials (stopping only at `Unable to locate credentials` means the arguments are valid). Do the same for later ones.
 
@@ -46,6 +46,12 @@ Q5's procedure (step 5.4) was checked the same way, and two more:
 - Every bash block of its sections 5 and 6, taken verbatim from the markdown, ran from a stand-in lab machine (bash, kubectl, helm, curl). The cluster came from a copy of `scripts/tests/bootstrap-cluster.sh` with the cleanup trap and the self-heal step cut, where ArgoCD had installed Traefik, dev and prod. Remove its containers and network by hand afterwards.
 
 Check later procedures with kubectl blocks the same way. No one-command lab script (the question does not ask for one; the user may ask later).
+
+Q8's procedure (step 8.1, `a641940`) was checked like this:
+- Its bash blocks were taken verbatim from the markdown.
+- The timeline's `mark` blocks ran on a fresh `ubuntu:24.04` without tzdata. The POSIX TZ string `<+06>-6` needs none.
+- The git blocks (sections 6 and 9) ran against a bare stand-in of shoplite-gitops, with a CI dev commit after the peer's.
+- The seven PromQL queries of section 8 ran as promtool `promql_expr_test` on sample series.
 
 ## Code conventions already in place (keep them)
 
@@ -395,7 +401,16 @@ At the split, `SaikatGeek/shoplite-app`'s placeholder `test.md` is replaced: the
 
 Its kubectl block (section 4) ran on a small k3s with ArgoCD's Application CRD and both Applications; `kubectl edit` ran with a stand-in editor.
 
+**Q8 (PROGRESS section 7b):** 8.1 is done (`a641940`): the lab procedure `docs/evidence/q8/commands.md`, the RCA's frame `docs/RCA.md` (TODO placeholders), and the architecture diagram in `docs/`.
+- In the procedure, k6 runs continuously (`DURATION=60m`) from a healthy start to the recovery.
+- The peer's access is removed right after the peer's commit and prod's sync.
+- The revert is pushed from the user's own PC: the lab machine cannot push.
+- The peer's four values sit in the procedure's last section (no separate chaos menu).
+- The RCA's numbers are taken before the destroy.
+- The RCA is committed before the diff is read; the comparison comes in a second commit.
+
 **Next:**
-1. Q8's procedure `docs/evidence/q8/commands.md` and the RCA's frame `docs/RCA.md` (the question's `docs/RCA`), on the user's own PC.
-2. The repository split, from the user's own PC.
-3. The lab sessions Q3 → Q8.
+1. The user's GitHub settings (Q5's procedure 0.2 and 0.3, Q7's section 0) and a peer for Q8.
+2. One lab session, the order agreed on 17 Nov: Q4 → Q5 → Q6 → Q7 → Q8, then Q3. It is screen-recorded whole; the videos are cut later.
+3. After the lab: fill `docs/RCA.md` from the timeline, the screenshots and section 8's numbers, then compare with the peer's commit, then publish.
+4. shoplite-app's README: how to run it, an evidence index, and the deviation log (PLAN Phase 10). It does not exist yet.

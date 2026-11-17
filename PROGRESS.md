@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-16, Q6 step 6.1 শেষ (metrics stack: kube-prometheus-stack, ServiceMonitor, exemplar, Grafana)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-17, Q8-এর lab-এর পদ্ধতি, RCA-র কাঠামো, আর architecture diagram `shoplite-app/docs`-এ (`a641940`)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -21,7 +21,7 @@
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। বাকি শুধু lab-এ চালানো |
 | Q6 | Observability | 25 | 🟡 Code আর lab-এর পদ্ধতি শেষ (6.1–6.5): metrics (kube-prometheus-stack, ServiceMonitor, exemplar), Loki, Alloy (JSON parse), Tempo (OTLP), Grafana-য় log ↔ trace আর exemplar → trace, "ShopLite — Golden Signals" dashboard, ৫টা alert আর runbook, Alertmanager → Slack, k6-এর load test, `docs/evidence/q6/commands.md`; সব ArgoCD দিয়ে, local k3s-এ রিহার্সাল pass। বাকি শুধু lab-এ চালানো |
 | Q7 | CI/CD, GitOps | 10 | 🟡 Code আর lab-এর পদ্ধতি শেষ (7.1–7.8): shoplite-gitops (root app, dev auto-sync আর self-heal, prod manual), cluster-এর bootstrap আর ArgoCD, GitHub OIDC-এর দুই role (CI-র push, PR-এর read-only plan), main pipeline (lint, test, build, Trivy-র gate, ECR, gitops-এ tag), PR pipeline আর Terraform plan-এর comment, `promote`, `docs/evidence/q7/commands.md`; সব local-এ রিহার্সাল করা। দুই repo GitHub-এ ভাগ হয়েছে (17 Nov, `publish-repos.sh`)। বাকি lab-এ চালানো |
-| Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
+| Q8 | Chaos, RCA | 10 | 🟡 chaos flag-এর code (Step 7); lab-এর পদ্ধতি `docs/evidence/q8/commands.md` আর RCA-র কাঠামো `docs/RCA.md` (`a641940`, section 7b)। বাকি lab-এ exercise, তারপর RCA লেখা |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
 
 **মোট কয়টা step:** Q1 ভাঙা হয়েছে ৯টা step-এ, Q2 প্রশ্নের চারটা অংশে (নিচে)। পুরো project-এ ৮টা প্রশ্ন আর ৪টা bonus। Q3 থেকে বাকিগুলোর code নিজের PC-তে লেখা হবে, চালানো আর প্রমাণ নেওয়া হবে AWS lab-এ।
@@ -1106,6 +1106,32 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
   - WSL Ubuntu-তে একই ভুল ঘটানো গেছে। `chmod -R a+rX` দিয়ে ঠিক করার পরে WSL-এ `ci.sh`-এর চারটা ধাপই pass করেছে (section 12)।
 - shoplite-gitops এখন থেকে বদলাবে তার নিজের clone-এ বা GitHub-এর web editor-এ, কারণ CI সেখানে commit করে। devops-final-এর `shoplite-gitops/` আর source নয়।
 
+## 7b. Q8: Chaos Day আর RCA
+
+| Step | কী | অবস্থা | Commit |
+|---|---|---|---|
+| 8.1 | Lab-এর পদ্ধতি, RCA-র কাঠামো, architecture diagram `docs/`-এ | ✅ | `a641940` |
+| 8.2 | Lab-এ exercise (screenshot, timeline, ভিডিও V6) | ⬜ | |
+| 8.3 | RCA লেখা, তারপর peer-এর commit-এর সাথে মেলানো (দুইটা আলাদা commit) | ⬜ | |
+
+**8.1-এ কী হলো (17 Nov):**
+
+- **`docs/evidence/q8/commands.md`** (English), প্রশ্নের ৮.১-এর ধাপ ধরে:
+  - নিয়ম: RCA লেখা পর্যন্ত Git-এর diff, ArgoCD-র APP DIFF, pod-এর env বা ConfigMap দেখা যাবে না; তদন্ত শুধু Grafana দিয়ে (Prometheus, Loki, Tempo), সাথে Slack-এর alert আর runbook। kubectl নয়।
+  - Timeline: `mark` function প্রতিটা ধাপের সময় `~/q8-timeline.txt`-এ লেখে, UTC+6-এ (Grafana-র dashboard browser-এর সময় দেখায়, Slack আর PC-র ঘড়িও তাই)।
+  - ধাপ: peer-কে collaborator করা → k6 একটানা (২২ RPS, `DURATION=60m`), ৫ মিনিট পরে সুস্থ dashboard → peer-এর commit → diff না দেখে ArgoCD-তে prod sync → peer-এর access সরানো → তদন্ত (alert, runbook, dashboard, log, trace, root cause-এর এক লাইন) → নিজের PC থেকে `git revert` আর push → আবার sync → dashboard-এ recovery আর Slack-এ RESOLVED → cluster থাকতে থাকতে RCA-র ৭টা সংখ্যা (PromQL) → RCA লেখা, তারপর diff।
+  - শেষে "The peer's part": invitation নেওয়া, `envs/prod/values.yaml`-এ ঠিক একটা লাইন বদলানো (`latencyMs: 1500`, `errorRate: 0.2`, `memoryLeak: true` বা `slowDb: true`), নিরীহ message, শুধু "done" বলা।
+- **`docs/RCA.md`:** কাঠামো, TODO সহ: summary, timeline (প্রতিটা ঘটনার পাশে screenshot), detection, investigation (dashboard → logs → trace), root cause, recovery time (detect, identify, recover, মোট), impact, একটা preventive measure, আর শেষে "RCA লেখার পরে change-এর সাথে মেলানো"।
+- **Architecture diagram** root থেকে `shoplite-app/docs/`-এ (`git mv`, প্রশ্নের ২.১-এর `docs/architecture-diagram`): `architecture-diagram.md` (লেখা এখন English, ছবি একই) আর তিনটা PNG। PNG তিনটা এখনকার stack-এর সাথে মিলিয়ে দেখা হয়েছে।
+
+**যাচাই:**
+
+- ✅ পদ্ধতির ১৮টা bash block markdown থেকে হুবহু তুলে চালানো:
+  - timeline-এর ১৩টা `mark` আর `cat` নতুন `ubuntu:24.04`-এ (tzdata ছাড়া): প্রতিটা লাইন `+06`, ঘণ্টা `date -u` + ৬;
+  - section 6 আর 9-এর git block shoplite-gitops-এর একটা bare stand-in-এর বিরুদ্ধে, peer-এর commit-এর পরে CI-র একটা dev commit সহ: revert শুধু peer-এর commit-টা উল্টায়, prod-এর values আগের মতো, dev-এরটা অক্ষত, revert-এর output-এ diff নেই, section 9-এর `git show` peer-এর বদলটা দেখায়।
+- ✅ Section 8-এর ৭টা PromQL promtool-এর `promql_expr_test` দিয়ে নমুনা series-এ (Prometheus v3.15.1): প্রতিটা প্রত্যাশিত সংখ্যা দেয় (5xx ৩২৪০, route-প্রতি request, order ১২৯৬০, p95 ২.০৫ s আর ০.৪৭৫ s, queue ৫০, restart ৩), dev-এর series বাদ পড়ে।
+- ✅ shoplite-app আর shoplite-gitops-এর কোনো ফাইলে Claude বা Anthropic-এর নাম নেই; commit-এ trailer নেই। `bash publish-repos.sh push`: `6ba1eed..88ae898`, fast-forward, ৪১টা commit।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -1151,6 +1177,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `2ec91d8`, `7d312a8`, `82e12f0` | 2026-11-17 | `publish-repos.sh` (split, message থেকে Claude-এর নাম মোছা, শুধু shoplite-app push) আর root-এর `.gitattributes`; দুই repo GitHub-এ publish |
 | `41db62e` | 2026-11-17 | fix: alert test-এর ফোল্ডার promtool পড়তে পারে (GitHub-এর প্রথম run-এর ভুল, Linux-এ permission) |
 | `c12bdd0` | 2026-11-17 | Q5 আর Q7-এর পদ্ধতিতে `publish-repos.sh` |
+| `a641940` | 2026-11-17 | Q8 step 8.1: lab-এর পদ্ধতি (`docs/evidence/q8/commands.md`), RCA-র কাঠামো (`docs/RCA.md`), architecture diagram `docs/`-এ |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -1182,6 +1209,10 @@ devops-final/
 │   ├── docs/evidence/q4/commands.md      Q4 lab-এ চালানোর পদ্ধতি, প্রমাণ আর screenshot-এর তালিকা (screenshot-ও এখানে)
 │   ├── docs/evidence/q5/commands.md      Q5-এর পদ্ধতি: একবার repo ভাগ আর GitHub-এর setting; প্রতি session-এ pipeline, bootstrap, promote, prod-এর sync, প্রমাণ
 │   ├── docs/evidence/q6/commands.md      Q6-এর পদ্ধতি: k6, Grafana, ৬a–৬e-র প্রমাণ, Slack-এ alert, ভিডিও V3 (alert থেকে ব্যর্থ request)
+│   ├── docs/evidence/q7/commands.md      Q7-এর পদ্ধতি: pipeline, Trivy-র লাল run, PR আর plan-এর comment, ArgoCD, self-heal (V5), checkpoint (V4)
+│   ├── docs/evidence/q8/commands.md      Q8-এর পদ্ধতি: peer-এর access, load-এ সুস্থ শুরু, peer-এর commit, শুধু Grafana দিয়ে তদন্ত, Git revert, recovery, RCA-র সংখ্যা, peer-এর অংশ
+│   ├── docs/RCA.md                       RCA-র কাঠামো (TODO); Q8-এর exercise-এর পরে লেখা হবে
+│   ├── docs/architecture-diagram.md      তিনটা mermaid ছবি (infrastructure, delivery, observability), সাথে তিনটা PNG
 │   ├── linux/                            Q3
 │   │   ├── sshd_config                   root আর password login বন্ধ
 │   │   ├── systemd/                      shoplite-backup.service, .timer, .sh (রাতে pg_dump)
@@ -1492,6 +1523,12 @@ bash ansible/tests/run.sh
   - devops-final-এর পুরনো commit যেমন আছে থাকে (user রাজি)।
   - split-এর সময় `publish-repos.sh` পুরনো লাইনগুলো মুছে দেয়।
 - **Publish একটা script দিয়ে, হাতে নয়** (Claude-এর বাছাই)। message পরিষ্কারের কাজ প্রতিবার একইভাবে হলে তবেই hash এক থাকে আর push fast-forward হয়; হাতে করলে ভুলের সুযোগ।
+- **Q8-এর load একটানা, সুস্থ অবস্থা থেকে recovery পর্যন্ত** (8.1; Claude-এর বাছাই, PLAN-এর ৪০ মিনিটের বদলে ৬০ পর্যন্ত)। প্রশ্নের "১৫ মিনিট, ২০+ RPS" এর ভেতরেই পড়ে; একই load-এ আগে-পরে তুলনা করা যায়, আর recovery dashboard-এ দেখাতে traffic লাগে।
+- **Peer-এর access peer-এর commit আর prod-এর sync-এর পরপরই সরানো** (8.1; Claude-এর বাছাই)। প্রশ্নের "এক ঘণ্টা"-র ভেতরে থাকে, আর peer-এর কাজ তখনই শেষ।
+- **Revert user-এর নিজের PC থেকে** (8.1)। lab machine-এ push-এর credential নেই; GitHub-এর web editor-এ revert-এর বোতাম নেই, আর হাতে আগের মান লিখতে হলে diff দেখতে হয়। `git revert` prod-এর values ফাইলের সবশেষ commit উল্টায়, খুলে না দেখে।
+- **Peer-এর জন্য মানের তালিকা পদ্ধতির ভেতরেই** (8.1; PLAN-এর আলাদা `docs/chaos-menu.md`-এর বদলে, যাতে বাড়তি ফাইল না হয়)। প্রতিটা মান k6-এর load-এ নিজের alert বাজায়: `latencyMs: 1500` (`/products/{id}`-এর ৩০%, p95 প্রায় ২ s), `errorRate: 0.2` (৫%-এর ওপরে), `memoryLeak` (২৫৬Mi-তে কয়েক মিনিটে OOMKilled), `slowDb` (queue ১০ মিনিট ৫০-এর ওপরে)।
+- **RCA-র সংখ্যা cluster ভাঙার আগেই** (8.1)। destroy-এর পরে Prometheus-এর data থাকে না।
+- **RCA আগে commit, diff-এর সাথে মেলানো পরের commit-এ** (8.1)। Git-এর ইতিহাসই দেখায় RCA diff দেখার আগে লেখা।
 
 ## 12. জানা বিষয়
 
@@ -1574,14 +1611,16 @@ bash ansible/tests/run.sh
 
 ## 13. পরের কাজ
 
-Q1–Q7-এর code শেষ; Q3–Q7-এর lab-এর পদ্ধতিও শেষ (section 4, 5, 6, 6b, 7)। এরপর:
+Q1–Q7-এর code শেষ; Q3–Q8-এর lab-এর পদ্ধতিও শেষ (section 4, 5, 6, 6b, 7, 7b)। এরপর:
 
-1. Q8-এর পদ্ধতি (`docs/evidence/q8/commands.md`) আর RCA-র কাঠামো (`docs/RCA.md`), নিজের PC-তে। প্রশ্নের structure-এ `docs/RCA` আছে; RCA-র লেখা আসবে lab-এর exercise থেকে।
-2. GitHub-এর setting (দুই repo ভাগ 17 Nov হয়ে গেছে): Q5-এর পদ্ধতির section 0.2 (deploy key আর secret `GITOPS_DEPLOY_KEY`) আর 0.3 (Slack-এর incoming webhook), আর Q7-এর পদ্ধতির section 0। এরপর shoplite-app-এর বদল devops-final-এ commit করে `bash publish-repos.sh push`; shoplite-gitops বদলাবে তার নিজের clone-এ বা GitHub-এর web editor-এ।
-3. AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
-   - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
+1. GitHub-এর setting (দুই repo ভাগ 17 Nov হয়ে গেছে): Q5-এর পদ্ধতির section 0.2 (deploy key আর secret `GITOPS_DEPLOY_KEY`) আর 0.3 (Slack-এর incoming webhook), আর Q7-এর পদ্ধতির section 0। Q8-এর জন্য একজন peer আর সময়। এরপর shoplite-app-এর বদল devops-final-এ commit করে `bash publish-repos.sh push`; shoplite-gitops বদলাবে তার নিজের clone-এ বা GitHub-এর web editor-এ।
+2. AWS lab-এ চালানো আর প্রমাণ, একটা session-এ: Q4 → Q5 → Q6 → Q7 → Q8, তারপর Q3 (17 Nov-এ user-এর সাথে ঠিক হওয়া ক্রম)।
    - Q4: `docs/evidence/q4/commands.md`।
-   - Q5: `docs/evidence/q5/commands.md`। তার আগে একবার দুই repo ভাগ, GitHub-এর setting আর Slack-এর incoming webhook (ওই ফাইলের section 0)।
+   - Q5: `docs/evidence/q5/commands.md`।
    - Q6: `docs/evidence/q6/commands.md`, Q5-এর পদ্ধতির section 4-এর পরে, একই session-এ।
    - Q7: `docs/evidence/q7/commands.md`, একই session-এ।
-   - Q8: chaos-এর exercise আর RCA (ধাপ ১-এর পদ্ধতি)।
+   - Q8: `docs/evidence/q8/commands.md`, একই session-এ। Section 8-এর সংখ্যা destroy-এর আগে।
+   - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
+   - পুরো session screen record করা থাকবে; ভিডিও V1–V6 পরে কাটা হবে।
+3. Lab-এর পরে: `docs/RCA.md` ভরানো (timeline, screenshot আর section 8-এর সংখ্যা থেকে) আর commit; তারপর peer-এর commit-এর সাথে মেলানো, আলাদা commit-এ; `bash publish-repos.sh push`।
+4. shoplite-app-এর README: কীভাবে চালাবে, প্রমাণের index (কোন মার্কের প্রমাণ কোন ফাইলে), deviation log (PLAN-এর Phase 10; এখনো নেই)।

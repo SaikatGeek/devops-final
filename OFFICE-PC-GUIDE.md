@@ -89,7 +89,7 @@ git pull
 CLAUDE.md আর PROGRESS.md পড়ো। তারপর বলো এখন কোথায় আছি আর পরের step কী। আমি হ্যাঁ বললে সেই step শুরু করবে।
 ```
 
-**পরের step শুরু করাতে** (এখন পরের কাজ: Q8-এর পদ্ধতি আর RCA-র কাঠামো, তারপর GitHub-এর setting আর lab; দুই repo ভাগ 17 Nov হয়ে গেছে):
+**পরের step শুরু করাতে** (এখন পরের কাজ: GitHub-এর setting, Q8-এর peer, তারপর lab; Q8-এর পদ্ধতি আর RCA-র কাঠামো 17 Nov হয়ে গেছে):
 
 ```text
 PROGRESS.md-এর "পরের কাজ"-এর প্রথম step শুরু করো
@@ -142,8 +142,10 @@ docker compose down
 | ✅ | Q6-এর code আর পদ্ধতি: 6.1 (metrics stack), 6.2 (Loki, Alloy, Tempo, Grafana-র link), 6.3 (Golden Signals dashboard), 6.4 (alert, runbook, Slack), 6.5 (`docs/evidence/q6/commands.md`, k6); local k3s-এ রিহার্সাল pass | হয়ে গেছে |
 | ✅ | Q7-এর বাকি: lint, test, Trivy-র gate (7.6), PR pipeline আর Terraform plan-এর comment (7.7), lab-এর পদ্ধতি (7.8) | হয়ে গেছে |
 | ✅ | দুই repo GitHub-এ ভাগ (`publish-repos.sh`, 17 Nov) | হয়ে গেছে |
-| 1 | Q8-এর পদ্ধতি আর RCA-র কাঠামো; GitHub-এর setting (Q5-এর পদ্ধতির section 0.2, 0.3) | নিজের PC |
-| 2 | Q3 থেকে Q8 চালানো আর প্রমাণ (Q3: `linux/evidence/commands.md` ধরে) | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
+| ✅ | Q8-এর পদ্ধতি (`docs/evidence/q8/commands.md`), RCA-র কাঠামো (`docs/RCA.md`), architecture diagram `shoplite-app/docs`-এ (`a641940`) | হয়ে গেছে |
+| 1 | GitHub-এর setting (Q5-এর পদ্ধতির section 0.2, 0.3; Q7-এর section 0); Q8-এর peer | নিজের PC |
+| 2 | এক session-এ Q4 → Q5 → Q6 → Q7 → Q8, তারপর Q3 (`linux/evidence/commands.md`); পুরো session screen record | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
+| 3 | RCA লেখা, তারপর peer-এর commit-এর সাথে মেলানো; shoplite-app-এর README | নিজের PC |
 
 ## ৮. সমস্যা হলে
 
