@@ -8,15 +8,18 @@
 #      (17 Nov) is that nothing in these two repositories carries the assistant's name.
 #      Authors, committers and dates stay, so every run gives the same commits, and a later
 #      push is a fast-forward.
-#   3. with "push": push both branches to GitHub's main, as fast-forwards only (the very first
-#      publication of shoplite-app replaced its placeholder with a force push, once)
+#   3. with "push": push split/shoplite-app to GitHub's main, as a fast-forward only. Both
+#      repositories were first published on 17 Nov (shoplite-app's placeholder replaced by a
+#      force push, once). From then on shoplite-gitops changes only in its own clone, because
+#      CI commits to it, so it is not pushed from here.
 # Run it from devops-final's root, with no uncommitted changes:
-#   bash publish-repos.sh          split and clean; prints each branch's commit
-#   bash publish-repos.sh push     the same, then push
+#   bash publish-repos.sh          split and clean both; prints each branch's commit
+#   bash publish-repos.sh push     the same, then push shoplite-app
 set -euo pipefail
 cd "$(dirname "$0")"
 
 FOLDERS="shoplite-app shoplite-gitops"
+PUSHED=shoplite-app
 OWNER=SaikatGeek
 
 [ -z "$(git status --porcelain)" ] || { echo "commit or stash your changes first" >&2; exit 1; }
@@ -40,7 +43,7 @@ for folder in $FOLDERS; do
     exit 1
   fi
   echo "split/$folder: $(git rev-parse --short "split/$folder"), $(git rev-list --count "split/$folder") commits"
-  if [ "${1:-}" = push ]; then
+  if [ "${1:-}" = push ] && [ "$folder" = "$PUSHED" ]; then
     git push "https://github.com/$OWNER/$folder.git" "split/$folder:main"
   fi
 done
