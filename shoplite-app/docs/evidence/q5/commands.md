@@ -27,19 +27,26 @@ and `shoplite-gitops/` of one repository, `SaikatGeek/devops-final`, and are spl
 with their history. ArgoCD reads both over HTTPS without credentials, so both are public, with
 `main` as the default branch (Settings → General).
 
-1. On GitHub, create the empty public repository `SaikatGeek/shoplite-gitops`, with no README,
-   licence or `.gitignore`. `SaikatGeek/shoplite-app` exists already; the force push below
-   replaces its placeholder `test.md` with this history.
-2. In a clone of `devops-final` that can push to both repositories:
+`publish-repos.sh`, at the root of `devops-final`, does the split:
+
+- `git subtree split` gives each folder's history as a branch of its own, `split/<folder>`.
+- The commit messages are cleaned; authors, committers and dates are kept, so every run gives
+  the same commits.
+- `bash publish-repos.sh push` also pushes shoplite-app, as a fast-forward.
+
+**Done on 17 Nov:**
+
+1. `SaikatGeek/shoplite-gitops` was created on GitHub, empty and public.
+2. In `devops-final`:
 
    ```bash
-   git subtree split --prefix=shoplite-app -b split/shoplite-app
-   git subtree split --prefix=shoplite-gitops -b split/shoplite-gitops
-   git push --force https://github.com/SaikatGeek/shoplite-app.git split/shoplite-app:main
+   bash publish-repos.sh
+   git push --force-with-lease=main:cd159531a123d88c3ec69fa00ca163bf6fcbe8ab https://github.com/SaikatGeek/shoplite-app.git split/shoplite-app:main
    git push https://github.com/SaikatGeek/shoplite-gitops.git split/shoplite-gitops:main
    ```
 
-3. Check that each `main` on GitHub is its split branch (the same commit, twice):
+   The force push replaced shoplite-app's placeholder commit (`test.md`), and only that commit.
+3. Each `main` on GitHub is its split branch (the same commit, twice):
 
    ```bash
    git rev-parse split/shoplite-app split/shoplite-gitops
@@ -47,12 +54,18 @@ with their history. ArgoCD reads both over HTTPS without credentials, so both ar
    git ls-remote https://github.com/SaikatGeek/shoplite-gitops.git refs/heads/main
    ```
 
-The push to shoplite-app starts its first main pipeline run. Until `LAB_ACTIVE` is set it only
-builds the images, and stays green.
+The push to shoplite-app started its first main pipeline run. Until `LAB_ACTIVE` is set it only
+lints, tests, builds and scans the images, and stays green.
 
-To publish a later change to shoplite-app from `devops-final`, run the first and third
-commands of step 2 again, without `--force`. The split is deterministic, so the push is a
-fast-forward. Change shoplite-gitops in its own clone from now on: CI commits to it.
+**To publish a later change** to shoplite-app, commit it in `devops-final` and run, from its
+root:
+
+```bash
+bash publish-repos.sh push
+```
+
+Change shoplite-gitops in its own clone, or in GitHub's web editor, from now on: CI commits
+to it, so `publish-repos.sh` never pushes it.
 
 ### 0.2 GitHub settings
 

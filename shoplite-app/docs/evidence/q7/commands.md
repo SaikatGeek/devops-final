@@ -162,11 +162,11 @@ record from the commit to the browser.
 1. Change the page title in `shoplite-app/services/web/public/index.html`, for example from
    `<title>ShopLite</title>` to `<title>ShopLite - Q7 checkpoint</title>`. Commit it on main,
    and push devops-final.
-2. Publish it to shoplite-app; the split is deterministic, so this push is a fast-forward:
+2. Publish it to shoplite-app, from devops-final's root. The split is deterministic, so this
+   push is a fast-forward:
 
    ```bash
-   git subtree split --prefix=shoplite-app -b split/shoplite-app
-   git push https://github.com/SaikatGeek/shoplite-app.git split/shoplite-app:main
+   bash publish-repos.sh push
    ```
 
 3. Watch it go, with no deployment command:
