@@ -5,9 +5,13 @@
 #   1. actionlint checks the workflows and runs shellcheck on their run steps; shellcheck
 #      checks the scripts
 #   2. main runs on a push to main and from its "Run workflow" button, promote only from its
-#      button; every action is pinned to the commit of the release its comment names, and
-#      gets only inputs that this commit's action.yml declares (actionlint does not know the
-#      newest releases); every step output a workflow reads exists
+#      button; main's lint, tests, build and Trivy scan (scripts/ci.sh) always run, before
+#      any step that reaches AWS; every action is pinned to the commit of the release its
+#      comment names, and gets only inputs that this commit's action.yml declares
+#      (actionlint does not know the newest releases); every step output a workflow reads
+#      exists; scripts/ci.sh pins every tool image by a digest that exists, and its four
+#      stages pass here, while the scan fails on an image with a CRITICAL vulnerability
+#      (web's unpatched base image)
 #   3. scripts/update-gitops.sh, run the way the main pipeline runs it, against a copy of
 #      shoplite-gitops (a bare repository standing in for GitHub, and clones): it writes
 #      dev's registry and tag in one commit and pushes it, prod untouched; a rerun with the
@@ -18,8 +22,8 @@
 #      kept; with no image in dev yet it stops and commits nothing
 #   5. the chart, with the values the workflows wrote (layered as the Applications layer
 #      them), renders the ECR images with the new tag in dev and in prod
-# Needs Docker and internet (images, and the actions' repositories on GitHub). About half a
-# minute. Run it from shoplite-app/, with shoplite-gitops next to it (SHOPLITE_GITOPS_DIR
+# Needs Docker and internet (images, the actions' repositories on GitHub, Trivy's database). About two
+# minutes. Run it from shoplite-app/, with shoplite-gitops next to it (SHOPLITE_GITOPS_DIR
 # overrides the path):
 #   bash scripts/tests/pipeline.sh
 set -euo pipefail
@@ -33,9 +37,10 @@ HELM_IMAGE=alpine/helm:4.3.1
 RUNNER=shoplite-pipeline-test
 # What ECR's login step gives the pipeline (any account and region would do).
 REGISTRY=123456789012.dkr.ecr.ap-southeast-1.amazonaws.com
+WORKLOG=$(mktemp)
 
 remove_runner() { docker rm -f "$RUNNER" >/dev/null 2>&1 || true; }
-trap remove_runner EXIT
+trap 'remove_runner; rm -f "$WORKLOG"' EXIT
 remove_runner # leftovers of an interrupted earlier run
 
 step() { echo "==> $*"; }
@@ -49,7 +54,7 @@ step "actionlint on the workflows (with shellcheck on their run steps), shellche
 docker run --rm -v "$HOST_DIR:/repo:ro" -w /repo "$ACTIONLINT_IMAGE" -no-color .github/workflows/*.yml ||
   fail "actionlint found problems"
 docker run --rm -v "$HOST_DIR:/repo:ro" -w /repo --entrypoint shellcheck "$ACTIONLINT_IMAGE" \
-  scripts/update-gitops.sh scripts/tests/pipeline.sh || fail "shellcheck found problems"
+  scripts/update-gitops.sh scripts/ci.sh scripts/tests/pipeline.sh || fail "shellcheck found problems"
 echo "ok    no findings"
 
 step "starting a stand-in for GitHub's runner (bash, git, yq)"
@@ -68,6 +73,58 @@ check main.yml '.on.push' '{"branches":["main"]}'
 check promote.yml '.on' '{"workflow_dispatch":null}'
 echo "ok    main: push to main, workflow_dispatch; promote: workflow_dispatch"
 EOF
+
+step "main's checks: lint, tests, build and the Trivy scan always run, before anything reaches AWS"
+on_runner <<'EOF' || fail "main's checks are missing, conditional, or after a step that reaches AWS"
+cd /app/.github/workflows
+# One "<if, or always> | <first line of run, or uses>" line per step, in order.
+steps=$(yq '.jobs.release.steps[] | (.if // "always") + " | " + ((.run // .uses) | split("\n") | .[0])' main.yml)
+# shellcheck disable=SC2016 # "$TAG" is the step's own text
+pos() { grep -n -F -- "$1" <<<"$steps" | head -n 1 | cut -d: -f1; }
+lint=$(pos 'always | bash scripts/ci.sh lint')
+tests=$(pos 'always | bash scripts/ci.sh test')
+# shellcheck disable=SC2016
+build=$(pos 'always | bash scripts/ci.sh build "$TAG"')
+# shellcheck disable=SC2016
+scan=$(pos 'always | bash scripts/ci.sh scan "$TAG"')
+aws=$(pos 'aws-actions/configure-aws-credentials@')
+if [ -z "$lint" ] || [ -z "$tests" ] || [ -z "$build" ] || [ -z "$scan" ] || [ -z "$aws" ] ||
+  [ "$lint" -gt "$tests" ] || [ "$tests" -gt "$build" ] || [ "$build" -gt "$scan" ] || [ "$scan" -gt "$aws" ]; then
+  echo "$steps"
+  exit 1
+fi
+echo "ok    main: steps $lint lint, $tests tests, $build build, $scan scan, then $aws AWS (OIDC), ECR and gitops"
+EOF
+
+step "scripts/ci.sh: every tool image pinned by a digest that exists"
+pins=$(sed -n 's/^[A-Z_]*_IMAGE=//p' scripts/ci.sh)
+[ "$(grep -c . <<<"$pins")" = 3 ] || fail "scripts/ci.sh should pin three tool images: $pins"
+while read -r image; do
+  [[ $image =~ ^[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$ ]] || fail "not pinned by digest: $image"
+  docker buildx imagetools inspect "$image" >/dev/null || fail "no such image: $image"
+  echo "ok    $image"
+done <<<"$pins"
+
+step "scripts/ci.sh, run here as the runner runs it: lint, tests, build and scan"
+for stage in lint test "build pipeline-test" "scan pipeline-test"; do
+  # shellcheck disable=SC2086 # a stage and its tag
+  bash scripts/ci.sh $stage >"$WORKLOG" 2>&1 || { tail -n 30 "$WORKLOG"; fail "scripts/ci.sh $stage failed"; }
+  echo "ok    scripts/ci.sh $stage"
+done
+# The gate's other side: an image with a CRITICAL vulnerability (web's base image before its
+# brotli-libs fix) fails the scan, which still scans the other images and names the bad one.
+docker image inspect nginxinc/nginx-unprivileged:1.30.6-alpine >/dev/null 2>&1 ||
+  docker pull -q nginxinc/nginx-unprivileged:1.30.6-alpine >/dev/null
+docker tag nginxinc/nginx-unprivileged:1.30.6-alpine shoplite/web:pipeline-red
+docker tag shoplite/catalog-api:pipeline-test shoplite/catalog-api:pipeline-red
+docker tag shoplite/order-worker:pipeline-test shoplite/order-worker:pipeline-red
+if bash scripts/ci.sh scan pipeline-red >"$WORKLOG" 2>&1; then
+  fail "the Trivy scan passed an image with a CRITICAL vulnerability"
+fi
+grep -q '::error::CRITICAL vulnerabilities in: web$' "$WORKLOG" || { tail -n 20 "$WORKLOG"; fail "the failed scan does not name web"; }
+[ "$(grep -c '^==> Trivy: ' "$WORKLOG")" = 3 ] || fail "the failed scan stopped before scanning every image"
+echo "ok    scripts/ci.sh scan fails on a CRITICAL vulnerability, after scanning all three images: $(grep -m1 -o 'CVE-[0-9-]*' "$WORKLOG")"
+docker rmi shoplite/web:pipeline-red shoplite/catalog-api:pipeline-red shoplite/order-worker:pipeline-red >/dev/null
 
 step "the actions: pinned to the commit of the release in their comment, given only inputs they declare"
 on_runner <<'EOF' || fail "an action's pin, inputs or outputs do not match"

@@ -1,8 +1,9 @@
-# Main-branch pipeline (question 7a), first version (step 7.4). On every push to main it
-# builds the three images tagged with the short commit SHA, pushes them to ECR through
-# OpenID Connect (no AWS key is stored in GitHub), and commits the new tag to
-# shoplite-gitops; ArgoCD then deploys dev from Git. The pipeline never runs kubectl and
-# holds no cluster credentials. Linting, tests and the Trivy gate come in a later step.
+# Main-branch pipeline (question 7a). On every push to main it lints (Hadolint, helm lint),
+# runs the unit tests, builds the three images tagged with the short commit SHA, scans them
+# with Trivy (any CRITICAL vulnerability stops the run), pushes them to ECR through OpenID
+# Connect (no AWS key is stored in GitHub), and commits the new tag to shoplite-gitops; ArgoCD
+# then deploys dev from Git. The pipeline never runs kubectl and holds no cluster
+# credentials. The checks are scripts/ci.sh's stages, which the pull-request pipeline runs too.
 #
 # Settings of this repository (Settings > Secrets and variables > Actions):
 #   variable AWS_ROLE_ARN       the role from `terraform output ci_role_arn`
@@ -32,7 +33,7 @@ permissions:
 
 jobs:
   release:
-    name: build, push to ECR, commit the tag to shoplite-gitops
+    name: lint, test, build, scan, push to ECR, commit the tag to shoplite-gitops
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -47,13 +48,22 @@ jobs:
         id: tag
         run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
+      - name: Lint (Hadolint, helm lint)
+        run: bash scripts/ci.sh lint
+
+      - name: Unit tests
+        run: bash scripts/ci.sh test
+
       - name: Build the images
         env:
           TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          for service in $SERVICES; do
-            docker build --target runtime -t "shoplite/$service:$TAG" "services/$service"
-          done
+        run: bash scripts/ci.sh build "$TAG"
+
+      # The very images that are pushed below: nothing with a CRITICAL vulnerability reaches ECR.
+      - name: Scan the images with Trivy (fails on CRITICAL)
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: bash scripts/ci.sh scan "$TAG"
 
       - name: AWS credentials through OIDC (the CI role)
         if: vars.LAB_ACTIVE == 'true'

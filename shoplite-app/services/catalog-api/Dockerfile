@@ -37,5 +37,5 @@ COPY app ./app
 USER 10001:10001
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget -qO /dev/null http://127.0.0.1:8000/healthz || exit 1
+  CMD ["wget", "-qO", "/dev/null", "http://127.0.0.1:8000/healthz"]
 CMD ["python", "-m", "app"]

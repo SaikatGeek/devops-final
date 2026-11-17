@@ -37,6 +37,6 @@ COPY worker ./worker
 USER 10001:10001
 EXPOSE 8001
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget -qO /dev/null http://127.0.0.1:8001/healthz || exit 1
+  CMD ["wget", "-qO", "/dev/null", "http://127.0.0.1:8001/healthz"]
 # exec form: python is PID 1 and receives SIGTERM directly for graceful shutdown
 CMD ["python", "-m", "worker"]
