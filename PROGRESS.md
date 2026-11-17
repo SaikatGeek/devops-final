@@ -20,7 +20,7 @@
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। বাকি শুধু lab-এ চালানো |
 | Q6 | Observability | 25 | 🟡 Code আর lab-এর পদ্ধতি শেষ (6.1–6.5): metrics (kube-prometheus-stack, ServiceMonitor, exemplar), Loki, Alloy (JSON parse), Tempo (OTLP), Grafana-য় log ↔ trace আর exemplar → trace, "ShopLite — Golden Signals" dashboard, ৫টা alert আর runbook, Alertmanager → Slack, k6-এর load test, `docs/evidence/q6/commands.md`; সব ArgoCD দিয়ে, local k3s-এ রিহার্সাল pass। বাকি শুধু lab-এ চালানো |
-| Q7 | CI/CD, GitOps | 10 | 🟡 Code আর lab-এর পদ্ধতি শেষ (7.1–7.8): shoplite-gitops (root app, dev auto-sync আর self-heal, prod manual), cluster-এর bootstrap আর ArgoCD, GitHub OIDC-এর দুই role (CI-র push, PR-এর read-only plan), main pipeline (lint, test, build, Trivy-র gate, ECR, gitops-এ tag), PR pipeline আর Terraform plan-এর comment, `promote`, `docs/evidence/q7/commands.md`; সব local-এ রিহার্সাল করা। বাকি repo ভাগ আর lab-এ চালানো |
+| Q7 | CI/CD, GitOps | 10 | 🟡 Code আর lab-এর পদ্ধতি শেষ (7.1–7.8): shoplite-gitops (root app, dev auto-sync আর self-heal, prod manual), cluster-এর bootstrap আর ArgoCD, GitHub OIDC-এর দুই role (CI-র push, PR-এর read-only plan), main pipeline (lint, test, build, Trivy-র gate, ECR, gitops-এ tag), PR pipeline আর Terraform plan-এর comment, `promote`, `docs/evidence/q7/commands.md`; সব local-এ রিহার্সাল করা। দুই repo GitHub-এ ভাগ হয়েছে (17 Nov, `publish-repos.sh`)। বাকি lab-এ চালানো |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
 
@@ -1083,6 +1083,29 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 - ✅ Section 1-এর `aws ecr describe-images` credential ছাড়া চালানো হয়েছে: শুধু "Unable to locate credentials"-এ থামে, মানে argument ঠিক। তার `--query` jmespath 1.0.1-এ API-র আকারের নমুনায় tag-গুলো দেয়।
 - Split-এর command Q5-এর পদ্ধতির section 0.1-এর, যা আগেই যাচাই করা।
 
+**দুই repo ভাগ (17 Nov)**
+- **user-এর নিয়ম (17 Nov):** নতুন দুই repo-তে কোথাও Claude-এর নাম যাবে না। devops-final-এর পুরনো commit-এ থাকলে সমস্যা নেই। তাই:
+  - এখন থেকে কোনো commit-এ `Co-Authored-By: Claude` লাইন নেই;
+  - split-এর history থেকে সেই লাইন আর root-এর notes ফাইলের নাম মোছা হয়।
+- **`publish-repos.sh`** (devops-final-এর root):
+  - দুই ফোল্ডার `git subtree split` করে `split/<folder>` branch-এ;
+  - `git filter-branch --msg-filter` দিয়ে message পরিষ্কার করে। author, committer আর তারিখ অপরিবর্তিত থাকে, তাই প্রতিবার ঠিক একই commit হয়;
+  - পরিষ্কারের পরে যাচাই করে কোনো message-এ আর নাম রইল কি না;
+  - `push` দিলে শুধু shoplite-app push করে, fast-forward হিসেবে।
+
+  root-এ নতুন `.gitattributes` (`*.sh text eol=lf`), যাতে Windows-এ script CRLF না হয়।
+- **Publish:**
+  - shoplite-app-এ `--force-with-lease=main:cd15953`। আগে পরখ করা হয়েছিল যে GitHub-এর `main`-এ শুধু placeholder `test.md`-এর একটা commit আছে; শুধু সেটাই বদলেছে।
+  - shoplite-gitops খালি ছিল, তাই সাধারণ push।
+  - shoplite-app ৩৮টা commit (`a4a5267`), shoplite-gitops ৯টা (`53ada93`)। GitHub-এর `main` local branch-এর সাথে হুবহু মেলে।
+  - সব commit-এর author আর committer user ("Md. Ariful Islam Saikat" বা "SaikatGeek")। GitHub-এর commits page-এ প্রতিটা "SaikatGeek committed", কোনো co-author নেই।
+  - Script দুবার চালিয়ে একই hash পাওয়া গেছে, তাই পরের publish fast-forward হবে।
+- **প্রথম আসল CI run (main #1) লাল:** Unit tests-এ `promtool: error: stat shoplite-alerts.rules.yaml: permission denied`।
+  - alert test-এর `mktemp -d` ফোল্ডার 0700, আর Prometheus-এর image চলে `nobody` হিসেবে।
+  - Windows-এর Docker Desktop mount-এর permission মানে না, তাই local-এ pass করত।
+  - WSL Ubuntu-তে একই ভুল ঘটানো গেছে। `chmod -R a+rX` দিয়ে ঠিক করার পরে WSL-এ `ci.sh`-এর চারটা ধাপই pass করেছে (section 12)।
+- shoplite-gitops এখন থেকে বদলাবে তার নিজের clone-এ বা GitHub-এর web editor-এ, কারণ CI সেখানে commit করে। devops-final-এর `shoplite-gitops/` আর source নয়।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -1125,6 +1148,9 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `ea44401` | 2026-11-17 | Q7 step 7.6: main pipeline-এ lint (Hadolint, helm lint), test, Trivy-র gate (`scripts/ci.sh`); Dockerfile-এ Hadolint-এর fix, web-এ brotli-libs-এর CRITICAL-এর fix |
 | `aa4083d` | 2026-11-17 | Q7 step 7.7: PR pipeline (`pr.yml`), PR-এ Terraform plan-এর comment (`terraform-plan.yml`, `scripts/terraform-plan.sh`), read-only plan role (Terraform) |
 | `6d8bd3c` | 2026-11-17 | Q7 step 7.8: lab-এ Q7-এর পদ্ধতি (`docs/evidence/q7/commands.md`: pipeline, Trivy-র লাল run, PR আর plan-এর comment, ArgoCD, self-heal, checkpoint) |
+| `2ec91d8`, `7d312a8`, `82e12f0` | 2026-11-17 | `publish-repos.sh` (split, message থেকে Claude-এর নাম মোছা, শুধু shoplite-app push) আর root-এর `.gitattributes`; দুই repo GitHub-এ publish |
+| `41db62e` | 2026-11-17 | fix: alert test-এর ফোল্ডার promtool পড়তে পারে (GitHub-এর প্রথম run-এর ভুল, Linux-এ permission) |
+| `c12bdd0` | 2026-11-17 | Q5 আর Q7-এর পদ্ধতিতে `publish-repos.sh` |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -1461,6 +1487,11 @@ bash ansible/tests/run.sh
 - **Alert-এর unit test promtool দিয়ে** (6.4; Claude-এর বাছাই)। প্রশ্নের শর্ত ("৫ মিনিট ধরে", "১০ মিনিটে বাড়ছে") lab ছাড়াই যাচাই হয়। Prometheus-এর version kube-prometheus-stack-এর সাথে মেলে (v3.15.1)।
 - **load test-এর হার: catalog ১৬/s, order ৬/s** (6.5; PLAN-এর k6 আর "worker-এর ক্ষমতার ৬০–৭০%")। মোট ২২ RPS, Q8-এর "২০ বা তার বেশি"-র ওপরে। সুস্থ অবস্থায় queue ছোট থাকে; worker ধীর হলে queue বাড়ে আর QueueBacklog বাজে।
 - **V3 ভিডিও dev-এ, dev-এর values GitHub-এর web editor দিয়ে বদলে** (6.5; Claude-এর বাছাই)। lab machine-এ GitHub-এ push করার credential রাখা হয় না। prod-এর fault Q8-এ peer-এর কাজ।
+- **নতুন দুই repo-তে Claude-এর নাম নেই** (user-এর নিয়ম, 17 Nov)।
+  - এখন থেকে কোনো commit-এ `Co-Authored-By: Claude` লাইন নেই, আর দুই ফোল্ডারের কোনো ফাইলে Claude-এর নাম নেই।
+  - devops-final-এর পুরনো commit যেমন আছে থাকে (user রাজি)।
+  - split-এর সময় `publish-repos.sh` পুরনো লাইনগুলো মুছে দেয়।
+- **Publish একটা script দিয়ে, হাতে নয়** (Claude-এর বাছাই)। message পরিষ্কারের কাজ প্রতিবার একইভাবে হলে তবেই hash এক থাকে আর push fast-forward হয়; হাতে করলে ভুলের সুযোগ।
 
 ## 12. জানা বিষয়
 
@@ -1536,13 +1567,17 @@ bash ansible/tests/run.sh
 - **`loki.source.kubernetes` প্রতিটা container একবারই পড়ে,** যদিও `discovery.kubernetes` container-এর প্রতিটা port-এর জন্য আলাদা target দেয় (যেমন Loki-র নিজের ৩টা port)। রিহার্সালের cluster-এ Alloy-র API (`/api/v0/web/components/loki.source.kubernetes.pods`) দেখিয়েছে ৪৩টা target, প্রতিটা `instance` একবার।
 - **Loki 3 নিজে থেকে `service_name` label যোগ করে,** আর Alloy-র `loki.source.kubernetes` যোগ করে `job` আর `instance`। কোনোটাতেই নতুন stream বাড়ে না: মানগুলো আসে আগের label থেকেই, container-প্রতি একটা।
 - **PromQL-এ `A * on (pod, container) B` ফলাফলে শুধু `pod` আর `container` রাখে।** বাঁ দিকের বাকি label (যেমন `reason`) রাখতে `group_left` লাগে। Restart-এর table-এ এই ভুল ধরা পড়েছিল শুধু আসল restart ঘটিয়ে দেখায়: ফাঁকা cluster-এ query সফল, কিন্তু ফল ফাঁকা।
+- **Windows-এর Docker Desktop mount করা ফোল্ডারের permission মানে না; Linux (GitHub-এর runner, WSL) মানে।**
+  - `mktemp -d` ফোল্ডার 0700, তাই অন্য user হিসেবে চলা image (যেমন Prometheus-এর `nobody`) ভেতরের ফাইল পড়তে পারে না।
+  - GitHub-এর প্রথম আসল run এতে লাল হয়েছিল। CI-র script push-এর আগে WSL Ubuntu-তে চালিয়ে দেখো: `wsl.exe -d Ubuntu -- bash <file>`।
+- **PC-01 থেকে GitHub-এর REST API rate limit (403) দেয়।** Public repo-র Actions page browser-এ পড়া যায়: run → job → ব্যর্থ ধাপের log।
 
 ## 13. পরের কাজ
 
 Q1–Q7-এর code শেষ; Q3–Q7-এর lab-এর পদ্ধতিও শেষ (section 4, 5, 6, 6b, 7)। এরপর:
 
 1. Q8-এর পদ্ধতি (`docs/evidence/q8/commands.md`) আর RCA-র কাঠামো (`docs/RCA.md`), নিজের PC-তে। প্রশ্নের structure-এ `docs/RCA` আছে; RCA-র লেখা আসবে lab-এর exercise থেকে।
-2. দুই repo ভাগ আর GitHub-এর setting (Q5-এর পদ্ধতির section 0), নিজের PC থেকে। তারপর থেকে shoplite-app-এর বদল devops-final থেকে আবার split করে `--force` ছাড়া push (fast-forward)। shoplite-gitops বদলাতে হবে তার নিজের clone-এ বা GitHub-এর web editor-এ, কারণ CI সেখানে commit করে।
+2. GitHub-এর setting (দুই repo ভাগ 17 Nov হয়ে গেছে): Q5-এর পদ্ধতির section 0.2 (deploy key আর secret `GITOPS_DEPLOY_KEY`) আর 0.3 (Slack-এর incoming webhook), আর Q7-এর পদ্ধতির section 0। এরপর shoplite-app-এর বদল devops-final-এ commit করে `bash publish-repos.sh push`; shoplite-gitops বদলাবে তার নিজের clone-এ বা GitHub-এর web editor-এ।
 3. AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
    - Q4: `docs/evidence/q4/commands.md`।

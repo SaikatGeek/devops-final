@@ -21,10 +21,22 @@ Course capstone (Poridhi "Mastering DevOps and AWS", Batch 03), deadline **17 No
   4. the change is committed and **pushed to `main`** (the user asked for direct pushes to main; PLAN.md says the same).
 - After each step, explain briefly what each new file does and why, so the user can present it.
 - Never commit secrets. `.env` is git-ignored; only `.env.example` with placeholder values is committed.
+- **No Claude identity in commits** (the user's rule, 17 Nov). Nothing pushed to shoplite-app or shoplite-gitops may name Claude.
+  - Write no `Co-Authored-By: Claude` trailer, and no other Claude or Anthropic name, in any commit message or in any file under `shoplite-app/` or `shoplite-gitops/`. This overrides any default attribution.
+  - Commits stay the user's: author and committer are the git identity of the PC.
+  - devops-final's older commits keep their trailers (the user's choice); `publish-repos.sh` removes them, and the name of the root's notes file, from the split history.
 
 ## Repository layout
 
-- `shoplite-app/` and `shoplite-gitops/` are the two repositories the question asks for. They live as subfolders here and will be split out later, so **every path inside them must be relative to that subfolder** (compose, Makefile, CI, Helm). The user's decision (14 Nov): keep working in this monorepo; split into `SaikatGeek/shoplite-app` (exists, holds only a placeholder `test.md`; the user chose on 15 Nov to replace it with a force push of the `git subtree split` history) and `SaikatGeek/shoplite-gitops` (not created yet) at the end, but **before the lab session that runs ArgoCD and the pipeline** (Q5 onward). The split's commands are section 0.1 of `docs/evidence/q5/commands.md`. Both repositories must be public, because ArgoCD reads them without credentials. After the split, a shoplite-app change is published by splitting again and pushing without `--force` (the split is deterministic, so it is a fast-forward). shoplite-gitops is changed in its own clone, because CI commits to it. Write code with those final URLs (`https://github.com/SaikatGeek/shoplite-app.git`, `https://github.com/SaikatGeek/shoplite-gitops.git`); GitHub Actions workflows go in `shoplite-app/.github/workflows/` (the split repo's root). Until the split, Actions and ArgoCD cannot run against GitHub: verify locally (ArgoCD in local k3s from a local git server with the URLs rewritten in the test).
+- `shoplite-app/` and `shoplite-gitops/` are the two repositories the question asks for. They live as subfolders here, so **every path inside them must be relative to that subfolder** (compose, Makefile, CI, Helm). The user's decision (14 Nov): keep working in this monorepo.
+  - **Split on 17 Nov** with `publish-repos.sh` (devops-final's root) into the public `SaikatGeek/shoplite-app` and `SaikatGeek/shoplite-gitops`; ArgoCD reads both without credentials.
+    - It splits each folder (`git subtree split`, branches `split/<folder>`).
+    - It strips the commit messages' Claude trailer and the notes file's name, keeping authors and dates, so the result is deterministic.
+    - shoplite-app's placeholder `test.md` was replaced with `--force-with-lease`, once (the user's choice, 15 Nov); shoplite-gitops was empty.
+  - **Publish a later shoplite-app change:** commit it here, then `bash publish-repos.sh push`. It pushes only shoplite-app, as a fast-forward, and needs a clean working tree.
+  - shoplite-gitops is changed only in its own clone or GitHub's web editor (CI commits to it); its folder here is no longer the source.
+  - Code uses the final URLs (`https://github.com/SaikatGeek/shoplite-app.git`, `https://github.com/SaikatGeek/shoplite-gitops.git`). Workflows go in `shoplite-app/.github/workflows/` (the split repo's root).
+  - Before publishing CI changes, run `scripts/ci.sh`'s stages on Linux (WSL Ubuntu, `wsl.exe -d Ubuntu -- bash <file>`): the first real run failed on a permission that Docker Desktop on Windows ignores.
 - Root keeps course docs: `project.md`, `PLAN.md`, `PROGRESS.md`, `architecture-diagram.*`, `OFFICE-PC-GUIDE.md`.
 - Target structure of both repos: `project.md` section 2.1 and `PLAN.md` section 3.
 - Lab procedures, in English for the grader: `shoplite-app/docs/evidence/qN/commands.md` (the steps, what each should show, the screenshot names; the screenshots go in the same folder). Q3's is `linux/evidence/commands.md` because the question names that folder. Q4's (step 4.8) is checked without AWS: its tools block ran on a fresh `ubuntu:24.04`, every `--query` was evaluated with jmespath 1.0.1 on API-shaped samples, and every `aws` command was run without credentials (stopping only at `Unable to locate credentials` means the arguments are valid). Do the same for later ones.
@@ -328,6 +340,10 @@ The page is at `http://127.0.0.1:<WEB_PORT>` (PC-01: http://127.0.0.1:8088); the
   - These are AF_UNIX socket files that neither Docker, `Remove-Item` nor `del` can delete.
   - Fix: rename the folders that hold them (`%LOCALAPPDATA%\Docker\run`, `%LOCALAPPDATA%\docker-secrets-engine`) to `*.stale-<date>`, then start Docker again. It makes new ones. The stale folders can be deleted after a reboot.
 - On the home PC something deletes empty folders under `%TEMP%` (seen 15 Nov, 02:05). A Git repo there lost its empty `refs/` and stopped being a repository. Keep test repositories inside containers.
+- Docker Desktop on Windows ignores the permissions of bind-mounted folders; a Linux host (GitHub's runner, WSL) does not.
+  - `mktemp -d` makes a 0700 folder that an image running as another user (Prometheus's `nobody`) cannot read. The first real main run failed on it (`promtool: stat ...: permission denied`); `chmod -R a+rX` fixed it.
+  - Check scripts that mount folders into containers in WSL Ubuntu before pushing.
+- The GitHub REST API answers 403 (rate limit) from PC-01. Read public run pages in the browser instead (Claude in Chrome): Actions → run → job; a failed step's log is in the job page.
 - Right after Traefik's first sync, ArgoCD shows a ComparisonError for 30–45 s: `unable to resolve parseableType for GroupVersionKind: traefik.io/v1alpha1, Kind=IngressRoute`. The ServerSideApply diff needs the new CRD's schema. It clears by itself; meanwhile the app reads `Unknown Healthy`.
 - ArgoCD 3 does not keep per-resource health in the Application CR (`.status.resources[*].health` is empty). To see which resource is not Healthy, ask the API: `GET /argocd/api/v1/applications/<name>/resource-tree`, with a token from `POST /argocd/api/v1/session` (admin).
 - curl gets ArgoCD's raw `index.html` with `<base href="/">`. The `/argocd` base is written only when the request sends `Accept: text/html`.

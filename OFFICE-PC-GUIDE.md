@@ -89,7 +89,7 @@ git pull
 CLAUDE.md আর PROGRESS.md পড়ো। তারপর বলো এখন কোথায় আছি আর পরের step কী। আমি হ্যাঁ বললে সেই step শুরু করবে।
 ```
 
-**পরের step শুরু করাতে** (এখন পরের কাজ: Q8-এর পদ্ধতি আর RCA-র কাঠামো, তারপর repo ভাগ আর lab):
+**পরের step শুরু করাতে** (এখন পরের কাজ: Q8-এর পদ্ধতি আর RCA-র কাঠামো, তারপর GitHub-এর setting আর lab; দুই repo ভাগ 17 Nov হয়ে গেছে):
 
 ```text
 PROGRESS.md-এর "পরের কাজ"-এর প্রথম step শুরু করো
@@ -141,7 +141,8 @@ docker compose down
 | ✅ | Q7-এর GitOps-এর ভিত: 7.1 আর 7.2 (bootstrap, ArgoCD; local k3s-এ রিহার্সাল pass), 7.3 (GitHub OIDC-এর role), 7.4 (main pipeline v1, local-এ রিহার্সাল), 7.5 (prod-এ তোলার `promote`) | হয়ে গেছে |
 | ✅ | Q6-এর code আর পদ্ধতি: 6.1 (metrics stack), 6.2 (Loki, Alloy, Tempo, Grafana-র link), 6.3 (Golden Signals dashboard), 6.4 (alert, runbook, Slack), 6.5 (`docs/evidence/q6/commands.md`, k6); local k3s-এ রিহার্সাল pass | হয়ে গেছে |
 | ✅ | Q7-এর বাকি: lint, test, Trivy-র gate (7.6), PR pipeline আর Terraform plan-এর comment (7.7), lab-এর পদ্ধতি (7.8) | হয়ে গেছে |
-| 1 | Q8-এর পদ্ধতি আর RCA-র কাঠামো, তারপর দুই repo ভাগ (Q5-এর পদ্ধতির section 0) | নিজের PC |
+| ✅ | দুই repo GitHub-এ ভাগ (`publish-repos.sh`, 17 Nov) | হয়ে গেছে |
+| 1 | Q8-এর পদ্ধতি আর RCA-র কাঠামো; GitHub-এর setting (Q5-এর পদ্ধতির section 0.2, 0.3) | নিজের PC |
 | 2 | Q3 থেকে Q8 চালানো আর প্রমাণ (Q3: `linux/evidence/commands.md` ধরে) | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
 
 ## ৮. সমস্যা হলে
