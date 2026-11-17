@@ -249,7 +249,8 @@ failed, in Grafana alone. It breaks dev on purpose, through Git, and repairs it 
 4. Repair dev through Git: in GitHub, edit `envs/dev/values.yaml` again, delete the three
    lines, and commit ("dev: back to normal"). (From a clone that can push, `git revert`
    of step 2's commit does the same.) Let the load run until the 5xx rate is back at 0 and
-   Slack shows RESOLVED.
+   Slack shows RESOLVED: about 10 minutes after the commit, because the alert looks at the
+   last 5 minutes and Alertmanager sends its updates every 5 minutes.
 
 Video `V3-alert-to-request.mp4`, and screenshot `17-dev-recovered.png`: the dashboard after
 the revert, the 5xx rate back at 0.

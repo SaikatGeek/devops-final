@@ -139,10 +139,32 @@ Check later procedures with kubectl blocks the same way. No one-command lab scri
       - plus a dashboard annotation "Deploys", from changes in `kube_deployment_metadata_generation`.
     - The panel titles are checked by the rehearsal; rename them in both places.
   - `monitoring/kustomization.yaml`: `configMapGenerator` `shoplite-dashboards` (namespace monitoring, label `grafana_dashboard: "1"`, which kube-prometheus-stack's Grafana sidecar loads from every namespace, `disableNameSuffixHash`). Build it with `kubectl kustomize` from the k3s image (Kustomize v5.8.1). shoplite-gitops `apps/monitoring-config.yaml` (path `monitoring`, wave 1, automated) applies it; 6.4's PrometheusRule goes in the same Kustomization.
+  - Alerts (6.4), `monitoring/alert-rules/shoplite-alerts.yaml`: PrometheusRule `shoplite-alerts`, group `shoplite`.
+    - The five alerts of question 6.5:
+      - HighErrorRate, critical: the 5xx ratio per namespace and route above 0.05 for 5m;
+      - HighLatency, warning: p95 per namespace and route above 1 for 5m;
+      - QueueBacklog, warning: `max by (namespace)` above 50 for 10m;
+      - PodCrashLooping, critical: `increase(kube_pod_container_status_restarts_total[10m]) > 0`, no `for`;
+      - NodeDiskFilling, warning: `mountpoint="/"` used above 0.85 for 5m.
+    - Each has `severity`, and `runbook_url` = `https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/<alert>.md`.
+    - The runbooks `monitoring/runbooks/<alert>.md` say which panels and queries to use first. They never name a chaos flag.
+    - Tests: `bash monitoring/alert-rules/tests/run.sh` (about 10 s). It checks the names and severities against the question and that the runbooks exist, then runs `promtool check rules` and `promtool test rules` (`shoplite-alerts.test.yaml`, on the PrometheusRule's `.spec`) with `quay.io/prometheus/prometheus:v3.15.1`. It was checked by mutation (nine mistakes, each fails it).
+  - Alertmanager (6.4): `alertmanager.config` in `kube-prometheus-stack.yaml`:
+    - one receiver `slack` (`slack_configs.api_url_file: /etc/alertmanager/secrets/alertmanager-slack/webhook-url`, `send_resolved`, a title and text with the runbook);
+    - `group_by: [alertname, namespace]`;
+    - `route.routes: null` drops the chart's Watchdog route, and `inhibit_rules: []`;
+    - `alertmanagerSpec.secrets: [alertmanager-slack]` mounts the Secret.
+
+    The webhook's URL is never in Git. Check the rendered config with `amtool check-config` from `quay.io/prometheus/alertmanager:v0.34.2`.
+  - Load test (6.5), `scripts/loadtest.js`, k6 v1.8.2 (the Docker image `grafana/k6:1.8.2` locally; in the lab, the release tarball checked against `k6-v1.8.2-checksums.txt`):
+    - two constant-arrival-rate scenarios: browse 16/s (half `/api/products`, half `/api/products/{id}`) and orders 6/s (about 60% of four workers);
+    - env `BASE_URL` (required), `DURATION` (15m), `BROWSE_RPS`, `ORDER_RPS`.
+
+    The error fault (question 1.5) fails only `POST /orders`; the latency fault delays `GET /products/{id}`.
   - The chart's `templates/servicemonitor.yaml` scrapes `/metrics` every 15 s: catalog-api on port `http`, order-worker on port `metrics`. order-worker has a Service (port 8001) only for this.
   - Prometheus job names: `catalog-api`, `order-worker`, `node-exporter`, `kube-state-metrics`.
   - The Prometheus image is distroless (no shell, no wget). Query it from outside: the rehearsal curls its ClusterIP from the node's network.
-- Cluster bootstrap (Q7 step 7.2, PROGRESS section 7): `scripts/bootstrap-cluster.sh` runs once per new cluster from the lab machine (needs `kubectl` and `helm`; kubeconfig through the `kubectl_tunnel` SSM port forward; shoplite-gitops next to shoplite-app, or `SHOPLITE_GITOPS_DIR`). It creates namespaces `shoplite` and `shoplite-dev` and a Secret `shoplite-db` in each (`POSTGRES_USER=shoplite`, random password; an existing Secret is kept, because Postgres keeps the password of its first start). It also creates namespace `monitoring` with the Secret `grafana-admin` (`admin-user=admin`, random `admin-password`). That Secret is kept if it exists too, because Grafana keeps the password of its first start. Then it installs ArgoCD from argo-helm chart `ARGOCD_CHART_VERSION=10.11.6` (ArgoCD v3.5.6) with `shoplite-gitops/bootstrap/argocd-values.yaml`, and applies `bootstrap/root-app.yaml`. It prints no secret. The values file's location was Claude's proposal from PLAN's example; the user may move it.
+- Cluster bootstrap (Q7 step 7.2, PROGRESS section 7): `scripts/bootstrap-cluster.sh` runs once per new cluster from the lab machine (needs `kubectl` and `helm`; kubeconfig through the `kubectl_tunnel` SSM port forward; shoplite-gitops next to shoplite-app, or `SHOPLITE_GITOPS_DIR`). It creates namespaces `shoplite` and `shoplite-dev` and a Secret `shoplite-db` in each (`POSTGRES_USER=shoplite`, random password; an existing Secret is kept, because Postgres keeps the password of its first start). It also creates namespace `monitoring` with the Secret `grafana-admin` (`admin-user=admin`, random `admin-password`). That Secret is kept if it exists too, because Grafana keeps the password of its first start. Alertmanager's Secret `alertmanager-slack` (key `webhook-url`) comes from `SLACK_WEBHOOK_URL`: it is required on the first run and checked before anything changes. A rerun without it keeps the Secret; a rerun with it updates it; the URL is never printed. Then it installs ArgoCD from argo-helm chart `ARGOCD_CHART_VERSION=10.11.6` (ArgoCD v3.5.6) with `shoplite-gitops/bootstrap/argocd-values.yaml`, and applies `bootstrap/root-app.yaml`. It prints no secret. The values file's location was Claude's proposal from PLAN's example; the user may move it.
 - What `argocd-values.yaml` sets:
   - Ingress `/argocd` (Prefix, no host, because the ALB's name changes every session) on Traefik's `web` entrypoint, with `server.insecure`, and `server.basehref` and `server.rootpath` set to `/argocd`. The admin password lives only in the cluster (`argocd-initial-admin-secret`).
   - `timeout.reconciliation: 60s`, jitter 0.
@@ -181,11 +203,18 @@ Check later procedures with kubectl blocks the same way. No one-command lab scri
       - the eight required panels return data;
       - in dev, an unreadable queue message (`redis-cli LPUSH orders:pending 'not an order'`) and a stopped worker process (`kill 1`) show in "Recent error logs" and "Restarted containers" (with the reason);
       - right after the self-heal step's `kubectl scale`, the Deploys annotation marks prod's web (it shows within about 20 s; its window is 2 minutes);
+    - Q6.4:
+      - a stand-in Slack webhook: a small Python server in `python:3.12-alpine`, fixed IP 172.30.0.11, which prints every POST;
+      - `SLACK_WEBHOOK_URL` is passed to the lab machine, and the second bootstrap must say `Secret alertmanager-slack set from SLACK_WEBHOOK_URL`, keep its resourceVersion, and never print the URL;
+      - Prometheus's `/api/v1/rules` has the group `shoplite` with the five alerts, their severities and runbook URLs;
+      - Alertmanager's config Secret (`alertmanager-kube-prometheus-stack-alertmanager`) has the `api_url_file` and not the URL;
+      - the dashboard step's restart of dev's worker makes `[FIRING] PodCrashLooping (critical) in shoplite-dev` reach the webhook, with the runbook link;
+    - at the end, it lists every container that restarted (only dev's order-worker is expected);
     - self-heal reverts a `kubectl scale` in dev, while prod keeps it and shows OutOfSync.
   - The monitoring charts' images are preloaded by `stack_images` (chart and values from the Application); images pinned by digest are left to k3s.
   - The test k3s runs `mount --make-rshared /` after it is Ready. node-exporter mounts `/` with HostToContainer propagation, which a container's private `/` refuses.
-  - About 13 minutes on PC-01 with the whole monitoring stack; more on the home PC.
-  - Passed in full on PC-01 on 15 Nov, first try (step 7.2 done), with the metrics stack on 16 Nov (step 6.1), and with logs and traces on 16 Nov (step 6.2).
+  - About 16 minutes on PC-01 with the whole monitoring stack, the dashboard and the alerts; more on the home PC.
+  - Passed in full on PC-01 on 15 Nov, first try (step 7.2 done), with the metrics stack on 16 Nov (step 6.1), with logs and traces on 16 Nov (step 6.2), and with the dashboard and the alerts on 17 Nov (steps 6.3 and 6.4).
   - To debug against a live cluster: run a copy with the `trap ... EXIT` line removed, placed in `scripts/tests/` (the script `cd`s from its own folder). Remove its containers, network and `/tmp/tmp.*` work folder by hand afterwards, and delete the copy.
 - Traefik (Q5d) lives in **shoplite-gitops** `apps/traefik.yaml` (the user's choice, per PLAN): an ArgoCD Application with Traefik's chart 42.2.0 (Traefik v3.7.16) and inline `valuesObject`: NodePort Service, entrypoint `web` → 30080 (prod, ALB 80) and `dev` (port 8001, exposed 8080) → 30081 (dev, ALB 8080), no websecure, `/ping` on web and dev through the chart's `ingressRoute.healthcheck` (the ALB health check), requests and limits, `ServerSideApply=true`. Traefik's Middleware CRD must exist before the shoplite chart is applied (sync Traefik first in Q7).
 - `helm/tests/run.sh` rehearses on a local `rancher/k3s:v1.37.2-k3s1` container (images loaded with `docker save | ctr import`; Helm `alpine/helm:4.3.1` and `curl` from the web image on the k3s container's network; `fail-cgroupv1=false` on cgroup v1 hosts). It installs Traefik exactly as `../shoplite-gitops/apps/traefik.yaml` says (read with `mikefarah/yq:4.54.1`; `SHOPLITE_GITOPS_DIR` overrides the path), and the ServiceMonitor CRD from the kube-prometheus-stack chart `apps/kube-prometheus-stack.yaml` pins (`charts/crds/crds/crd-servicemonitors.yaml` of the pulled chart). It then lints, dry-runs the prod manifests server-side, installs dev (`shoplite-dev`) and prod (`shoplite`), then checks ready pods, non-root uids, requests/limits, the seed, orders to `COMPLETED` (through web's proxy and through NodePorts 30080/30081, each landing in its own environment's database), `/ping` 200 on both NodePorts, NetworkPolicy (`nc -z` from the pods: catalog-api and order-worker reach `postgres:5432` and `redis:6379`, web does not, dev does not reach prod's), a setting change rolling only catalog-api and order-worker (Deployment `generation`), the HPA scaling out under 400 orders, and `kubectl drain` evicting one catalog-api pod per environment while the PDB refuses the second. About 10 minutes (20 on 16 Nov, step 6.2); extend it with every chart step.
@@ -298,9 +327,15 @@ At the split, `SaikatGeek/shoplite-app`'s placeholder `test.md` is replaced: the
 **Q6, in steps (PROGRESS section 6b; Q6 before the rest of Q7 was Claude's advice, and on 16 Nov the user said to go on):**
 - 6.1 is done (`cb6830f`; both rehearsals passed on PC-01, 16 Nov): metrics through kube-prometheus-stack, ServiceMonitors, exemplar storage, Grafana at `/grafana`.
 - 6.2 is done (`289ea11`; the GitOps, chart and pipeline rehearsals passed on PC-01, 16 Nov): Loki, Alloy with JSON parsing, Tempo with OTLP. In Grafana: log → trace, trace → log, exemplar → trace.
-- 6.3 is pushed (`cadd840`) but not yet done: its first version passed the GitOps rehearsal on PC-01 (16 Nov); the fix (`group_left`) and the three new checks were tried by hand on that cluster, but the full run of the last version did not finish before the user left the office. **First thing on the home PC: run `bash scripts/tests/bootstrap-cluster.sh`; if it passes, mark 6.3 ✅ in PROGRESS (table and section 13) and here.** What it is: the "ShopLite — Golden Signals" dashboard as JSON in Git, through Kustomize and ArgoCD; eight panels for the question plus, the user's choice, restarts, error logs and deploy marks for Q8.
-- 6.4: five alerts, runbooks, Alertmanager → Slack. It needs the user's Slack incoming webhook URL, which goes in a Secret, never in Git.
-- 6.5: the lab procedure `docs/evidence/q6/commands.md`.
+- 6.3 is done (`cadd840`; its last version passed the GitOps rehearsal with 6.4 on PC-01, 17 Nov): the "ShopLite — Golden Signals" dashboard as JSON in Git, through Kustomize and ArgoCD; eight panels for the question plus, the user's choice, restarts, error logs and deploy marks for Q8.
+- 6.4 is done (`9e65283`; the alert unit tests and the GitOps rehearsal passed on PC-01, 17 Nov): five alerts with runbooks, Alertmanager → Slack. The Slack URL is in the cluster only: `SLACK_WEBHOOK_URL` at the bootstrap.
+- 6.5 is done (`4f4002e`): the lab procedure `docs/evidence/q6/commands.md` and `scripts/loadtest.js` (k6).
+  - It was checked like Q5's. The k6 install block ran on a fresh `ubuntu:24.04`.
+  - The kubectl blocks of sections 1, 2, 3 and 5 ran verbatim from a stand-in lab machine against the kept rehearsal cluster.
+  - Its queries and the runbooks' 13 queries ran through Grafana's data sources.
+  - k6 ran for a minute against prod.
+  - Video V3's flow ran on dev: the fault through the test Git server, k6 on dev, HighErrorRate to the stand-in Slack, then log → trace.
+  - Lab pushes to shoplite-gitops go through GitHub's web editor: the lab machine has no push credentials.
 
 Then the rest of Q7, on the user's own PC:
   - lint (Hadolint, `helm lint`), tests and the Trivy gate in main;

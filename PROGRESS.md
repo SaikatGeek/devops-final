@@ -19,7 +19,7 @@
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। বাকি শুধু lab-এ চালানো |
-| Q6 | Observability | 25 | 🟡 app-এর দিক তৈরি (৬টা metric, trace, exemplar, log-এ trace_id)। 6.1-এ metrics stack: kube-prometheus-stack ArgoCD দিয়ে, ServiceMonitor, exemplar, Grafana `/grafana`-এ। 6.2-এ Loki, Alloy (JSON parse), Tempo (OTLP), আর Grafana-য় log → trace, trace → log, exemplar → trace। 6.3-এ "ShopLite — Golden Signals" dashboard (৮টা panel, আর Q8-এর জন্য restart, error log, deploy-এর দাগ) Git থেকে Kustomize দিয়ে। 6.1 আর 6.2 local k3s-এ রিহার্সাল pass; 6.3-এর শেষ সংস্করণের পুরো রিহার্সাল বাকি (বাসার PC-তে)। বাকি 6.4 alert, 6.5 পদ্ধতি |
+| Q6 | Observability | 25 | 🟡 Code আর lab-এর পদ্ধতি শেষ (6.1–6.5): metrics (kube-prometheus-stack, ServiceMonitor, exemplar), Loki, Alloy (JSON parse), Tempo (OTLP), Grafana-য় log ↔ trace আর exemplar → trace, "ShopLite — Golden Signals" dashboard, ৫টা alert আর runbook, Alertmanager → Slack, k6-এর load test, `docs/evidence/q6/commands.md`; সব ArgoCD দিয়ে, local k3s-এ রিহার্সাল pass। বাকি শুধু lab-এ চালানো |
 | Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 (root app, dev আর prod-এর Application, `envs` values), 7.2 (cluster-এর bootstrap, ArgoCD; local k3s-এ পুরো রিহার্সাল pass) 7.3 (GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push), 7.4 (main pipeline v1: build → OIDC দিয়ে ECR → gitops-এ tag; local-এ রিহার্সাল, আসল run repo ভাগের পরে) আর 7.5 (`promote`: dev-এর image Git দিয়ে prod-এ) শেষ; এরপর 5.4, তারপর Q7-এর বাকি অংশ |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
@@ -532,9 +532,9 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 |---|---|---|---|
 | 6.1 | Metrics: kube-prometheus-stack (Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics); catalog-api আর order-worker-এর ServiceMonitor; exemplar storage; Grafana ALB-র `/grafana`-এ | (a), (b) | ✅ `cb6830f` (lab-এ চালানো বাকি) |
 | 6.2 | Logs আর traces: Loki, Alloy (JSON parse), Tempo (OTLP); Grafana-তে log ↔ trace আর exemplar → trace | (a), (d) | ✅ `289ea11` (lab-এ চালানো বাকি) |
-| 6.3 | "ShopLite — Golden Signals" dashboard, JSON Git-এ | (c) | 🟡 `cadd840` (শেষ সংস্করণের পুরো রিহার্সাল বাকি) |
-| 6.4 | ৫টা alert (severity, `runbook_url`), ৫টা runbook, Alertmanager → Slack | (e) | ⬜ |
-| 6.5 | Lab-এর পদ্ধতি `docs/evidence/q6/commands.md` | সব | ⬜ |
+| 6.3 | "ShopLite — Golden Signals" dashboard, JSON Git-এ | (c) | ✅ `cadd840` (lab-এ চালানো বাকি) |
+| 6.4 | ৫টা alert (severity, `runbook_url`), ৫টা runbook, Alertmanager → Slack | (e) | ✅ `9e65283` (lab-এ চালানো বাকি) |
+| 6.5 | Lab-এর পদ্ধতি `docs/evidence/q6/commands.md`, আর k6-এর load test | সব | ✅ `4f4002e` (lab-এ চালানো বাকি) |
 
 **Chart-এর version** (16 Nov বাছা; দুই সপ্তাহের বেশি পুরনো সর্বশেষ release):
 - kube-prometheus-stack **92.17.0**, prometheus-community থেকে। এতে Prometheus Operator v0.94.2, Prometheus v3.15.1, আর Grafana chart 14.3.0।
@@ -692,8 +692,112 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
   - prod-এর web scale করার ১৯ সেকেন্ড পরে deploy-এর দাগ আসে।
 
   এই তিনটা পরীক্ষা এখন রিহার্সালেও আছে: dashboard-এর ধাপে, আর self-heal ধাপের `kubectl scale`-এর ঠিক পরে।
-- ⏳ **শেষ সংস্করণে পুরো GitOps রিহার্সাল বাকি।** অফিসে 18:06-এ শুরু হয়েছিল, user বের হওয়ার আগে শেষ হয়নি। বাসার PC-তে প্রথমে এটা চালাতে হবে; pass করলে 6.3 শেষ।
+- ✅ **শেষ সংস্করণে পুরো GitOps রিহার্সাল `PASS`** (17 Nov, অফিসের PC, ১৫.৭ মিনিট), 6.4-এর সাথে একই রানে। তিনটা নতুন check-ও pass:
+  - dev-এ "Recent error logs"-এ worker-এর ERROR line;
+  - "Restarted containers"-এ order-worker, `Completed`, restart 1;
+  - self-heal-এর `kubectl scale`-এর পরে prod-এর web-এ deploy-এর দাগ।
+
+  16 Nov সন্ধ্যার রানটা PC বন্ধ হওয়ায় metrics-এর ধাপে কেটে গিয়েছিল (কোনো FAIL নেই)।
+- 🐞 17 Nov সকালের প্রথম রান একবার থেমেছিল Grafana-র ধাপে: data source uid `prometheus`-এর proxy query সফল হয়নি। আগের রানগুলোতে এই check pass করেছিল, আর এর পরের রানেও pass করেছে। সেবার কারণ ধরার মতো তথ্য ছিল না। এখন এই check ব্যর্থ হলে Grafana-র উত্তর আর `monitoring`-এর pod-গুলো দেখায়। রানের শেষে রিহার্সাল এখন restart হওয়া সব container-এর তালিকাও দেখায়; পরের রানে সেখানে ছিল শুধু dev-এর সেই order-worker, যেটা রিহার্সাল নিজে থামায়।
 - ⏳ Lab-এ: load চলা অবস্থায় dashboard (live demo-র checkpoint), আর UI-তে exemplar ও log থেকে trace-এ click।
+
+**Step 6.4-এ কী হলো** (`9e65283`)
+- **`monitoring/alert-rules/shoplite-alerts.yaml`:** প্রশ্নের ৫টা alert, একটা PrometheusRule-এ (group `shoplite`)। প্রতিটায় `severity` label, আর `runbook_url`, যা এই repo-র runbook-এর link (`https://github.com/SaikatGeek/shoplite-app/blob/main/monitoring/runbooks/<alert>.md`)।
+
+  | Alert | শর্ত | Severity |
+  |---|---|---|
+  | HighErrorRate | route অনুযায়ী 5xx-এর ভাগ 5%-এর বেশি, ৫ মিনিট | critical |
+  | HighLatency | route অনুযায়ী p95 ১ সেকেন্ডের বেশি, ৫ মিনিট | warning |
+  | QueueBacklog | `max(order_queue_depth)` ৫০-এর বেশি, ১০ মিনিট | warning |
+  | PodCrashLooping | ১০ মিনিটে কোনো container-এর restart বেড়েছে (প্রথম restart-এই বাজে) | critical |
+  | NodeDiskFilling | node-এর `/` ৮৫%-এর বেশি ভরা, ৫ মিনিট | warning |
+
+  দুই env-ই দেখা হয়; `namespace` label বলে কোনটা। summary আর description-এ route, namespace আর মান থাকে, তাই Slack-এর message নিজেই বলে কী হয়েছে।
+- **`monitoring/runbooks/`:** ৫টা runbook, প্রতিটা alert-এর নামে। প্রতিটায় আছে:
+  - লক্ষণ আর প্রভাব;
+  - প্রথম ৫ মিনিটে dashboard-এর কোন panel আর Explore-এর কোন query (PromQL, LogQL, TraceQL);
+  - সম্ভাব্য কারণ আর সমাধান (বদল এলে Git-এ revert, তারপর ArgoCD sync);
+  - কখন ঠিক হলো বলা যাবে।
+
+  কোনো runbook-এ chaos flag-এর নাম নেই, যাতে Q8 শুধু observability দিয়েই সমাধান করতে হয়।
+- **`monitoring/alert-rules/tests/`:** promtool-এর unit test (`shoplite-alerts.test.yaml`), আর `run.sh`, যা চালায়:
+  - ৫টা alert-এর নাম আর severity প্রশ্নের table-এর সাথে মেলায়;
+  - প্রতিটা `runbook_url` আর তার runbook ফাইল আছে কি না দেখে;
+  - `promtool check rules` আর `promtool test rules` চালায়: প্রতিটা alert শুধু তার সময় পার হলে বাজে, label আর annotation সহ, আর পাশের সুস্থ series চুপ থাকে।
+- **`monitoring/kustomization.yaml`:** PrometheusRule যোগ হয়েছে। ArgoCD-র `monitoring-config` dashboard-এর সাথে এটাও বসায়।
+- **Alertmanager → Slack** (`monitoring/stack/kube-prometheus-stack.yaml`):
+  - সব alert যায় Slack-এর receiver-এ, `alertname` আর `namespace` ধরে group হয়ে; resolve হলেও message যায়;
+  - message-এ title `[FIRING] <alert> (<severity>) in <namespace>`, তারপর summary, description আর runbook-এর link;
+  - chart-এর পুরনো route আর inhibit rule সরানো (সেগুলো chart-এর default alert-এর জন্য, যা বসানো হয় না)।
+- **Webhook-এর URL Git-এ নেই।** Alertmanager পড়ে ফাইল থেকে (`api_url_file`), Secret `alertmanager-slack` (key `webhook-url`) mount করে।
+  - Secret বানায় `scripts/bootstrap-cluster.sh`, `SLACK_WEBHOOK_URL` থেকে।
+  - প্রথমবার এটা না দিলে script কিছু বদলানোর আগেই থামে।
+  - পরের রানে না দিলে আগের Secret রাখে; দিলে হালনাগাদ করে।
+  - URL কখনো screen-এ আসে না।
+- **Q5-এর পদ্ধতি:** নতুন 0.3 (Slack-এ incoming webhook বানানো একবার), আর bootstrap-এর আগে `read -rsp` দিয়ে URL নেওয়া, যাতে screen বা shell-এর history-তে না থাকে।
+- **রিহার্সাল (`scripts/tests/bootstrap-cluster.sh`):** একটা নকল Slack webhook (python-এর ছোট server, fixed IP 172.30.0.11), আর নতুন check, নিচে যাচাইয়ে।
+
+**যাচাই:**
+- ✅ `bash monitoring/alert-rules/tests/run.sh` `PASS`:
+  - ৫টা নাম আর severity প্রশ্নের table-এর সাথে মেলে, আর ৫টা runbook আছে;
+  - `promtool check rules`: ৫টা rule;
+  - `promtool test rules`: SUCCESS।
+- ✅ Mutation: ৯টা ইচ্ছাকৃত ভুল, প্রতিটায় test FAIL:
+  - HighErrorRate-এর সীমা 0.05 → 0.2;
+  - `for: 5m` → `1m`;
+  - p95 → p50;
+  - latency-র সীমা 1 → 3;
+  - queue-র `max` → `sum`;
+  - `for: 10m` → `5m`;
+  - restart-এর window 10m → 30m;
+  - disk-এর সীমা 0.85 → 0.95;
+  - critical → warning।
+- ✅ Chart থেকে render করা Alertmanager-এর config `amtool check-config` (v0.34.2)-এ SUCCESS। তাতে আছে শুধু slack receiver, URL-এর বদলে ফাইলের path। chart-এর পুরনো route আর inhibit rule নেই।
+- ✅ Kustomize বানায় ConfigMap আর PrometheusRule, দুটোই kubeconform-এ valid।
+- ✅ **GitOps রিহার্সাল** `PASS`, 6.3-এর সাথে একই রানে:
+  - bootstrap দুবার। Slack-এর Secret আসে `SLACK_WEBHOOK_URL` থেকে, দ্বিতীয়বার অপরিবর্তিত থাকে, আর URL কোথাও print হয় না।
+  - Prometheus ৫টা alert evaluate করে, severity আর runbook_url সহ।
+  - Alertmanager-এর config-এ শুধু ফাইলের path আছে, URL নেই।
+  - dev-এর order-worker restart-এর পরে নকল Slack webhook পেয়েছে `[FIRING] PodCrashLooping (critical) in shoplite-dev`, runbook-এর link সহ।
+- ✅ রানের পরে cluster রেখে আরও পরখ:
+  - message-এর title-এর link বদলে runbook-এ দেওয়া হয়েছে, কারণ default link যায় Alertmanager-এর ভেতরের ঠিকানায়। বদলটা পরীক্ষার Git server-এ push করার পরে ArgoCD ৯০ সেকেন্ডে sync করেছে।
+  - prod-এর worker restart-এর ৮৪ সেকেন্ড পরে Slack-এ নতুন message এসেছে, title-এর link runbook-এ।
+  - Runbook-এর ১৩টা query (PromQL, LogQL, TraceQL) Grafana-র data source দিয়ে চালানো হয়েছে, সবগুলো valid (HTTP 200)।
+- ⏳ Lab-এ: আসল Slack channel-এ message।
+
+**Step 6.5-এ কী হলো** (`4f4002e`)
+- **`docs/evidence/q6/commands.md`** (English, grader-এর জন্য): lab-এ Q6-এর প্রমাণ নেওয়ার পদ্ধতি। Q5-এর পদ্ধতির section 4 পর্যন্ত করার পরে, একই session-এ।
+  - 0: k6 install, checksum মিলিয়ে।
+  - 1: Grafana-র ঠিকানা আর password।
+  - 2–3 (6a, 6b): stack, data source, `up` আর ছয়টা metric, ServiceMonitor।
+  - 4–5 (6c): k6 দিয়ে prod-এ ২২ RPS, তারপর load চলা অবস্থায় dashboard, আর তার ConfigMap।
+  - 6 (6d): এক order-এর log → trace → log, আর exemplar → trace।
+  - 7 (6e): ৫টা alert rule, আর dev-এর worker একবার থামিয়ে Slack-এ পরীক্ষামূলক alert।
+  - 8: ভিডিও V3। dev-এ GitHub-এর web editor দিয়ে error-এর fault চালু, HighErrorRate বাজে, তারপর Slack → runbook → dashboard → error log → trace, ২ মিনিটের মধ্যে। শেষে আবার Git দিয়ে ঠিক করা।
+  - ১৭টা screenshot আর একটা ভিডিও।
+- **`scripts/loadtest.js`** (k6 v1.8.2, PLAN-এর বাছাই): দুটো constant-arrival-rate scenario।
+  - catalog ১৬/s (অর্ধেক তালিকা, অর্ধেক একটা product);
+  - order ৬/s, চারটা worker-এর ক্ষমতার প্রায় ৬০% (PLAN)।
+
+  হার নির্দিষ্ট থাকে, ShopLite ধীর হলেও। `BASE_URL` লাগবেই; `DURATION` (default 15m, Q8-এর শর্ত), `BROWSE_RPS`, `ORDER_RPS` বদলানো যায়।
+
+**যাচাই:**
+- ✅ k6-এর install block হুবহু একটা নতুন `ubuntu:24.04`-এ: checksum `OK`, `k6 v1.8.2`।
+- ✅ রিহার্সালের cluster রেখে, পদ্ধতির section 1, 2, 3 আর 5-এর bash block হুবহু, একটা নকল lab machine থেকে (bash, kubectl): Grafana-র password, Application, pod, ServiceMonitor, dashboard-এর ConfigMap আর তার label।
+- ✅ পদ্ধতির query-গুলো সেই cluster-এ Grafana দিয়ে:
+  - `count by (job, namespace) (up == 1)`: ১৩টা সারি;
+  - `up == 0`: ফাঁকা;
+  - ছয়টা metric: ৬টা সারি;
+  - LogQL-এ prod-এর `order created` line।
+- ✅ k6 এক মিনিট prod-এ (k6-এর Docker image, node-এর network থেকে NodePort 30080): ২২.৭ request/s, ১৩২২টা check-এর সবগুলো pass, কোনো request ব্যর্থ নয়, p95 ৪.৬ ms।
+- dev-এর values-এ ওই তিনটা লাইন দিলে chart-এর render-এ `CHAOS_ERROR_RATE: "0.2"` হয়, আর checksum বদলায় বলে pod roll করে।
+- ✅ **V3-এর পথ, রিহার্সালের cluster-এ:**
+  - পরীক্ষার Git server-এ dev-এর values-এ তিনটা লাইন commit করার পরে ArgoCD dev-এর ConfigMap বদলেছে ১২০ সেকেন্ডে, আর catalog-api roll করেছে।
+  - তারপর k6 dev-এ চলেছে (NodePort 30081)।
+  - HighErrorRate pending হয়েছে 10:46:22-এ, আর নকল Slack-এ পৌঁছেছে 10:51:56-এ: `[FIRING] HighErrorRate (critical) in shoplite-dev`, "18.86% of the requests to /orders in shoplite-dev failed with a 5xx status", title-এর link runbook-এ।
+  - dev-এর ERROR line (`request completed`, `POST /orders`, status 500) থেকে trace_id। Tempo-তে সেই trace-এ শুধু একটা span: `POST /orders` (SERVER), status ERROR, পেছনে কোনো DB বা queue span নেই। পদ্ধতি এটাই দেখতে বলে।
+  - তারপর Git-এ revert। নকল Slack-এ `[RESOLVED] HighErrorRate` এসেছে ৫৪৪ সেকেন্ড পরে; পদ্ধতিতে তাই "প্রায় ১০ মিনিট" লেখা।
+  - dev-এ k6: ২২.৫ request/s। order-এর ১৭% ব্যর্থ (fault ২০%, কিছু সময় বন্ধ ছিল)। catalog-এর ১৭টা (০.২%) ব্যর্থ হয়েছে, fault চালু আর বন্ধের সময় catalog-api-এর pod roll হওয়ার ফাঁকে।
 
 ## 7. Q7: CI/CD আর GitOps
 
@@ -928,6 +1032,8 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `cb6830f` | 2026-11-16 | Q6 step 6.1: metrics stack (kube-prometheus-stack ArgoCD দিয়ে), ServiceMonitor, exemplar, Grafana `/grafana`-এ |
 | `289ea11` | 2026-11-16 | Q6 step 6.2: Loki, Alloy (JSON parse), Tempo (OTLP) ArgoCD দিয়ে; Grafana-য় log → trace, trace → log, exemplar → trace |
 | `cadd840` | 2026-11-16 | Q6 step 6.3: "ShopLite — Golden Signals" dashboard (Kustomize, monitoring-config), Q8-এর restart, error log আর deploy-এর দাগ সহ |
+| `9e65283` | 2026-11-17 | Q6 step 6.4: ৫টা alert (PrometheusRule), ৫টা runbook, promtool-এর test, Alertmanager → Slack (URL শুধু cluster-এর Secret-এ) |
+| `4f4002e` | 2026-11-17 | Q6 step 6.5: lab-এ Q6-এর পদ্ধতি (`docs/evidence/q6/commands.md`, ভিডিও V3 সহ), k6-এর load test `scripts/loadtest.js` |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -940,7 +1046,8 @@ devops-final/
 │   ├── docker-compose.yml                ৫টা component: web, catalog-api, order-worker, postgres, redis
 │   ├── Makefile                          build, up, down, test, smoke
 │   ├── scripts/smoke-test.sh             stack চালু → readyz → order → COMPLETED
-│   ├── scripts/bootstrap-cluster.sh      নতুন cluster-এ একবার: namespace, DB-র Secret, ArgoCD, root app (Q7, 7.2)
+│   ├── scripts/bootstrap-cluster.sh      নতুন cluster-এ একবার: namespace, DB-র Secret, Grafana-র Secret, Slack-এর webhook-এর Secret, ArgoCD, root app (Q7, 7.2; Q6)
+│   ├── scripts/loadtest.js               k6-এর load test: catalog ১৬/s আর order ৬/s, নির্দিষ্ট হারে (Q6, Q8)
 │   ├── scripts/update-gitops.sh          CI: shoplite-gitops-এ এক environment-এর image registry আর tag commit ও push (Q7, 7.4)
 │   ├── scripts/tests/                    রিহার্সাল: bootstrap (local k3s, test-এর Git server, lab machine-এর tools); pipeline (actionlint, pin, update-gitops, promote)
 │   ├── .github/workflows/main.yml        main pipeline: build → OIDC দিয়ে ECR → gitops-এ dev-এর tag (Q7a; repo ভাগের পরে চলে)
@@ -948,13 +1055,16 @@ devops-final/
 │   ├── .env.example                      local-এর setting (WEB_PORT সহ); আসল .env Git-এ যায় না
 │   ├── monitoring/stack/                 Q6-এর chart-গুলোর values: kube-prometheus-stack, loki, tempo, alloy (Alloy-র log pipeline সহ); ArgoCD shoplite-gitops-এর apps/ থেকে পড়ে
 │   ├── monitoring/dashboards/            golden-signals.json: "ShopLite — Golden Signals" (Q6, 6.3)
-│   ├── monitoring/kustomization.yaml     dashboard থেকে ConfigMap (Grafana-র sidecar তোলে); ArgoCD-র monitoring-config পড়ে
+│   ├── monitoring/alert-rules/           shoplite-alerts.yaml: ৫টা alert (PrometheusRule); tests/: promtool-এর unit test আর run.sh (Q6, 6.4)
+│   ├── monitoring/runbooks/              ৫টা runbook, প্রতিটা alert-এর নামে (Q6, 6.4)
+│   ├── monitoring/kustomization.yaml     dashboard থেকে ConfigMap (Grafana-র sidecar তোলে), আর alert-এর PrometheusRule; ArgoCD-র monitoring-config পড়ে
 │   ├── helm/shoplite/                    Q5-এর chart: Chart.yaml, values.yaml, values-dev.yaml, values-prod.yaml
 │   │   ├── files/init.sql                table আর seed (Compose আর Kubernetes দুটোই এটা ব্যবহার করে)
 │   │   └── templates/                    web, catalog-api (+ PDB), order-worker (+ HPA, metrics-এর Service), postgres, redis, ingress, networkpolicy, servicemonitor, configmap, _helpers
 │   ├── helm/tests/run.sh                 chart-এর রিহার্সাল: local k3s-এ install, যাচাই, শেষে সব মোছে
 │   ├── docs/evidence/q4/commands.md      Q4 lab-এ চালানোর পদ্ধতি, প্রমাণ আর screenshot-এর তালিকা (screenshot-ও এখানে)
 │   ├── docs/evidence/q5/commands.md      Q5-এর পদ্ধতি: একবার repo ভাগ আর GitHub-এর setting; প্রতি session-এ pipeline, bootstrap, promote, prod-এর sync, প্রমাণ
+│   ├── docs/evidence/q6/commands.md      Q6-এর পদ্ধতি: k6, Grafana, ৬a–৬e-র প্রমাণ, Slack-এ alert, ভিডিও V3 (alert থেকে ব্যর্থ request)
 │   ├── linux/                            Q3
 │   │   ├── sshd_config                   root আর password login বন্ধ
 │   │   ├── systemd/                      shoplite-backup.service, .timer, .sh (রাতে pg_dump)
@@ -1088,6 +1198,12 @@ Pipeline-এর রিহার্সাল (Docker আর internet লাগে
 
 ```bash
 bash scripts/tests/pipeline.sh
+```
+
+Alert-এর unit test (Docker লাগে; ৫টা alert-এর নাম, severity আর runbook, তারপর promtool; প্রায় ১০ সেকেন্ড), `shoplite-app` থেকে:
+
+```bash
+bash monitoring/alert-rules/tests/run.sh
 ```
 
 Ansible-এর রিহার্সাল (Docker আর internet লাগে; ৩টা node-এ hardening আর k3s, দুইবার run, যাচাই, শেষে সব মোছে; ৫–১০ মিনিট), `shoplite-app` থেকে:
@@ -1244,6 +1360,16 @@ bash ansible/tests/run.sh
 - **Deploy-এর দাগ annotation হিসেবে** (6.3; Claude-এর বাছাই)। আলাদা panel-এর বদলে সব graph-এর ওপর একসাথে দেখায়, কখন deploy হলো আর তার পরে কী বদলাল।
 - **Environment বাছাই custom variable-এ** (`shoplite`, `shoplite-dev`; default prod), Prometheus থেকে খুঁজে নয়। মান দুটো নির্দিষ্ট।
 - **`monitoring-config` wave 1-এ** (6.3)। 6.4-এর PrometheusRule-এর CRD kube-prometheus-stack (wave 0) থেকে আসে।
+- **Alert Slack-এ, webhook-এর URL শুধু cluster-এ** (6.4; PLAN)।
+  - Alertmanager URL পড়ে Secret-এর ফাইল থেকে (`api_url_file`), তাই Git-এর config-এ শুধু path থাকে।
+  - Secret বানায় bootstrap, `SLACK_WEBHOOK_URL` থেকে। প্রথমবার এটা না দিলে bootstrap থামে, কারণ Slack ছাড়া alert কোথাও যেত না।
+- **error আর latency-র alert route অনুযায়ী, দুই env-এর জন্যই** (6.4; PLAN)। এক route-এর সমস্যা বাকিগুলোর গড়ে ঢাকা পড়ে না, আর `namespace` label বলে কোন env।
+- **PodCrashLooping-এ `for` নেই** (6.4; PLAN)। প্রথম restart-এই বাজে, শেষ restart-এর ১০ মিনিট পরে থামে। Q8-এ memory-র সমস্যা (OOMKilled) ধরা পড়ে সবার আগে।
+- **NodeDiskFilling শুধু `/`-এর জন্য, `for: 5m`** (6.4; PLAN)। প্রশ্ন সময় বলেনি; ৫ মিনিট একবারের ঝলকে বাজা আটকায়।
+- **Slack-এর title-এর link runbook-এ** (6.4; Claude-এর বাছাই)। default link যায় Alertmanager-এর ভেতরের ঠিকানায়, যা Slack থেকে খোলে না।
+- **Alert-এর unit test promtool দিয়ে** (6.4; Claude-এর বাছাই)। প্রশ্নের শর্ত ("৫ মিনিট ধরে", "১০ মিনিটে বাড়ছে") lab ছাড়াই যাচাই হয়। Prometheus-এর version kube-prometheus-stack-এর সাথে মেলে (v3.15.1)।
+- **load test-এর হার: catalog ১৬/s, order ৬/s** (6.5; PLAN-এর k6 আর "worker-এর ক্ষমতার ৬০–৭০%")। মোট ২২ RPS, Q8-এর "২০ বা তার বেশি"-র ওপরে। সুস্থ অবস্থায় queue ছোট থাকে; worker ধীর হলে queue বাড়ে আর QueueBacklog বাজে।
+- **V3 ভিডিও dev-এ, dev-এর values GitHub-এর web editor দিয়ে বদলে** (6.5; Claude-এর বাছাই)। lab machine-এ GitHub-এ push করার credential রাখা হয় না। prod-এর fault Q8-এ peer-এর কাজ।
 
 ## 12. জানা বিষয়
 
@@ -1322,15 +1448,12 @@ bash ansible/tests/run.sh
 
 ## 13. পরের কাজ
 
-Q5-এর code আর lab-এর পদ্ধতি শেষ (section 6); Q6-এর 6.1–6.3 শেষ (section 6b); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর, সবই নিজের PC-তে:
+Q5-এর code আর lab-এর পদ্ধতি শেষ (section 6); Q6-এর code আর lab-এর পদ্ধতি শেষ, 6.1–6.5 (section 6b); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর:
 
-0. 6.3 শেষ করা: শেষ সংস্করণে GitOps রিহার্সাল (`bash scripts/tests/bootstrap-cluster.sh`) চালানো। Pass করলে section 6b-র table-এ 6.3 ✅।
-1. Q6-এর বাকি step (section 6b):
-   - 6.4: alert, runbook আর Slack। এর জন্য user-এর Slack incoming webhook URL লাগবে, যা যাবে Secret-এ, Git-এ নয়;
-   - 6.5: lab-এর পদ্ধতি।
-2. Q7-এর বাকি অংশ: lint, test, Trivy, PR pipeline, Terraform plan-এর comment।
-3. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
+1. Q7-এর বাকি অংশ, নিজের PC-তে: lint, test, Trivy, PR pipeline, Terraform plan-এর comment।
+2. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
    - Q4: `docs/evidence/q4/commands.md`।
-   - Q5: `docs/evidence/q5/commands.md`। তার আগে একবার দুই repo ভাগ আর GitHub-এর setting (ওই ফাইলের section 0)।
-   - ভাগের পরে shoplite-gitops বদলাতে হবে তার নিজের clone-এ, কারণ CI সেখানে commit করে। shoplite-app-এর বদল devops-final থেকে আবার split করে `--force` ছাড়া push করা যায় (fast-forward)।
+   - Q5: `docs/evidence/q5/commands.md`। তার আগে একবার দুই repo ভাগ, GitHub-এর setting আর Slack-এর incoming webhook (ওই ফাইলের section 0)।
+   - Q6: `docs/evidence/q6/commands.md`, Q5-এর পদ্ধতির section 4-এর পরে, একই session-এ।
+   - ভাগের পরে shoplite-gitops বদলাতে হবে তার নিজের clone-এ (বা GitHub-এর web editor-এ), কারণ CI সেখানে commit করে। shoplite-app-এর বদল devops-final থেকে আবার split করে `--force` ছাড়া push করা যায় (fast-forward)।
