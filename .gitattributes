@@ -1,0 +1,2 @@
+# Shell scripts at the root keep LF line endings on every machine (bash fails on CRLF).
+*.sh text eol=lf
