@@ -816,7 +816,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | 7.4 | Pipeline-এর প্রথম সংস্করণ: build → OIDC দিয়ে ECR-এ push → gitops-এ tag commit | (a) | ✅ `e23bf34`, "Run workflow" বোতাম `2e538cc` (GitHub-এ প্রথম run repo ভাগের পরে) |
 | 7.5 | prod-এ তোলার workflow (`promote.yml`): dev-এর image prod-এর values-এ commit, তারপর ArgoCD-তে হাতে sync | (c) | ✅ `7d4076a` (user-এর সিদ্ধান্ত: 5.4-এর আগে) |
 | 7.6 | main pipeline-এ lint (Hadolint, `helm lint`), test আর Trivy-র gate, `scripts/ci.sh`-এর ধাপ হিসেবে | (a) | ✅ `ea44401` (GitHub-এ চালানো বাকি) |
-| 7.7 | PR pipeline (`pr.yml`): lint, test, build, scan; `terraform/` বদলালে plan PR-এ comment | (b) | ⬜ |
+| 7.7 | PR pipeline (`pr.yml`): lint, test, build, scan; `terraform/` বদলালে plan PR-এ comment (`terraform-plan.yml`, read-only plan role) | (b) | ✅ `aa4083d` (GitHub-এ চালানো বাকি) |
 | 7.8 | Lab-এর পদ্ধতি `docs/evidence/q7/commands.md`: pipeline, PR, Trivy-র লাল run, ArgoCD, self-heal, checkpoint | সব | ⬜ |
 
 **Step 7.1-এ কী হলো** (`shoplite-gitops/`, `b3b00a0`)
@@ -1024,6 +1024,47 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 - ✅ Pipeline-এর রিহার্সাল `PASS`, ৫৯ সেকেন্ডে। চারটা ইচ্ছাকৃত ভুলের প্রতিটায় FAIL: scan শুধু `LAB_ACTIVE`-এ, scan push-এর পরে, lint বাদ, Trivy শুধু tag দিয়ে।
 - ⏳ GitHub-এ আসল run: repo ভাগের পরে, lab session-এ।
 
+**Step 7.7-এ কী হলো** (`aa4083d`)
+- **`.github/workflows/pr.yml`:** main-এ আসা প্রতিটা PR-এ `scripts/ci.sh`-এর চারটা ধাপ: lint, test, build (tag `pr-<number>`), Trivy-র scan।
+  - কিছু push হয় না, কোনো AWS বা GitHub secret লাগে না; permission শুধু `contents: read`।
+  - একই PR-এ নতুন push এলে পুরনো run বাতিল হয়।
+- **`.github/workflows/terraform-plan.yml`:** main-এ আসা যে PR `terraform/` বদলায়, তার plan PR-এ comment হিসেবে।
+  - read-only plan role নেয় OIDC দিয়ে (`vars.AWS_PLAN_ROLE_ARN`); push role কখনো নয়।
+  - `scripts/terraform-plan.sh` চালায়, তারপর `gh pr comment` দিয়ে post করে (`GITHUB_TOKEN`, `pull-requests: write`)। plan ব্যর্থ হলেও comment যায়, কারণসহ।
+  - শুধু `LAB_ACTIVE` থাকলে; নইলে শুধু একটা notice।
+  - Setting: variable `AWS_PLAN_ROLE_ARN` আর `SSH_PUBLIC_KEY` (apply-এর একই key), secret `BUDGET_ALERT_EMAIL` (apply-এর একই ঠিকানা; ব্যক্তিগত, তাই secret)।
+- **`scripts/terraform-plan.sh`:**
+  - account থেকে state bucket বের করে (`shoplite-tfstate-<account>-<region>`);
+  - pin করা `hashicorp/terraform:1.17.2`-এ `init`, তারপর `plan -lock=false -input=false`, যাতে state-এ কিছু লেখা না হয়;
+  - comment-এ থাকে summary (`Plan: ...` বা `No changes.`) আর পুরো output ভাঁজ করা অবস্থায় (শেষের ৬০,০০০ অক্ষর; GitHub-এর সীমা ৬৫,৫৩৬);
+  - init বা plan ব্যর্থ হলে comment লিখে তারপর non-zero দিয়ে বের হয়।
+- **Terraform (`modules/github-oidc`):** নতুন role `shoplite-github-plan`। trust শুধু `repo:SaikatGeek/shoplite-app:pull_request` (exact match), policy AWS-এর `ReadOnlyAccess`। output `plan_role_arn`, root-এ `ci_plan_role_arn`। CI role অপরিবর্তিত, শুধু main।
+- **রিহার্সাল (`scripts/tests/pipeline.sh`):**
+  - দুই PR workflow-এর trigger;
+  - `pr.yml`-এ চারটা check, কোনো AWS action নেই, permission শুধু `contents: read`;
+  - `terraform-plan.yml`-এ role শুধু `AWS_PLAN_ROLE_ARN`, আর ঠিক এই তিনটা permission;
+  - কোনো PR workflow-এ `AWS_ROLE_ARN` বা `GITOPS_DEPLOY_KEY` নেই;
+  - plan চলে `-lock=false`-এ;
+  - AWS ছাড়া plan script comment লেখে আর fail করে।
+
+**যাচাই:**
+- ✅ `terraform fmt -check`, `validate`; module-এর ১০টা আর root-এর ১০টা test pass।
+- ✅ IAM-এর mutation: ছয়টা ইচ্ছাকৃত ভুল, প্রতিটায় test FAIL:
+  - plan role-এ wildcard;
+  - plan role-কে main trust করা;
+  - CI role-কে PR trust করা;
+  - `AdministratorAccess`;
+  - push policy plan role-এ;
+  - নাম বদলানো।
+- ✅ actionlint আর shellcheck পরিষ্কার।
+- ✅ Pipeline-এর রিহার্সাল `PASS`, ৭০ সেকেন্ডে। পাঁচটা ইচ্ছাকৃত ভুলের প্রতিটায় FAIL:
+  - plan-এ CI role;
+  - `pr.yml`-এ `id-token`;
+  - `pr.yml` থেকে scan বাদ;
+  - plan-এ lock;
+  - `pr.yml` সব branch-এ।
+- ⏳ Lab-এ: GitHub-এ দুটো PR (একটা সাধারণ, একটা `terraform/` বদলে) আর plan-এর comment।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -1064,6 +1105,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `9e65283` | 2026-11-17 | Q6 step 6.4: ৫টা alert (PrometheusRule), ৫টা runbook, promtool-এর test, Alertmanager → Slack (URL শুধু cluster-এর Secret-এ) |
 | `4f4002e` | 2026-11-17 | Q6 step 6.5: lab-এ Q6-এর পদ্ধতি (`docs/evidence/q6/commands.md`, ভিডিও V3 সহ), k6-এর load test `scripts/loadtest.js` |
 | `ea44401` | 2026-11-17 | Q7 step 7.6: main pipeline-এ lint (Hadolint, helm lint), test, Trivy-র gate (`scripts/ci.sh`); Dockerfile-এ Hadolint-এর fix, web-এ brotli-libs-এর CRITICAL-এর fix |
+| `aa4083d` | 2026-11-17 | Q7 step 7.7: PR pipeline (`pr.yml`), PR-এ Terraform plan-এর comment (`terraform-plan.yml`, `scripts/terraform-plan.sh`), read-only plan role (Terraform) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
