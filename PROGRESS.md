@@ -815,7 +815,9 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | 7.3 | Terraform-এ GitHub OIDC: CI-এর IAM role, শুধু তিনটা ECR repo-তে push | (a) | ✅ `ac8e1b3` |
 | 7.4 | Pipeline-এর প্রথম সংস্করণ: build → OIDC দিয়ে ECR-এ push → gitops-এ tag commit | (a) | ✅ `e23bf34`, "Run workflow" বোতাম `2e538cc` (GitHub-এ প্রথম run repo ভাগের পরে) |
 | 7.5 | prod-এ তোলার workflow (`promote.yml`): dev-এর image prod-এর values-এ commit, তারপর ArgoCD-তে হাতে sync | (c) | ✅ `7d4076a` (user-এর সিদ্ধান্ত: 5.4-এর আগে) |
-| পরে | Q7-এর বাকি: lint (Hadolint, `helm lint`), test, Trivy, PR pipeline, Terraform plan-এর comment, self-heal-এর প্রমাণ | (a), (b), (d) | ⬜ |
+| 7.6 | main pipeline-এ lint (Hadolint, `helm lint`), test আর Trivy-র gate, `scripts/ci.sh`-এর ধাপ হিসেবে | (a) | ✅ `ea44401` (GitHub-এ চালানো বাকি) |
+| 7.7 | PR pipeline (`pr.yml`): lint, test, build, scan; `terraform/` বদলালে plan PR-এ comment | (b) | ⬜ |
+| 7.8 | Lab-এর পদ্ধতি `docs/evidence/q7/commands.md`: pipeline, PR, Trivy-র লাল run, ArgoCD, self-heal, checkpoint | সব | ⬜ |
 
 **Step 7.1-এ কী হলো** (`shoplite-gitops/`, `b3b00a0`)
 - **`bootstrap/root-app.yaml`:** root Application ("app of apps")। Cluster বানানোর সময় শুধু এটা একবার হাতে বসানো হবে; এরপর `apps/`-এর সব Application ArgoCD নিজেই Git থেকে বানায় আর বদলায়।
@@ -995,6 +997,33 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
   আগের workflow-এর ভুলগুলোও (ভুল SHA, ভুল version-এর comment, input-এর বানান, নেই এমন output, বোতাম মোছা, সব branch) নতুন loop-এ আবার fail করেছে।
 - ⏳ GitHub-এ আসল run: repo ভাগের পরে, lab session-এ।
 
+**Step 7.6-এ কী হলো** (`ea44401`)
+- **`scripts/ci.sh`:** দুই pipeline-এর check, এক একটা ধাপ এক একবার ডাকলে। GitHub Actions আর যেকোনো Docker-ওয়ালা machine ঠিক একই command চালায়।
+  - `lint`: তিনটা Dockerfile-এ Hadolint, আর chart-এর `helm lint --strict`, dev আর prod-এর values দিয়ে।
+  - `test`: তিন service-এর unit test (তাদের Docker test stage চালিয়ে), আর alert-এর promtool test।
+  - `build <tag>`: তিনটা runtime image, `shoplite/<service>:<tag>`।
+  - `scan <tag>`: তিনটা image-এ Trivy। কোনোটায় CRITICAL থাকলে fail, তবে আগে তিনটাই scan করে, যাতে এক রানেই সব দেখা যায়।
+
+  সব tool চলে digest দিয়ে pin করা image থেকে: Hadolint v2.15.1, Helm 4.3.1, Trivy v0.76.1 (দুই সপ্তাহের বেশি পুরনো সর্বশেষ release)। tag সরানো যায়, digest যায় না; PLAN-এর `trivy-action`-এর tag hijack-এর কথা মনে রেখে action-এর বদলে image।
+- **`.github/workflows/main.yml`:** build-এর আগে lint আর test, build-এর পরে scan, তারপর আগের মতো OIDC → ECR → gitops। যে image push হয়, scan হয় ঠিক সেটাই, একই job-এ। চারটা check সব সময় চলে, `LAB_ACTIVE` থাকুক বা না থাকুক।
+- **Dockerfile:** Hadolint-এর আপত্তি ঠিক করা হয়েছে।
+  - তিনটার `HEALTHCHECK` এখন JSON রূপে (DL3025)। busybox-এর wget connection refused আর HTTP 500-এ নিজেই 1 দিয়ে বের হয়, তাই `|| exit 1` লাগে না।
+  - web-এর runtime stage-এ `brotli-libs=1.2.1-r0` (version pin করা, DL3018)। base image `nginx-unprivileged:1.30.6-alpine`-এর brotli-libs 1.2.0-r1-এ CRITICAL CVE-2026-111497 আছে, আর nginx-unprivileged-এর কোনো tag-এ এখনো নতুন build নেই (সব 19 Oct-এর)। base image ঠিক হলে লাইন দুটো তুলে দিতে হবে।
+  - `USER 0` দিয়ে install, তারপর আবার `USER 101`। সংখ্যায় লেখা, কারণ Hadolint নামে লেখা user চায় না (DL3066)।
+- **রিহার্সাল (`scripts/tests/pipeline.sh`):**
+  - main-এর lint, test, build আর scan সব সময় চলে, আর AWS-এর যেকোনো ধাপের আগে;
+  - `ci.sh`-এর প্রতিটা image digest দিয়ে pin করা, আর সেই digest registry-তে আছে;
+  - `ci.sh`-এর চারটা ধাপ এখানে চালানো হয়;
+  - web-এর ঠিক না করা base image দিলে scan fail করে, তিনটাই scan করে, আর web-এর নাম বলে।
+
+**যাচাই:**
+- ✅ Hadolint-এ তিনটা Dockerfile পরিষ্কার। `helm lint --strict` দুই values-এ।
+- ✅ Unit test: web-এর ১৫টা check, catalog-api ৪৮টা, order-worker ২৯টা, আর alert-এর promtool test।
+- ✅ Trivy: আগে web-এ ১টা CRITICAL (brotli-libs), fix-এর পরে তিনটা image-ই ০। web চলে uid 101-এ; আকার ৬৫.৭ MB (আগে ৬৪.৬)।
+- ✅ আলাদা compose project-এ (`shoplite-ci`, port 8099) নতুন image দিয়ে পাঁচটা service healthy, smoke test `PASS`। user-এর নিজের stack অপরিবর্তিত।
+- ✅ Pipeline-এর রিহার্সাল `PASS`, ৫৯ সেকেন্ডে। চারটা ইচ্ছাকৃত ভুলের প্রতিটায় FAIL: scan শুধু `LAB_ACTIVE`-এ, scan push-এর পরে, lint বাদ, Trivy শুধু tag দিয়ে।
+- ⏳ GitHub-এ আসল run: repo ভাগের পরে, lab session-এ।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -1034,6 +1063,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `cadd840` | 2026-11-16 | Q6 step 6.3: "ShopLite — Golden Signals" dashboard (Kustomize, monitoring-config), Q8-এর restart, error log আর deploy-এর দাগ সহ |
 | `9e65283` | 2026-11-17 | Q6 step 6.4: ৫টা alert (PrometheusRule), ৫টা runbook, promtool-এর test, Alertmanager → Slack (URL শুধু cluster-এর Secret-এ) |
 | `4f4002e` | 2026-11-17 | Q6 step 6.5: lab-এ Q6-এর পদ্ধতি (`docs/evidence/q6/commands.md`, ভিডিও V3 সহ), k6-এর load test `scripts/loadtest.js` |
+| `ea44401` | 2026-11-17 | Q7 step 7.6: main pipeline-এ lint (Hadolint, helm lint), test, Trivy-র gate (`scripts/ci.sh`); Dockerfile-এ Hadolint-এর fix, web-এ brotli-libs-এর CRITICAL-এর fix |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
