@@ -41,6 +41,9 @@ echo "==> promtool check rules and test rules ($PROMETHEUS_IMAGE)"
 # promtool reads plain rule files: the PrometheusRule's spec.
 yq '.spec' <"$RULES" >"$WORK/shoplite-alerts.rules.yaml"
 cp monitoring/alert-rules/tests/shoplite-alerts.test.yaml "$WORK/"
+# mktemp makes the folder private (0700); the Prometheus image runs as nobody, which must read
+# it. (Docker Desktop on Windows ignores the mode, a Linux runner does not.)
+chmod -R a+rX "$WORK"
 WORK_HOST=$(cd "$WORK" && (pwd -W 2>/dev/null || pwd))
 promtool() { docker run --rm -v "$WORK_HOST:/t:ro" -w /t --entrypoint promtool "$PROMETHEUS_IMAGE" "$@"; }
 promtool check rules shoplite-alerts.rules.yaml
