@@ -137,6 +137,11 @@ run "github_actions_gets_a_role_to_push_the_images" {
     condition     = output.ci_role_arn == "arn:aws:iam::123456789012:role/shoplite-example"
     error_message = "The root configuration must create the CI role and expose its ARN as ci_role_arn."
   }
+
+  assert {
+    condition     = output.ci_plan_role_arn == "arn:aws:iam::123456789012:role/shoplite-example"
+    error_message = "The root configuration must create the read-only plan role and expose its ARN as ci_plan_role_arn."
+  }
 }
 
 run "budget_alarm_at_20_usd" {

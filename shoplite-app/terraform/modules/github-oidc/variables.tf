@@ -4,7 +4,7 @@ variable "name" {
 }
 
 variable "github_repository" {
-  description = "The GitHub repository (owner/name) whose main-branch workflows may take the role."
+  description = "The GitHub repository (owner/name): its main-branch runs may take the CI role, its pull-request runs the plan role."
   type        = string
 
   validation {

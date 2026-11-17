@@ -1,0 +1,48 @@
+# Pull-request pipeline (question 7b). Every pull request to main gets the main pipeline's
+# checks (scripts/ci.sh): lint (Hadolint, helm lint), the unit tests, the build of the three
+# images and their Trivy scan (any CRITICAL vulnerability fails the check). Nothing is pushed
+# and no AWS or GitHub secret is used. A change under terraform/ also gets its plan as a
+# comment, from terraform-plan.yml.
+name: pr
+
+on:
+  pull_request:
+    branches: [main]
+
+# A newer push to the same pull request replaces the older run.
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: lint, test, build, scan
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Image tag (pr-<number>)
+        id: tag
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: echo "tag=pr-$PR" >> "$GITHUB_OUTPUT"
+
+      - name: Lint (Hadolint, helm lint)
+        run: bash scripts/ci.sh lint
+
+      - name: Unit tests
+        run: bash scripts/ci.sh test
+
+      - name: Build the images
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: bash scripts/ci.sh build "$TAG"
+
+      - name: Scan the images with Trivy (fails on CRITICAL)
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: bash scripts/ci.sh scan "$TAG"

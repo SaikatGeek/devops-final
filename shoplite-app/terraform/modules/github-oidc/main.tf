@@ -1,8 +1,11 @@
-# GitHub Actions in AWS without stored keys (question 7a). Every workflow run gets a
+# GitHub Actions in AWS without stored keys (question 7). Every workflow run gets a
 # short-lived OpenID Connect token from GitHub; AWS trusts GitHub as an identity provider and
-# exchanges that token for temporary credentials of the CI role. Only runs on the main
-# branch of one repository can do this, and the role may only push images to the given ECR
-# repositories.
+# exchanges that token for temporary credentials of a role. Two roles, each for one kind of
+# run of one repository:
+#   - the CI role (7a): runs on the main branch; it may only push images to the given ECR
+#     repositories;
+#   - the plan role (7b): runs for pull requests; it may only read, for terraform plan.
+# A pull request never gets the CI role.
 
 # AWS trusts tokens signed by GitHub Actions. AWS checks GitHub's certificate itself, so no
 # thumbprint is pinned here.
@@ -61,4 +64,32 @@ resource "aws_iam_role_policy" "ecr_push" {
       },
     ]
   })
+}
+
+# The plan role. Only a token for a pull_request run in the given repository can take it
+# (exact match, no wildcard): the pull-request pipeline posts the Terraform plan with it.
+resource "aws_iam_role" "plan" {
+  name        = "${var.name}-github-plan"
+  description = "GitHub Actions of ${var.github_repository}, pull requests: terraform plan, read-only"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:pull_request"
+        }
+      }
+    }]
+  })
+}
+
+# Read only: AWS's managed ReadOnlyAccess covers what the plan refreshes (EC2, ELB, ECR, IAM,
+# Budgets) and the state in S3. The plan runs with -lock=false, so it writes no lock file.
+resource "aws_iam_role_policy_attachment" "plan_read_only" {
+  role       = aws_iam_role.plan.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }

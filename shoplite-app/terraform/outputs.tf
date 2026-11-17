@@ -57,3 +57,8 @@ output "ci_role_arn" {
   description = "The role GitHub Actions takes through OIDC to push the images (role-to-assume in shoplite-app's workflows)."
   value       = module.github_oidc.role_arn
 }
+
+output "ci_plan_role_arn" {
+  description = "The read-only role the pull-request pipeline takes through OIDC for terraform plan (variable AWS_PLAN_ROLE_ARN)."
+  value       = module.github_oidc.plan_role_arn
+}

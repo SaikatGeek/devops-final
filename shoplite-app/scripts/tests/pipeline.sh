@@ -54,7 +54,7 @@ step "actionlint on the workflows (with shellcheck on their run steps), shellche
 docker run --rm -v "$HOST_DIR:/repo:ro" -w /repo "$ACTIONLINT_IMAGE" -no-color .github/workflows/*.yml ||
   fail "actionlint found problems"
 docker run --rm -v "$HOST_DIR:/repo:ro" -w /repo --entrypoint shellcheck "$ACTIONLINT_IMAGE" \
-  scripts/update-gitops.sh scripts/ci.sh scripts/tests/pipeline.sh || fail "shellcheck found problems"
+  scripts/update-gitops.sh scripts/ci.sh scripts/terraform-plan.sh scripts/tests/pipeline.sh || fail "shellcheck found problems"
 echo "ok    no findings"
 
 step "starting a stand-in for GitHub's runner (bash, git, yq)"
@@ -71,8 +71,51 @@ check() { # file, yq expression, the JSON it must give
 check main.yml '.on | keys | sort' '["push","workflow_dispatch"]'
 check main.yml '.on.push' '{"branches":["main"]}'
 check promote.yml '.on' '{"workflow_dispatch":null}'
-echo "ok    main: push to main, workflow_dispatch; promote: workflow_dispatch"
+check pr.yml '.on' '{"pull_request":{"branches":["main"]}}'
+check terraform-plan.yml '.on' '{"pull_request":{"branches":["main"],"paths":["terraform/**"]}}'
+echo "ok    main: push to main, workflow_dispatch; promote: workflow_dispatch; pr: pull requests to main; terraform-plan: pull requests to main that change terraform/"
 EOF
+
+step "the pull-request workflows: pr runs the checks with no credentials; terraform-plan takes only the read-only plan role"
+on_runner <<'EOF' || fail "a pull-request workflow can reach more than it should"
+cd /app/.github/workflows
+check() { # file, yq expression, the JSON it must give
+  got=$(yq -o=json -I=0 "$2" "$1")
+  [ "$got" = "$3" ] || { echo "$1: $2 is $got, not $3"; exit 1; }
+}
+# shellcheck disable=SC2016 # "$TAG" is the steps' own text
+check pr.yml '[.jobs[].steps[].run // "" | select(test("scripts/ci.sh"))]' '["bash scripts/ci.sh lint","bash scripts/ci.sh test","bash scripts/ci.sh build \"$TAG\"","bash scripts/ci.sh scan \"$TAG\""]'
+check pr.yml '[.jobs[].steps[].uses // "" | select(test("aws-actions"))] | length' '0'
+check pr.yml '[.permissions, .jobs[].permissions // {}]' '[{"contents":"read"},{}]'
+# shellcheck disable=SC2016 # GitHub's expression, not the shell's
+check terraform-plan.yml '[.jobs.plan.steps[].with."role-to-assume" // ""] | map(select(. != ""))' '["${{ vars.AWS_PLAN_ROLE_ARN }}"]'
+check terraform-plan.yml '.jobs.plan.permissions' '{"contents":"read","id-token":"write","pull-requests":"write"}'
+for file in pr.yml terraform-plan.yml; do
+  if grep -n -E 'AWS_ROLE_ARN|GITOPS_DEPLOY_KEY' "$file"; then
+    echo "$file must never use the CI role or the gitops deploy key"
+    exit 1
+  fi
+done
+grep -q -- '-lock=false' /app/scripts/terraform-plan.sh || { echo "terraform plan must not lock the state"; exit 1; }
+echo "ok    pr: the four checks, no AWS, contents: read only; terraform-plan: role AWS_PLAN_ROLE_ARN only, -lock=false; neither names the CI role or the deploy key"
+EOF
+
+step "scripts/terraform-plan.sh without AWS credentials: it still writes the comment, and fails"
+stub=$(mktemp -d)
+printf '#!/bin/sh\necho 123456789012\n' >"$stub/aws"
+chmod +x "$stub/aws"
+if env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN PATH="$stub:$PATH" \
+  bash scripts/terraform-plan.sh "$stub/plan.md" >"$WORKLOG" 2>&1; then
+  rm -rf "$stub"
+  fail "scripts/terraform-plan.sh succeeded with no AWS credentials"
+fi
+if ! grep -q '^\*\*The plan failed\*\* (exit [1-9]' "$stub/plan.md" || ! grep -q '^### Terraform plan of terraform/' "$stub/plan.md"; then
+  cat "$stub/plan.md"
+  rm -rf "$stub"
+  fail "the failed plan's comment is not as expected"
+fi
+echo "ok    no credentials: exit non-zero, and the comment says the plan failed and shows the output's end"
+rm -rf "$stub"
 
 step "main's checks: lint, tests, build and the Trivy scan always run, before anything reaches AWS"
 on_runner <<'EOF' || fail "main's checks are missing, conditional, or after a step that reaches AWS"

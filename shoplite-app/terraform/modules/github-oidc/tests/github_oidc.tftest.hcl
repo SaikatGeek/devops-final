@@ -115,6 +115,52 @@ run "the_role_may_only_log_in_and_push_to_the_given_repositories" {
   }
 }
 
+run "only_pull_requests_of_the_repository_can_take_the_plan_role" {
+  command = apply
+
+  assert {
+    condition     = aws_iam_role.plan.name == "shoplite-github-plan"
+    error_message = "The plan role must be called <name>-github-plan."
+  }
+
+  assert {
+    condition = alltrue([
+      length(jsondecode(aws_iam_role.plan.assume_role_policy).Statement) == 1,
+      jsondecode(aws_iam_role.plan.assume_role_policy).Statement[0].Effect == "Allow",
+      jsondecode(aws_iam_role.plan.assume_role_policy).Statement[0].Action == "sts:AssumeRoleWithWebIdentity",
+      jsondecode(aws_iam_role.plan.assume_role_policy).Statement[0].Principal == { Federated = aws_iam_openid_connect_provider.github.arn },
+    ])
+    error_message = "Only a web identity from the GitHub identity provider may take the plan role, in one statement."
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_role.plan.assume_role_policy).Statement[0].Condition == {
+      StringEquals = {
+        "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+        "token.actions.githubusercontent.com:sub" = "repo:SaikatGeek/shoplite-app:pull_request"
+      }
+    }
+    error_message = "The plan role's token must match exactly (no wildcard): audience sts.amazonaws.com, a pull request of SaikatGeek/shoplite-app."
+  }
+}
+
+run "the_plan_role_may_only_read" {
+  command = apply
+
+  assert {
+    condition = alltrue([
+      aws_iam_role_policy_attachment.plan_read_only.role == aws_iam_role.plan.name,
+      aws_iam_role_policy_attachment.plan_read_only.policy_arn == "arn:aws:iam::aws:policy/ReadOnlyAccess",
+    ])
+    error_message = "The plan role must have AWS's ReadOnlyAccess, nothing that writes."
+  }
+
+  assert {
+    condition     = aws_iam_role_policy.ecr_push.role != aws_iam_role.plan.name
+    error_message = "The push policy must never belong to the plan role."
+  }
+}
+
 run "outputs_name_the_role_and_the_identity_provider" {
   command = apply
 
@@ -126,6 +172,11 @@ run "outputs_name_the_role_and_the_identity_provider" {
   assert {
     condition     = output.oidc_provider_arn == aws_iam_openid_connect_provider.github.arn
     error_message = "oidc_provider_arn must be the GitHub identity provider's ARN."
+  }
+
+  assert {
+    condition     = output.plan_role_arn == aws_iam_role.plan.arn
+    error_message = "plan_role_arn must be the plan role's ARN."
   }
 }
 
