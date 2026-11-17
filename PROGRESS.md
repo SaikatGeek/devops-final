@@ -20,7 +20,7 @@
 | Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। বাকি শুধু lab-এ চালানো |
 | Q6 | Observability | 25 | 🟡 Code আর lab-এর পদ্ধতি শেষ (6.1–6.5): metrics (kube-prometheus-stack, ServiceMonitor, exemplar), Loki, Alloy (JSON parse), Tempo (OTLP), Grafana-য় log ↔ trace আর exemplar → trace, "ShopLite — Golden Signals" dashboard, ৫টা alert আর runbook, Alertmanager → Slack, k6-এর load test, `docs/evidence/q6/commands.md`; সব ArgoCD দিয়ে, local k3s-এ রিহার্সাল pass। বাকি শুধু lab-এ চালানো |
-| Q7 | CI/CD, GitOps | 10 | 🟡 GitOps-এর ভিত চলছে (PLAN Phase 6, Q5-এর lab-এর আগে লাগে): 7.1 (root app, dev আর prod-এর Application, `envs` values), 7.2 (cluster-এর bootstrap, ArgoCD; local k3s-এ পুরো রিহার্সাল pass) 7.3 (GitHub OIDC-এর role, শুধু তিনটা ECR repo-তে push), 7.4 (main pipeline v1: build → OIDC দিয়ে ECR → gitops-এ tag; local-এ রিহার্সাল, আসল run repo ভাগের পরে) আর 7.5 (`promote`: dev-এর image Git দিয়ে prod-এ) শেষ; এরপর 5.4, তারপর Q7-এর বাকি অংশ |
+| Q7 | CI/CD, GitOps | 10 | 🟡 Code আর lab-এর পদ্ধতি শেষ (7.1–7.8): shoplite-gitops (root app, dev auto-sync আর self-heal, prod manual), cluster-এর bootstrap আর ArgoCD, GitHub OIDC-এর দুই role (CI-র push, PR-এর read-only plan), main pipeline (lint, test, build, Trivy-র gate, ECR, gitops-এ tag), PR pipeline আর Terraform plan-এর comment, `promote`, `docs/evidence/q7/commands.md`; সব local-এ রিহার্সাল করা। বাকি repo ভাগ আর lab-এ চালানো |
 | Q8 | Chaos, RCA | 10 | ⬜ chaos flag-এর code তৈরি (Step 7); exercise আর RCA lab-এ |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
 
@@ -817,7 +817,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | 7.5 | prod-এ তোলার workflow (`promote.yml`): dev-এর image prod-এর values-এ commit, তারপর ArgoCD-তে হাতে sync | (c) | ✅ `7d4076a` (user-এর সিদ্ধান্ত: 5.4-এর আগে) |
 | 7.6 | main pipeline-এ lint (Hadolint, `helm lint`), test আর Trivy-র gate, `scripts/ci.sh`-এর ধাপ হিসেবে | (a) | ✅ `ea44401` (GitHub-এ চালানো বাকি) |
 | 7.7 | PR pipeline (`pr.yml`): lint, test, build, scan; `terraform/` বদলালে plan PR-এ comment (`terraform-plan.yml`, read-only plan role) | (b) | ✅ `aa4083d` (GitHub-এ চালানো বাকি) |
-| 7.8 | Lab-এর পদ্ধতি `docs/evidence/q7/commands.md`: pipeline, PR, Trivy-র লাল run, ArgoCD, self-heal, checkpoint | সব | ⬜ |
+| 7.8 | Lab-এর পদ্ধতি `docs/evidence/q7/commands.md`: pipeline, PR, Trivy-র লাল run, ArgoCD, self-heal, checkpoint | সব | ✅ `6d8bd3c` (lab-এ চালানো বাকি) |
 
 **Step 7.1-এ কী হলো** (`shoplite-gitops/`, `b3b00a0`)
 - **`bootstrap/root-app.yaml`:** root Application ("app of apps")। Cluster বানানোর সময় শুধু এটা একবার হাতে বসানো হবে; এরপর `apps/`-এর সব Application ArgoCD নিজেই Git থেকে বানায় আর বদলায়।
@@ -1065,6 +1065,24 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
   - `pr.yml` সব branch-এ।
 - ⏳ Lab-এ: GitHub-এ দুটো PR (একটা সাধারণ, একটা `terraform/` বদলে) আর plan-এর comment।
 
+**Step 7.8-এ কী হলো** (`6d8bd3c`)
+- **`docs/evidence/q7/commands.md`** (English, grader-এর জন্য): lab-এ Q7-এর প্রমাণ, Q5-এর পদ্ধতির section 4-এর পরে, একই session-এ।
+  - 0: PR-এর plan-এর setting। secret `BUDGET_ALERT_EMAIL` একবার। variable `SSH_PUBLIC_KEY` আর `AWS_PLAN_ROLE_ARN` প্রতি session-এ, কারণ lab machine আর তার key নতুন।
+  - 1 (7a): সবুজ main run, তার ধাপের ক্রম; ECR-এর tag আর main-এর short SHA মেলানো; shoplite-gitops-এ CI-র commit।
+  - 2 (7a): Trivy-র লাল run। একটা PR, যাতে web-এর Dockerfile থেকে brotli-র fix সরানো; `pr` check fail করে CVE-2026-111497 দিয়ে। PR merge হয় না।
+  - 3 (7b): একটা সাধারণ PR আর সবুজ check। একটা `terraform/` বদলের PR (budget 20 → 25): `pr` আর `terraform-plan` দুটোই চলে, আর comment-এ "Plan: 0 to add, 1 to change, 0 to destroy."।
+  - 4 (7c): দুই Application-এর sync policy, terminal আর ArgoCD-তে।
+  - 5 (7d): `kubectl edit` দিয়ে dev-এর web-এর replicas বদলানো; ArgoCD ফিরিয়ে আনে। ভিডিও V5।
+  - 6: checkpoint। title বদলে devops-final থেকে split আর push, তারপর pipeline → gitops → ArgoCD → browser, কোনো deploy command ছাড়া। ভিডিও V4।
+  - ১১টা screenshot আর দুটো ভিডিও।
+- **PR-গুলো কখনো merge হয় না** (Claude-এর বাছাই)। GitHub-এর web editor-এ নতুন branch-এ বানানো, পরে বন্ধ করা। shoplite-app-এর main এগোয় শুধু devops-final থেকে আবার split-এ; merge হলে split-এর fast-forward ভেঙে যেত।
+
+**যাচাই:**
+- ✅ Section 4-এর kubectl block হুবহু একটা ছোট k3s-এ (`rancher/k3s:v1.37.2-k3s1`, ArgoCD chart 10.11.6-এর Application CRD, shoplite-gitops-এর dev আর prod Application): dev-এ `map[prune:true selfHeal:true]`, prod-এ `<none>`।
+- ✅ Section 5-এর `kubectl edit`, nano-র বদলে একটা sed editor দিয়ে: replicas 2 → 5। ArgoCD-র ফিরিয়ে আনা GitOps রিহার্সালে প্রতিবার যাচাই হয়।
+- ✅ Section 1-এর `aws ecr describe-images` credential ছাড়া চালানো হয়েছে: শুধু "Unable to locate credentials"-এ থামে, মানে argument ঠিক। তার `--query` jmespath 1.0.1-এ API-র আকারের নমুনায় tag-গুলো দেয়।
+- Split-এর command Q5-এর পদ্ধতির section 0.1-এর, যা আগেই যাচাই করা।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -1106,6 +1124,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `4f4002e` | 2026-11-17 | Q6 step 6.5: lab-এ Q6-এর পদ্ধতি (`docs/evidence/q6/commands.md`, ভিডিও V3 সহ), k6-এর load test `scripts/loadtest.js` |
 | `ea44401` | 2026-11-17 | Q7 step 7.6: main pipeline-এ lint (Hadolint, helm lint), test, Trivy-র gate (`scripts/ci.sh`); Dockerfile-এ Hadolint-এর fix, web-এ brotli-libs-এর CRITICAL-এর fix |
 | `aa4083d` | 2026-11-17 | Q7 step 7.7: PR pipeline (`pr.yml`), PR-এ Terraform plan-এর comment (`terraform-plan.yml`, `scripts/terraform-plan.sh`), read-only plan role (Terraform) |
+| `6d8bd3c` | 2026-11-17 | Q7 step 7.8: lab-এ Q7-এর পদ্ধতি (`docs/evidence/q7/commands.md`: pipeline, Trivy-র লাল run, PR আর plan-এর comment, ArgoCD, self-heal, checkpoint) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -1520,12 +1539,14 @@ bash ansible/tests/run.sh
 
 ## 13. পরের কাজ
 
-Q5-এর code আর lab-এর পদ্ধতি শেষ (section 6); Q6-এর code আর lab-এর পদ্ধতি শেষ, 6.1–6.5 (section 6b); Q7-এর 7.1–7.5 শেষ (section 7): GitOps-এর ভিত, pipeline-এর প্রথম সংস্করণ আর prod-এ তোলার `promote`। এরপর:
+Q1–Q7-এর code শেষ; Q3–Q7-এর lab-এর পদ্ধতিও শেষ (section 4, 5, 6, 6b, 7)। এরপর:
 
-1. Q7-এর বাকি অংশ, নিজের PC-তে: lint, test, Trivy, PR pipeline, Terraform plan-এর comment।
-2. তারপর AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
+1. Q8-এর পদ্ধতি (`docs/evidence/q8/commands.md`) আর RCA-র কাঠামো (`docs/RCA.md`), নিজের PC-তে। প্রশ্নের structure-এ `docs/RCA` আছে; RCA-র লেখা আসবে lab-এর exercise থেকে।
+2. দুই repo ভাগ আর GitHub-এর setting (Q5-এর পদ্ধতির section 0), নিজের PC থেকে। তারপর থেকে shoplite-app-এর বদল devops-final থেকে আবার split করে `--force` ছাড়া push (fast-forward)। shoplite-gitops বদলাতে হবে তার নিজের clone-এ বা GitHub-এর web editor-এ, কারণ CI সেখানে commit করে।
+3. AWS lab-এ চালানো আর প্রমাণ: Q3 → Q4 → Q5 → Q6 → Q7 → Q8 (PLAN.md section 4)।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
    - Q4: `docs/evidence/q4/commands.md`।
    - Q5: `docs/evidence/q5/commands.md`। তার আগে একবার দুই repo ভাগ, GitHub-এর setting আর Slack-এর incoming webhook (ওই ফাইলের section 0)।
    - Q6: `docs/evidence/q6/commands.md`, Q5-এর পদ্ধতির section 4-এর পরে, একই session-এ।
-   - ভাগের পরে shoplite-gitops বদলাতে হবে তার নিজের clone-এ (বা GitHub-এর web editor-এ), কারণ CI সেখানে commit করে। shoplite-app-এর বদল devops-final থেকে আবার split করে `--force` ছাড়া push করা যায় (fast-forward)।
+   - Q7: `docs/evidence/q7/commands.md`, একই session-এ।
+   - Q8: chaos-এর exercise আর RCA (ধাপ ১-এর পদ্ধতি)।

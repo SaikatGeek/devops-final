@@ -372,10 +372,14 @@ At the split, `SaikatGeek/shoplite-app`'s placeholder `test.md` is replaced: the
   - Video V3's flow ran on dev: the fault through the test Git server, k6 on dev, HighErrorRate to the stand-in Slack, then log → trace.
   - Lab pushes to shoplite-gitops go through GitHub's web editor: the lab machine has no push credentials.
 
-Then the rest of Q7, on the user's own PC:
-  - lint (Hadolint, `helm lint`), tests and the Trivy gate in main;
-  - `pr.yml`;
-  - `terraform-plan.yml`, with a separate read-only role;
-  - self-heal evidence.
+**The rest of Q7 (PROGRESS section 7), done on 17 Nov:**
+- 7.6 (`ea44401`): lint, tests and the Trivy gate in main, through `scripts/ci.sh`.
+- 7.7 (`aa4083d`): `pr.yml`, and `terraform-plan.yml` with the read-only plan role.
+- 7.8 (`6d8bd3c`): the lab procedure `docs/evidence/q7/commands.md`. Its pull requests are made in GitHub's web editor and never merged. Self-heal is video V5 and the title checkpoint video V4.
 
-Then the repository split and the lab sessions Q3 → Q8.
+Its kubectl block (section 4) ran on a small k3s with ArgoCD's Application CRD and both Applications; `kubectl edit` ran with a stand-in editor.
+
+**Next:**
+1. Q8's procedure `docs/evidence/q8/commands.md` and the RCA's frame `docs/RCA.md` (the question's `docs/RCA`), on the user's own PC.
+2. The repository split, from the user's own PC.
+3. The lab sessions Q3 → Q8.
