@@ -1192,6 +1192,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `c12bdd0` | 2026-11-17 | Q5 আর Q7-এর পদ্ধতিতে `publish-repos.sh` |
 | `a641940` | 2026-11-17 | Q8 step 8.1: lab-এর পদ্ধতি (`docs/evidence/q8/commands.md`), RCA-র কাঠামো (`docs/RCA.md`), architecture diagram `docs/`-এ |
 | `04b7063` | 2026-11-18 | shoplite-app-এর README: চালানো, layout, AWS, setting, secret, test, প্রমাণের index, deviation log |
+| `3b0ccf7` | 2026-11-18 | Q3-এর server এখন shoplite-app clone করে (আগে devops-final); Q4-এর পুরনো "ভাগের আগে" নোট বাদ |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -1628,8 +1629,10 @@ bash ansible/tests/run.sh
 
 Q1–Q7-এর code শেষ; Q3–Q8-এর lab-এর পদ্ধতিও শেষ (section 4, 5, 6, 6b, 7, 7b)। এরপর:
 
+**ধাপে ধাপে, বাংলায়: [LAB-GUIDE.md](LAB-GUIDE.md)** (18 Nov): GitHub-এর setting, peer, lab-এর ক্রম আর সময়, প্রতি session-এর variable, destroy-এর আগে কী নিতে হবে, Q3-এর আলাদা session, lab-এর পরের কাজ।
+
 1. GitHub-এর setting (দুই repo ভাগ 17 Nov হয়ে গেছে): Q5-এর পদ্ধতির section 0.2 (deploy key আর secret `GITOPS_DEPLOY_KEY`) আর 0.3 (Slack-এর incoming webhook), আর Q7-এর পদ্ধতির section 0। Q8-এর জন্য একজন peer আর সময়। এরপর shoplite-app-এর বদল devops-final-এ commit করে `bash publish-repos.sh push`; shoplite-gitops বদলাবে তার নিজের clone-এ বা GitHub-এর web editor-এ।
-2. AWS lab-এ চালানো আর প্রমাণ, একটা session-এ: Q4 → Q5 → Q6 → Q7 → Q8, তারপর Q3 (17 Nov-এ user-এর সাথে ঠিক হওয়া ক্রম)।
+2. AWS lab-এ চালানো আর প্রমাণ: এক session-এ Q4 → Q5 → Q6 → Q7 → Q8 (প্রায় ৪–৪.৫ ঘণ্টা; lab-এর timer ৪:৫৯), Q3 আলাদা ছোট session-এ (18 Nov-এ বদলানো: সব এক session-এ আঁটে না)।
    - Q4: `docs/evidence/q4/commands.md`।
    - Q5: `docs/evidence/q5/commands.md`।
    - Q6: `docs/evidence/q6/commands.md`, Q5-এর পদ্ধতির section 4-এর পরে, একই session-এ।

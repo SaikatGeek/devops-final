@@ -143,8 +143,8 @@ docker compose down
 | ✅ | Q7-এর বাকি: lint, test, Trivy-র gate (7.6), PR pipeline আর Terraform plan-এর comment (7.7), lab-এর পদ্ধতি (7.8) | হয়ে গেছে |
 | ✅ | দুই repo GitHub-এ ভাগ (`publish-repos.sh`, 17 Nov) | হয়ে গেছে |
 | ✅ | Q8-এর পদ্ধতি (`docs/evidence/q8/commands.md`), RCA-র কাঠামো (`docs/RCA.md`), architecture diagram `shoplite-app/docs`-এ (`a641940`) | হয়ে গেছে |
-| 1 | GitHub-এর setting (Q5-এর পদ্ধতির section 0.2, 0.3; Q7-এর section 0); Q8-এর peer | নিজের PC |
-| 2 | এক session-এ Q4 → Q5 → Q6 → Q7 → Q8, তারপর Q3 (`linux/evidence/commands.md`); পুরো session screen record | Poridhi AWS lab (PLAN.md section 4, 5, 6) |
+| 1 | GitHub-এর setting আর Q8-এর peer: ধাপে ধাপে [LAB-GUIDE.md](LAB-GUIDE.md)-এর section ২ আর ৩ | নিজের PC |
+| 2 | এক session-এ Q4 → Q5 → Q6 → Q7 → Q8, Q3 আলাদা ছোট session-এ; পুরো session screen record; ক্রম, সময় আর checklist [LAB-GUIDE.md](LAB-GUIDE.md)-এ | Poridhi AWS lab |
 | ✅ | shoplite-app-এর README (`04b7063`): চালানো, AWS, setting, test, প্রমাণের index, deviation log | হয়ে গেছে |
 | 3 | RCA লেখা, তারপর peer-এর commit-এর সাথে মেলানো; screenshot `docs/evidence/`-এ | নিজের PC |
 

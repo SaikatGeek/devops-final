@@ -37,7 +37,9 @@ Course capstone (Poridhi "Mastering DevOps and AWS", Batch 03), deadline **17 No
   - shoplite-gitops is changed only in its own clone or GitHub's web editor (CI commits to it); its folder here is no longer the source.
   - Code uses the final URLs (`https://github.com/SaikatGeek/shoplite-app.git`, `https://github.com/SaikatGeek/shoplite-gitops.git`). Workflows go in `shoplite-app/.github/workflows/` (the split repo's root).
   - Before publishing CI changes, run `scripts/ci.sh`'s stages on Linux (WSL Ubuntu, `wsl.exe -d Ubuntu -- bash <file>`): the first real run failed on a permission that Docker Desktop on Windows ignores.
-- Root keeps course docs: `project.md`, `PLAN.md`, `PROGRESS.md`, `OFFICE-PC-GUIDE.md`. The architecture diagram moved to `shoplite-app/docs/` on 17 Nov (`architecture-diagram.md`, English, three mermaid pictures, and their three PNGs); the RCA is `shoplite-app/docs/RCA.md`.
+- Root keeps course docs: `project.md`, `PLAN.md`, `PROGRESS.md`, `OFFICE-PC-GUIDE.md`, and `LAB-GUIDE.md` (18 Nov).
+  - `LAB-GUIDE.md` is the user's lab-day checklist, in Bengali: the GitHub settings step by step, the peer, the session order with times, the per-session variables, what to save before the destroy, Q3's separate session, and the work after the lab.
+  - It points to the English procedures for every command; keep it in step with them. The architecture diagram moved to `shoplite-app/docs/` on 17 Nov (`architecture-diagram.md`, English, three mermaid pictures, and their three PNGs); the RCA is `shoplite-app/docs/RCA.md`.
 - Target structure of both repos: `project.md` section 2.1 and `PLAN.md` section 3.
 - Lab procedures, in English for the grader: `shoplite-app/docs/evidence/qN/commands.md` (the steps, what each should show, the screenshot names; the screenshots go in the same folder). Q3's is `linux/evidence/commands.md` because the question names that folder. Q4's (step 4.8) is checked without AWS: its tools block ran on a fresh `ubuntu:24.04`, every `--query` was evaluated with jmespath 1.0.1 on API-shaped samples, and every `aws` command was run without credentials (stopping only at `Unable to locate credentials` means the arguments are valid). Do the same for later ones.
 
@@ -412,7 +414,7 @@ Its kubectl block (section 4) ran on a small k3s with ArgoCD's Application CRD a
 
 **Next:**
 1. The user's GitHub settings (Q5's procedure 0.2 and 0.3, Q7's section 0) and a peer for Q8.
-2. One lab session, the order agreed on 17 Nov: Q4 → Q5 → Q6 → Q7 → Q8, then Q3. It is screen-recorded whole; the videos are cut later.
+2. One lab session for Q4 → Q5 → Q6 → Q7 → Q8 (about 4–4.5 hours; the lab's timer is 4:59), and Q3 in a short session of its own (18 Nov: all of it does not fit in one). Sessions are screen-recorded whole; the videos are cut later. Step by step: `LAB-GUIDE.md`.
 3. After the lab: fill `docs/RCA.md` from the timeline, the screenshots and section 8's numbers, then compare with the peer's commit, then publish.
 4. shoplite-app's `README.md` is done (`04b7063`, 18 Nov; PROGRESS section 7c).
    - It covers: running the stack, the API, the fault settings, the layout, AWS, the workflows' GitHub settings, secrets, tests, the evidence index, and 16 deviations.
