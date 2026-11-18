@@ -353,6 +353,7 @@ The page is at `http://127.0.0.1:<WEB_PORT>` (PC-01: http://127.0.0.1:8088); the
 - Right after Traefik's first sync, ArgoCD shows a ComparisonError for 30–45 s: `unable to resolve parseableType for GroupVersionKind: traefik.io/v1alpha1, Kind=IngressRoute`. The ServerSideApply diff needs the new CRD's schema. It clears by itself; meanwhile the app reads `Unknown Healthy`.
 - ArgoCD 3 does not keep per-resource health in the Application CR (`.status.resources[*].health` is empty). To see which resource is not Healthy, ask the API: `GET /argocd/api/v1/applications/<name>/resource-tree`, with a token from `POST /argocd/api/v1/session` (admin).
 - curl gets ArgoCD's raw `index.html` with `<base href="/">`. The `/argocd` base is written only when the request sends `Accept: text/html`.
+- WSL can say `The command 'docker' could not be found in this WSL 2 distro`. On 18 Nov it said that while Docker Desktop was restarting, not because the integration was off. Check `docker info` from Git Bash first, and wait until it answers.
 
 ## Next work (details in PROGRESS.md)
 
@@ -413,4 +414,7 @@ Its kubectl block (section 4) ran on a small k3s with ArgoCD's Application CRD a
 1. The user's GitHub settings (Q5's procedure 0.2 and 0.3, Q7's section 0) and a peer for Q8.
 2. One lab session, the order agreed on 17 Nov: Q4 → Q5 → Q6 → Q7 → Q8, then Q3. It is screen-recorded whole; the videos are cut later.
 3. After the lab: fill `docs/RCA.md` from the timeline, the screenshots and section 8's numbers, then compare with the peer's commit, then publish.
-4. shoplite-app's README: how to run it, an evidence index, and the deviation log (PLAN Phase 10). It does not exist yet.
+4. shoplite-app's `README.md` is done (`04b7063`, 18 Nov; PROGRESS section 7c).
+   - It covers: running the stack, the API, the fault settings, the layout, AWS, the workflows' GitHub settings, secrets, tests, the evidence index, and 16 deviations.
+   - It was checked on a fresh clone of the published repository: compose healthy, smoke PASS, unit tests; then the Terraform loop and its 32 links.
+   - Keep its deviation log and its evidence index in step with later changes.

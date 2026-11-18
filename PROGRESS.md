@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-17, Q8-এর lab-এর পদ্ধতি, RCA-র কাঠামো, আর architecture diagram `shoplite-app/docs`-এ (`a641940`)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-18, shoplite-app-এর README (`04b7063`); আগে Q8-এর lab-এর পদ্ধতি, RCA-র কাঠামো, আর architecture diagram `shoplite-app/docs`-এ (`a641940`)। Deadline: 17 Nov 2026।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -1132,6 +1132,19 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 - ✅ Section 8-এর ৭টা PromQL promtool-এর `promql_expr_test` দিয়ে নমুনা series-এ (Prometheus v3.15.1): প্রতিটা প্রত্যাশিত সংখ্যা দেয় (5xx ৩২৪০, route-প্রতি request, order ১২৯৬০, p95 ২.০৫ s আর ০.৪৭৫ s, queue ৫০, restart ৩), dev-এর series বাদ পড়ে।
 - ✅ shoplite-app আর shoplite-gitops-এর কোনো ফাইলে Claude বা Anthropic-এর নাম নেই; commit-এ trailer নেই। `bash publish-repos.sh push`: `6ba1eed..88ae898`, fast-forward, ৪১টা commit।
 
+## 7c. shoplite-app-এর README (PLAN-এর Phase 10)
+
+`04b7063` (18 Nov), `shoplite-app/README.md`, English, grader-এর জন্য:
+
+- কী আছে: application আর API-র table, চারটা fault-injection setting (Compose-এ `.env`, Kubernetes-এ gitops-এর `config.chaos`), local-এ চালানো (`make up && make smoke`, `make test`), repo-র layout, AWS-এ কীভাবে চলে (Terraform → Ansible → bootstrap → ArgoCD → GitHub Actions), workflow-এর GitHub setting (৫টা variable, ২টা secret), secret কোথায় থাকে, test আর রিহার্সালের table, প্রশ্ন ধরে প্রমাণের index, আর deviation log (১৬টা: domain নেই, self-heal dev-এ, Ingress-এর health check, k3s-এর containerd, node-এর UFW, ECR-এর credential provider, Q3-এর আলাদা VPC, `LAB_ACTIVE` আর "Run workflow", promote, Compose-এ trace backend নেই, stock কমে না, dashboard-এর Investigation অংশ, alert-এর ব্যাখ্যা, brotli-র pin, Q8-এর এক ঘণ্টার load, এক-command-এর script নেই)।
+
+**যাচাই:**
+
+- ✅ GitHub থেকে নতুন clone (`88ae898`), Git Bash-এ Makefile-এর command হাতে (Windows-এ `make` নেই), আলাদা project name আর port-এ: পাঁচটা component healthy, smoke `PASS: order 1 COMPLETED`, unit test (web সব check, API ৪৮, worker ২৯), page 200। পরে test-এর volume আর clone মোছা।
+- ✅ README-র Terraform loop হুবহু: `fmt -check` আর আটটা folder-এর `terraform test` (১০, ৩, ৭, ৭, ৯, ৮, ৪, ১০ test), সব pass।
+- ✅ চারটা doc-এর ৩২টা relative link আর README-র `#tests` anchor মেলে; কোনো ফাইলে Claude বা Anthropic-এর নাম নেই।
+- WSL-এর check চলেনি: তখন Docker Desktop নতুন করে চালু হচ্ছিল (WSL বলেছিল `docker could not be found`)। চালু হওয়ার পরে Git Bash-এ চালানো হয়েছে।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -1178,6 +1191,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `41db62e` | 2026-11-17 | fix: alert test-এর ফোল্ডার promtool পড়তে পারে (GitHub-এর প্রথম run-এর ভুল, Linux-এ permission) |
 | `c12bdd0` | 2026-11-17 | Q5 আর Q7-এর পদ্ধতিতে `publish-repos.sh` |
 | `a641940` | 2026-11-17 | Q8 step 8.1: lab-এর পদ্ধতি (`docs/evidence/q8/commands.md`), RCA-র কাঠামো (`docs/RCA.md`), architecture diagram `docs/`-এ |
+| `04b7063` | 2026-11-18 | shoplite-app-এর README: চালানো, layout, AWS, setting, secret, test, প্রমাণের index, deviation log |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -1187,6 +1201,7 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 devops-final/
 ├── PLAN.md, project.md, PROGRESS.md      পরিকল্পনা, প্রশ্নপত্র, এই log
 ├── shoplite-app/
+│   ├── README.md                         grader-এর জন্য: চালানো, layout, AWS, setting, test, প্রমাণের index, deviation log
 │   ├── docker-compose.yml                ৫টা component: web, catalog-api, order-worker, postgres, redis
 │   ├── Makefile                          build, up, down, test, smoke
 │   ├── scripts/smoke-test.sh             stack চালু → readyz → order → COMPLETED
@@ -1622,5 +1637,5 @@ Q1–Q7-এর code শেষ; Q3–Q8-এর lab-এর পদ্ধতিও �
    - Q8: `docs/evidence/q8/commands.md`, একই session-এ। Section 8-এর সংখ্যা destroy-এর আগে।
    - Q3: `linux/evidence/commands.md`, আর সেখানেই Q2-এর পরিষ্কার machine-এর ভিডিও (V1)।
    - পুরো session screen record করা থাকবে; ভিডিও V1–V6 পরে কাটা হবে।
-3. Lab-এর পরে: `docs/RCA.md` ভরানো (timeline, screenshot আর section 8-এর সংখ্যা থেকে) আর commit; তারপর peer-এর commit-এর সাথে মেলানো, আলাদা commit-এ; `bash publish-repos.sh push`।
-4. shoplite-app-এর README: কীভাবে চালাবে, প্রমাণের index (কোন মার্কের প্রমাণ কোন ফাইলে), deviation log (PLAN-এর Phase 10; এখনো নেই)।
+3. Lab-এর পরে: `docs/RCA.md` ভরানো (timeline, screenshot আর section 8-এর সংখ্যা থেকে) আর commit; তারপর peer-এর commit-এর সাথে মেলানো, আলাদা commit-এ; screenshot-গুলো `docs/evidence/qN/`-এ; `bash publish-repos.sh push`।
+4. README হয়ে গেছে (`04b7063`, section 7c)। Lab-এর পরে কিছু বদলালে (যেমন bonus) README-র deviation log-ও মেলাতে হবে।
