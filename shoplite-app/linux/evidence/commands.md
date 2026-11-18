@@ -37,8 +37,8 @@ This is also question 2's checkpoint on a clean machine.
 sudo apt-get update
 sudo apt-get install -y docker.io docker-compose-v2 make git curl acl
 sudo usermod -aG docker "$USER"   # log out and back in once, so the group applies
-git clone https://github.com/SaikatGeek/devops-final.git   # until the repositories are split
-cd devops-final/shoplite-app
+git clone https://github.com/SaikatGeek/shoplite-app.git
+cd shoplite-app
 make up && make smoke
 ```
 

@@ -18,10 +18,6 @@ git clone https://github.com/SaikatGeek/shoplite-gitops.git   # next to it; ques
 cd shoplite-app
 ```
 
-Before the repositories are split ([question 5, section 0.1](../q5/commands.md#01-the-two-repositories)),
-the code is in one repository:
-`git clone https://github.com/SaikatGeek/devops-final.git && cd devops-final/shoplite-app`.
-
 ## 0.2 Tools
 
 Terraform 1.17.2, the AWS CLI v2 with the Session Manager plugin (Ansible's SSH and kubectl both
