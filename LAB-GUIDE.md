@@ -23,7 +23,7 @@ GitHub-এও খোলা যায়: https://github.com/SaikatGeek/shoplite-
 3. ওই folder-এ Claude Code খোলো আর বলো:
 
    ```text
-   CLAUDE.md, PROGRESS.md আর LAB-GUIDE.md পড়ো। আমি lab করব; কোনো ধাপে আটকালে সাহায্য করবে।
+   CLAUDE.md, PROGRESS.md আর LAB-GUIDE.md পড়ো। আজ lab-এর দিন, local stack বা smoke test লাগবে না। LAB-GUIDE-এর section ২ (GitHub-এর setting) থেকে ধাপে ধাপে করাও; lab-এ কোনো ধাপে আটকালে সাহায্য করবে।
    ```
 
    Lab চলার সময় কোনো error এলে পুরো error-টা এই Claude-কে paste করো।
