@@ -1,8 +1,8 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-23, প্রথম AWS lab session: Q4 lab-এ পুরো চলেছে, bastion host (lab SSM বন্ধ রাখে), web-এর nginx 1.30.7, আর পরের lab-এর জন্য [NEXT-LAB.md](NEXT-LAB.md) ও [LAB-RUNBOOK.md](LAB-RUNBOOK.md) (section 7d)। পরে একই দিনে: OIDC-র fail-এর কারণ পাওয়া গেছে (GitHub-এর immutable subject) আর ঠিক করা হয়েছে। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-24, দ্বিতীয় AWS lab session (section 7e): OIDC lab-এ কাজ করেছে, Q4 আর Q5-এর সব প্রমাণ, Q6-এর ১৪টা, Q7-এর ৩টা। আগে, 2026-11-23, প্রথম AWS lab session: Q4 lab-এ পুরো চলেছে, bastion host (lab SSM বন্ধ রাখে), web-এর nginx 1.30.7, আর পরের lab-এর জন্য [NEXT-LAB.md](NEXT-LAB.md) ও [LAB-RUNBOOK.md](LAB-RUNBOOK.md) (section 7d)। পরে একই দিনে: OIDC-র fail-এর কারণ পাওয়া গেছে (GitHub-এর immutable subject) আর ঠিক করা হয়েছে। Deadline: 17 Nov 2026।
 
-**পরের lab-এর আগে পড়ো: [NEXT-LAB.md](NEXT-LAB.md)** (কোথায় আছি, কী বদলায়, OIDC-র খোলা সমস্যা) আর **[LAB-RUNBOOK.md](LAB-RUNBOOK.md)** (copy-paste command আর screenshot)।
+**পরের lab-এর আগে পড়ো: [NEXT-LAB.md](NEXT-LAB.md)** (কোথায় আছি, কী বদলায়, বাকি কাজ) আর **[LAB-RUNBOOK.md](LAB-RUNBOOK.md)** (copy-paste command আর screenshot)।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -19,10 +19,10 @@
 | Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
-| Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8); 23 Nov lab-এ পুরো চলেছে (section 7d): Terraform, bastion দিয়ে Ansible (lab SSM বন্ধ রাখে), তিন node `Ready`। ২১টার মধ্যে ১৮টা screenshot নেওয়া; বাকি 05 (node-এর `checkip` সহ আবার), 08, 10, 18 পরের session-এ |
-| Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। বাকি শুধু lab-এ চালানো |
-| Q6 | Observability | 25 | 🟡 Code আর lab-এর পদ্ধতি শেষ (6.1–6.5): metrics (kube-prometheus-stack, ServiceMonitor, exemplar), Loki, Alloy (JSON parse), Tempo (OTLP), Grafana-য় log ↔ trace আর exemplar → trace, "ShopLite — Golden Signals" dashboard, ৫টা alert আর runbook, Alertmanager → Slack, k6-এর load test, `docs/evidence/q6/commands.md`; সব ArgoCD দিয়ে, local k3s-এ রিহার্সাল pass। বাকি শুধু lab-এ চালানো |
-| Q7 | CI/CD, GitOps | 10 | 🟡 Code আর lab-এর পদ্ধতি শেষ (7.1–7.8): shoplite-gitops (root app, dev auto-sync আর self-heal, prod manual), cluster-এর bootstrap আর ArgoCD, GitHub OIDC-এর দুই role (CI-র push, PR-এর read-only plan), main pipeline (lint, test, build, Trivy-র gate, ECR, gitops-এ tag), PR pipeline আর Terraform plan-এর comment, `promote`, `docs/evidence/q7/commands.md`; সব local-এ রিহার্সাল করা। দুই repo GitHub-এ ভাগ হয়েছে (17 Nov, `publish-repos.sh`)। বাকি lab-এ চালানো |
+| Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8); 23 Nov lab-এ পুরো চলেছে (section 7d): Terraform, bastion দিয়ে Ansible (lab SSM বন্ধ রাখে), তিন node `Ready`। ২১টার মধ্যে ১৮টা screenshot নেওয়া। 24 Nov দ্বিতীয় session-এ বাকি 05, 08, 10, 18 আর নতুন 21: **২১টাই আছে** (section 7e) |
+| Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। 24 Nov lab-এ পুরো চলেছে: **১৯টা screenshot-ই আছে**, checkpoint-এ ALB দিয়ে order `COMPLETED` (section 7e)। Video V2 record হয়েছে কি না নিশ্চিত না |
+| Q6 | Observability | 25 | 🟡 Code আর lab-এর পদ্ধতি শেষ (6.1–6.5): metrics (kube-prometheus-stack, ServiceMonitor, exemplar), Loki, Alloy (JSON parse), Tempo (OTLP), Grafana-য় log ↔ trace আর exemplar → trace, "ShopLite — Golden Signals" dashboard, ৫টা alert আর runbook, Alertmanager → Slack, k6-এর load test, `docs/evidence/q6/commands.md`; সব ArgoCD দিয়ে, local k3s-এ রিহার্সাল pass। 24 Nov lab-এ চলেছে: ১৭টার ১৪টা screenshot; বাকি 15, 16 (Slack), 17 আর video V3 |
+| Q7 | CI/CD, GitOps | 10 | 🟡 Code আর lab-এর পদ্ধতি শেষ (7.1–7.8): shoplite-gitops (root app, dev auto-sync আর self-heal, prod manual), cluster-এর bootstrap আর ArgoCD, GitHub OIDC-এর দুই role (CI-র push, PR-এর read-only plan), main pipeline (lint, test, build, Trivy-র gate, ECR, gitops-এ tag), PR pipeline আর Terraform plan-এর comment, `promote`, `docs/evidence/q7/commands.md`; সব local-এ রিহার্সাল করা। দুই repo GitHub-এ ভাগ হয়েছে (17 Nov, `publish-repos.sh`)। 24 Nov lab-এ main (OIDC সবুজ) আর promote চলেছে; screenshot 01, 02, 08; PR 1 (Trivy লাল) আর PR 2 (সবুজ) খোলা, 04 আর 05-এর জন্য। বাকি 03, 06, 07, 09, 10, 11, video V4, V5 |
 | Q8 | Chaos, RCA | 10 | 🟡 chaos flag-এর code (Step 7); lab-এর পদ্ধতি `docs/evidence/q8/commands.md` আর RCA-র কাঠামো `docs/RCA.md` (`a641940`, section 7b)। বাকি lab-এ exercise, তারপর RCA লেখা |
 | Bonus | EKS, SQS, canary, SLO | +10 | ⬜ |
 
@@ -1172,6 +1172,24 @@ Poridhi-র lab-এ Q4 চালানো হয়েছে। পথে যা
 - **Screenshot:** Q4-এর 01–07, 09, 11–17, 19–21 (`4c870d1`, `61257b6`, `cf65508`, `eb25f5b`), Q5-এর 01।
 - **Docs (এই commit):** Q4-এর পদ্ধতি (bastion, env ফাইল, locale, 503, screenshot-এর command, lock-এর প্রমাণ প্রথম apply-এর সময়, terminal হারালে destroy), README (bastion, `ADMIN_CIDR`, nginx, lab-এর বন্ধ API), Q5 আর Q7-এর variable, architecture diagram-এর লেখা (PNG আবার বানানো বাকি)।
 
+## 7e. দ্বিতীয় AWS lab session (24 Nov, বাসার PC)
+
+একই AWS account (`041793356414`), নতুন lab machine। প্রায় ২ ঘণ্টা ৪৫ মিনিট, তারপর destroy।
+
+- **OIDC কাজ করেছে।** `e26efcc`-এর trust (GitHub-এর immutable subject) দিয়ে main-এর run #11 পুরো সবুজ: lint, test, build, Trivy, "AWS credentials through OIDC", ECR-এ push (৩টা image, tag `6025631`), shoplite-gitops-এ `e6ed747 dev: images 6025631` (github-actions[bot])। ২৩ Nov-এর fail lab-এর policy ছিল না।
+- **Q4:** Terraform (bootstrap আর root), Ansible (`failed=0`), kubectl (তিন node `Ready`)। Screenshot 05 (node বাইরে যায় NAT-এর IP `54.254.210.79` দিয়ে), 08 (bastion দিয়ে control plane), 18 (worker-1-এ hardening: sshd, `deploy`, ACL, UFW), 10 (দুই target group-এ দুই worker `healthy`), 21 (নতুন destroy, ৬১টা)। Q4-এর ২১টাই আছে।
+- **Q5:** Helm 4.3.1, bootstrap (Secret-গুলো random password-এ, ArgoCD, root), ArgoCD-র ৯টা Application `Synced Healthy`, promote (`97570dc prod: images 6025631`), prod-এর manual sync। Section 5-এর সব প্রমাণ: workload, probe/PDB/HPA (`cpu: 2%/70%`), ১২টা product seed, requests/limits আর non-root (uid 10001, 101, 70, 999), Secret শুধু নাম আর `bytes`, Git-এ password নেই, NetworkPolicy (web আর dev `blocked`), Traefik (`/ping` 200), Helm lint। Checkpoint: browser থেকে order #5 `COMPLETED`, DB-তে row। ১৯টাই আছে।
+- **Q6:** k6 দিয়ে prod-এ ২২ RPS, ২০ মিনিট (HPA worker ১ → ৪)। Screenshot 01–14: monitoring-এর pod, ৪টা data source, `up` table (সব job দুই namespace-এ), ৬টা metric, ServiceMonitor, dashboard-এর ৮টা panel load-এর মধ্যে, dashboard-এর ConfigMap, log → trace (View trace), পুরো order-এর trace (২ service, ৭ span), trace → worker-এর log, exemplar → trace, ৫টা alert rule, HighErrorRate-এর `severity` আর `runbook_url`। Slack-এর PodCrashLooping (15, 16), 17 আর V3 বাকি।
+- **Q7:** 01 (Q5-এর `02-main-run`-এর একই run), 02 (main-এর SHA = ECR-এর tag), 08 (dev automated prune selfHeal, prod `<none>`)। PR [1](https://github.com/SaikatGeek/shoplite-app/pull/1) `trivy-red`: web-এর patch-এর block মোছা, check লাল, `Total: 5 (CRITICAL: 5)` (brotli-libs CVE-2026-111497, nginx-এর ৪টা), `CRITICAL vulnerabilities in: web`। PR [2](https://github.com/SaikatGeek/shoplite-app/pull/2) `pr-check`: সবুজ। দুটোই খোলা, ছবির পরে বন্ধ হবে। Q7-এর পদ্ধতির section 2 এখন এই block-এর কথা বলে (২৩ Nov-এর nginx-এর patch-এর পরে পুরোনো লেখা আর মিলছিল না)।
+- **Lab-এর নতুন শিক্ষা** (NEXT-LAB section ৩, LAB-RUNBOOK):
+  - নতুন lab-এ AWS-এর key আগে থেকে ছিল না: `aws configure` lab page-এর key দিয়ে।
+  - Slack-এর URL command-এর ভেতরে লেখা হয়ে screen আর chat-এ দেখা গিয়েছিল; `history -c`, আর webhook বদলানোর পরামর্শ। `read -rsp` হুবহু চালাতে হয়, URL পরে prompt-এ।
+  - একই block দুইবার paste করায় লাইন জোড়া লেগে `~/shoplite.env`-এ ভুল লাইন (`sed -i '/^prod: /d'`)। `ALB` এখন `~/shoplite.env`-এ রাখা হয়।
+  - Grafana-র Explore-এ query Code mode-এ, table-এর জন্য Instant।
+- **Q8 হয়নি:** peer বা instructor ছিলেন না। প্রশ্ন বলে peer-কে এক ঘণ্টার write access দিতে হবে আর সে গোপনে flag চালু করবে; নিজে চালু করলে সেই শর্ত ভাঙে। পরের session-এ, সময় ঠিক করে।
+- **শেষে:** `LAB_ACTIVE=false`, `terraform destroy` (৬১টা), bootstrap destroy (২টা)।
+- Screenshot-এর commit `2078117` (Q4 আর Q5) আর এই commit (Q6, Q7, doc)।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -1225,6 +1243,7 @@ Poridhi-র lab-এ Q4 চালানো হয়েছে। পথে যা
 | `f4cfc46` | 2026-11-23 | fix(terraform): security group-এর description-এ apostrophe নেই, আর তার test |
 | `4c870d1`, `61257b6`, `cf65508`, `eb25f5b` | 2026-11-23 | প্রথম lab-এর screenshot (Q4-এর ১৮টা, Q5-এর ১টা) |
 | `e26efcc` | 2026-11-23 | fix(terraform): OIDC-র trust-এ GitHub-এর immutable subject (owner আর repo-র ID), প্রথম lab-এর OIDC fail-এর কারণ |
+| `2078117` | 2026-11-24 | দ্বিতীয় lab-এর screenshot: Q4-এর 05, 08, 10, 18, Q5-এর 02–19 |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 

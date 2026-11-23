@@ -81,7 +81,9 @@ ansible-galaxy collection list 2>/dev/null | grep -E 'ansible.posix|community.ge
 ```
 - শেষে ৬টা version আসবে: Terraform v1.17.2, aws-cli/2, plugin, kubectl v1.37.2, `ansible [core 2.21.6]`, দুইটা collection। কোনোটায় error এলে থামো।
 
-**২.৪ Settings ফাইল।** Paste করার আগে `you@example.com`-এর জায়গায় নিজের email বসাও। এটা চালালে:
+**২.৪ Settings ফাইল।** আগে `aws sts get-caller-identity` একা চালাও। `Unable to locate credentials` এলে (২৪ নভেম্বর এসেছিল) `aws configure` চালাও: lab page-এর Access Key আর Secret Key, region `ap-southeast-1`, output `json`। Key কাউকে দেখাবে না।
+
+Paste করার আগে `you@example.com`-এর জায়গায় নিজের email বসাও। এটা চালালে:
 - SSH key বানাবে (একবারই);
 - সব variable `~/shoplite.env`-এ রাখবে (Git-এর বাইরে);
 - lab-এর IP নিজে বের করে `admin_cidr`-এ বসাবে।
@@ -296,15 +298,24 @@ clear; for tg in shoplite-prod shoplite-dev; do aws elbv2 describe-target-health
 প্রতিটা প্রশ্নের procedure GitHub-এ খুলে section ধরে ক্রমে চালাও। প্রতিটা code block-এর ডান কোণে copy button আছে। নতুন terminal হলে আগে `source ~/shoplite.env && cd ~/shoplite-app`।
 
 **Q5** (~৪০ মিনিট): https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q5/commands.md
-- Section 1-এর Helm install আর `ALB=...` লাইন; বাকিটা উপরে হয়ে গেছে। তারপর section 2 (main run), 3 (bootstrap), 4 (promote আর prod sync), 5, 6।
-- Section 3-এর block `Slack webhook URL:` চাইবে। URL paste করে Enter দাও, screen-এ দেখাবে না।
+- Section 1-এর Helm install। `ALB` রাখো `~/shoplite.env`-এ, যাতে নতুন terminal-এও থাকে (block দুইবার paste করবে না):
+  ```bash
+  echo 'export ALB=http://$(aws elbv2 describe-load-balancers --names shoplite --query "LoadBalancers[0].DNSName" --output text)' >> ~/shoplite.env
+  source ~/shoplite.env && echo "$ALB"
+  ```
+- তারপর section 2 (main run), 3 (bootstrap), 4 (promote আর prod sync), 5, 6।
+- Section 3: `read -rsp 'Slack webhook URL: ' SLACK_WEBHOOK_URL; echo` **হুবহু** চালাও, URL দাও **পরে** prompt-এ, Enter। Command-এর ভেতরে URL লিখবে না (২৪ নভেম্বর এভাবে URL ফাঁস হয়েছিল)।
+- ArgoCD-র password: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo`।
+- **Q5-এর ১৯টা ছবি ২৪ নভেম্বর নেওয়া হয়ে গেছে।** পরের session-এ শুধু setup (Helm, `ALB`, main run, bootstrap, promote, prod sync), ছবি ছাড়া।
 - Prod-এর sync ArgoCD-র UI-তে হাতে করতে হয়: REFRESH → SYNC।
 - 📸 `q5/02`–`19`: `02-main-run`, `03-ecr-images`, `04-bootstrap`, `05-argocd-applications`, `06-promote-run`, `07-argocd-prod-synced`, `08-applications-synced`, `09-workloads`, `10-probes-pdb-hpa`, `11-postgres-seed`, `12-resources-non-root`, `13-secret-configmap`, `14-no-secret-in-git`, `15-networkpolicy`, `16-traefik`, `17-helm-chart`, `18-checkpoint-browser`, `19-checkpoint-database`।
 - 🎥 V2: section 6-এর checkpoint (browser থেকে order)। শুরুর আগে recording চালু করো।
 - এরপর Q4-এর `10-target-health.png` (section ৭-এর শেষ block)।
 
 **Q6** (~৫০ মিনিট): https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q6/commands.md
-- Section 0 (k6) থেকে 8 পর্যন্ত, ক্রমে।
+- Section 0 (k6) থেকে 8 পর্যন্ত, ক্রমে। ২৪ নভেম্বর 01–14 নেওয়া হয়েছে; বাকি 15, 16 (Slack-এর PodCrashLooping: আগে `kubectl -n shoplite-dev exec deploy/order-worker -- kill 1`), 17 আর V3।
+- Grafana-র password: `kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d; echo`।
+- Explore-এ query লেখো **Code** mode-এ (Builder না); table-এর জন্য Options → Type **Instant**।
 - 📸 `q6/01`–`17`: `01-monitoring-pods`, `02-datasources`, `03-targets-up`, `04-servicemonitors`, `05-six-metrics`, `06-dashboard-load`, `07-dashboard-configmap`, `08-log-to-trace`, `09-order-trace`, `10-trace-to-logs`, `11-exemplar`, `12-exemplar-trace`, `13-alert-rules`, `14-alert-labels`, `15-slack-alert`, `16-slack-resolved`, `17-dev-recovered`।
 - 🎥 V3: section 8 (alert থেকে কারণ খুঁজে পাওয়া, দুই মিনিটের মধ্যে)।
 - Lab machine push করতে পারে না। shoplite-gitops-এ বদলানো GitHub-এর web editor-এ।
@@ -312,6 +323,7 @@ clear; for tg in shoplite-prod shoplite-dev; do aws elbv2 describe-target-health
 **Q7** (~৩৫ মিনিট): https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q7/commands.md
 - Section 0 (variable, উপরে হয়ে গেছে) থেকে 6।
 - PR গুলো GitHub-এর web editor-এ খুলবে, **কখনো merge করবে না**।
+- ২৪ নভেম্বর নেওয়া: 01, 02, 08। Section 2 আর 3-এর প্রথম দুই PR খোলা আছে, lab লাগে না: [PR 1](https://github.com/SaikatGeek/shoplite-app/pull/1) লাল (`04`), [PR 2](https://github.com/SaikatGeek/shoplite-app/pull/2) সবুজ (`05`)। Lab-এ বাকি: 03, Terraform-এর PR (06, 07; `LAB_ACTIVE=true` থাকতে হবে), 09, 10, V5, V4 আর 11।
 - 📸 `q7/01`–`11`: `01-main-run`, `02-ecr-sha-tags`, `03-gitops-ci-commit`, `04-trivy-red`, `05-pr-checks`, `06-terraform-plan-comment`, `07-terraform-pr-checks`, `08-argocd-apps`, `09-dev-sync-policy`, `10-prod-sync-policy`, `11-new-title`।
 - 🎥 V5: self-heal (section 5)। 🎥 V4: title বদলানো (section 6)।
   - Title-এর commit তোমার PC থেকে: `shoplite-app/services/web/public/index.html`-এর `<title>` বদলাও, commit করো, `git push`, তারপর `bash publish-repos.sh push`।
