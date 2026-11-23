@@ -13,6 +13,8 @@ variables {
   name               = "shoplite"
   vpc_id             = "vpc-0123456789abcdef0"
   private_subnet_ids = ["subnet-aaaa", "subnet-bbbb"]
+  public_subnet_id   = "subnet-pppp"
+  admin_cidr         = "203.0.113.10/32"
   ssh_public_key     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test"
 }
 
@@ -65,8 +67,79 @@ run "nothing_from_the_internet_reaches_the_nodes" {
       for r in concat(values(aws_vpc_security_group_ingress_rule.node_to_node), [aws_vpc_security_group_ingress_rule.api_from_nodes]) :
       r.from_port <= 22 && 22 <= r.to_port
     ])
-    error_message = "SSH (22) must not be open: admin access goes through SSM."
+    error_message = "No rule between the nodes may open SSH (22): it comes only from the bastion."
   }
+
+  assert {
+    condition = alltrue([
+      aws_vpc_security_group_ingress_rule.ssh_from_bastion.security_group_id == aws_security_group.nodes.id,
+      aws_vpc_security_group_ingress_rule.ssh_from_bastion.referenced_security_group_id == aws_security_group.bastion.id,
+      aws_vpc_security_group_ingress_rule.ssh_from_bastion.cidr_ipv4 == null,
+      aws_vpc_security_group_ingress_rule.ssh_from_bastion.ip_protocol == "tcp",
+      aws_vpc_security_group_ingress_rule.ssh_from_bastion.from_port == 22,
+      aws_vpc_security_group_ingress_rule.ssh_from_bastion.to_port == 22,
+    ])
+    error_message = "The nodes must accept SSH (22) only from the bastion's security group."
+  }
+}
+
+run "the_bastion_is_the_only_way_in" {
+  command = apply
+
+  assert {
+    condition = alltrue([
+      aws_instance.bastion.subnet_id == "subnet-pppp",
+      aws_instance.bastion.associate_public_ip_address,
+      aws_instance.bastion.instance_type == "t3.micro",
+      aws_instance.bastion.ami == "ami-0123456789abcdef0",
+      aws_instance.bastion.vpc_security_group_ids == toset([aws_security_group.bastion.id]),
+    ])
+    error_message = "The bastion must be a t3.micro with a public IP in the public subnet, in the bastion group only."
+  }
+
+  assert {
+    condition = alltrue([
+      aws_vpc_security_group_ingress_rule.ssh_from_admin.security_group_id == aws_security_group.bastion.id,
+      aws_vpc_security_group_ingress_rule.ssh_from_admin.cidr_ipv4 == "203.0.113.10/32",
+      aws_vpc_security_group_ingress_rule.ssh_from_admin.referenced_security_group_id == null,
+      aws_vpc_security_group_ingress_rule.ssh_from_admin.ip_protocol == "tcp",
+      aws_vpc_security_group_ingress_rule.ssh_from_admin.from_port == 22,
+      aws_vpc_security_group_ingress_rule.ssh_from_admin.to_port == 22,
+    ])
+    error_message = "The bastion must accept only SSH (22), only from admin_cidr."
+  }
+
+  assert {
+    condition = alltrue([
+      aws_vpc_security_group_egress_rule.ssh_to_nodes.security_group_id == aws_security_group.bastion.id,
+      aws_vpc_security_group_egress_rule.ssh_to_nodes.referenced_security_group_id == aws_security_group.nodes.id,
+      aws_vpc_security_group_egress_rule.ssh_to_nodes.cidr_ipv4 == null,
+      aws_vpc_security_group_egress_rule.ssh_to_nodes.ip_protocol == "tcp",
+      aws_vpc_security_group_egress_rule.ssh_to_nodes.from_port == 22,
+      aws_vpc_security_group_egress_rule.ssh_to_nodes.to_port == 22,
+    ])
+    error_message = "The bastion may connect only to the nodes' SSH port."
+  }
+
+  assert {
+    condition = alltrue([
+      aws_instance.bastion.metadata_options[0].http_tokens == "required",
+      aws_instance.bastion.metadata_options[0].http_put_response_hop_limit == 1,
+      aws_instance.bastion.root_block_device[0].encrypted,
+      aws_instance.bastion.root_block_device[0].volume_type == "gp3",
+    ])
+    error_message = "The bastion must require IMDSv2 and have an encrypted gp3 disk."
+  }
+}
+
+run "rejects_an_admin_cidr_wider_than_24" {
+  command = plan
+
+  variables {
+    admin_cidr = "0.0.0.0/0"
+  }
+
+  expect_failures = [var.admin_cidr]
 }
 
 run "only_the_control_plane_serves_the_kubernetes_api" {
@@ -135,7 +208,7 @@ run "imdsv2_only_and_encrypted_disks" {
   }
 }
 
-run "every_node_gets_the_key_for_ssh_over_ssm" {
+run "every_node_and_the_bastion_get_the_key" {
   command = apply
 
   assert {
@@ -144,8 +217,8 @@ run "every_node_gets_the_key_for_ssh_over_ssm" {
   }
 
   assert {
-    condition     = alltrue([for i in concat([aws_instance.control_plane], aws_instance.worker) : i.key_name == aws_key_pair.nodes.key_name])
-    error_message = "Every node must get the key pair, so Ansible can log in through SSM."
+    condition     = alltrue([for i in concat([aws_instance.control_plane, aws_instance.bastion], aws_instance.worker) : i.key_name == aws_key_pair.nodes.key_name])
+    error_message = "Every node and the bastion must get the key pair, so Ansible can log in through the bastion."
   }
 }
 

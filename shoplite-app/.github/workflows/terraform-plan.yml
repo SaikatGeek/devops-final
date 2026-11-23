@@ -51,6 +51,7 @@ jobs:
         env:
           TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
           TF_VAR_budget_alert_email: ${{ secrets.BUDGET_ALERT_EMAIL }}
+          TF_VAR_admin_cidr: ${{ vars.ADMIN_CIDR }}
         run: bash scripts/terraform-plan.sh plan.md
 
       # Also when the plan failed: the comment then shows why.

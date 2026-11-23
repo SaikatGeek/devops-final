@@ -3,7 +3,7 @@
 # written as the markdown of a pull-request comment to the file given (default plan.md).
 # .github/workflows/terraform-plan.yml runs it with the read-only plan role's credentials in
 # the environment, then posts the file. It also needs Docker, the AWS CLI, and the same
-# TF_VAR_ssh_public_key and TF_VAR_budget_alert_email as terraform apply. The state is in the
+# TF_VAR_ssh_public_key, TF_VAR_budget_alert_email and TF_VAR_admin_cidr as terraform apply. The state is in the
 # bootstrap's bucket shoplite-tfstate-<account>-<region>; the plan runs with -lock=false, so it
 # writes nothing there. It exits non-zero when init or plan fails, after writing the comment.
 set -euo pipefail
@@ -22,7 +22,7 @@ trap 'rm -f "$LOG"' EXIT
 tf() {
   docker run --rm -v "$HOST_DIR/terraform:/tf" -w /tf -e TF_IN_AUTOMATION=1 \
     -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN -e AWS_REGION="$REGION" \
-    -e TF_VAR_ssh_public_key -e TF_VAR_budget_alert_email "$TERRAFORM_IMAGE" "$@"
+    -e TF_VAR_ssh_public_key -e TF_VAR_budget_alert_email -e TF_VAR_admin_cidr "$TERRAFORM_IMAGE" "$@"
 }
 # write <headline>: the comment, with the log in a folded block.
 write() {

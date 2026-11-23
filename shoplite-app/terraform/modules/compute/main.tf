@@ -1,6 +1,7 @@
 # Kubernetes nodes (question 4c): one control-plane and the workers, all in private
-# subnets without public IPs. Admin access is through SSM Session Manager (the preferred
-# option in the question), so no bastion host and no open SSH port are needed.
+# subnets without public IPs. They are set up for SSM Session Manager, the question's
+# preferred admin access; where the account denies it, as the lab's does, admin access goes
+# through the bastion host in bastion.tf.
 
 # Ubuntu 24.04 LTS, the newest image Canonical (owner 099720109477) has published.
 data "aws_ami" "ubuntu" {
@@ -49,10 +50,9 @@ resource "aws_iam_instance_profile" "nodes" {
   role = aws_iam_role.nodes.name
 }
 
-# Ansible (question 4g) logs in with SSH tunnelled through SSM Session Manager
-# (AWS-StartSSHSession): the SSM agent connects to port 22 on the instance itself, so no
-# security group opens 22 and the nodes keep no public IP. The key pair only puts this
-# public key into the ubuntu user's authorized_keys.
+# Ansible (question 4g) logs in with SSH through the bastion host (bastion.tf). The key pair
+# puts this public key into the ubuntu user's authorized_keys on every node and on the
+# bastion.
 resource "aws_key_pair" "nodes" {
   key_name   = "${var.name}-nodes"
   public_key = var.ssh_public_key

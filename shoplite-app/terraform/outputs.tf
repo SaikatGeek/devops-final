@@ -14,28 +14,44 @@ output "private_subnet_ids" {
 }
 
 output "control_plane_instance_id" {
-  description = "k3s server; open a shell with: aws ssm start-session --target <id>"
+  description = "Instance id of the k3s server."
   value       = module.compute.control_plane_instance_id
 }
 
 output "worker_instance_ids" {
-  description = "k3s agents (SSM targets)."
+  description = "Instance ids of the k3s agents."
   value       = module.compute.worker_instance_ids
 }
 
+locals {
+  # Every SSH connection to a node goes through the bastion host, with the same key.
+  bastion_proxy   = "ssh -i ${var.ssh_private_key_file} -o StrictHostKeyChecking=accept-new -W %h:%p ubuntu@${module.compute.bastion_public_ip}"
+  ssh_via_bastion = "ssh -i ${var.ssh_private_key_file} -o StrictHostKeyChecking=accept-new -o ProxyCommand=\"${local.bastion_proxy}\""
+}
+
+output "bastion_public_ip" {
+  description = "Public IP of the bastion host, the only way in to the nodes (SSH from admin_cidr)."
+  value       = module.compute.bastion_public_ip
+}
+
+output "ssh_via_bastion" {
+  description = "Opens a shell on a node through the bastion: eval \"$(terraform -chdir=terraform output -raw ssh_via_bastion) ubuntu@<the node's ansible_host from ansible/lab.ini>\""
+  value       = local.ssh_via_bastion
+}
+
 output "ansible_inventory" {
-  description = "Ansible inventory of the nodes, reached by SSH through SSM. Write it with: terraform output -raw ansible_inventory > ansible/lab.ini"
+  description = "Ansible inventory of the nodes, reached by SSH through the bastion. Write it with: terraform output -raw ansible_inventory > ansible/lab.ini"
   value = templatefile("${path.module}/templates/inventory.ini.tftpl", {
-    region               = var.region
-    control_plane_id     = module.compute.control_plane_instance_id
-    worker_ids           = module.compute.worker_instance_ids
+    control_plane_ip     = module.compute.control_plane_private_ip
+    worker_ips           = module.compute.worker_private_ips
     ssh_private_key_file = var.ssh_private_key_file
+    proxy_command        = local.bastion_proxy
   })
 }
 
 output "kubectl_tunnel" {
-  description = "Keep this running in a second terminal: it forwards local port 6443 to the k3s API on the control plane, the address in the fetched kubeconfig."
-  value       = "aws ssm start-session --region ${var.region} --target ${module.compute.control_plane_instance_id} --document-name AWS-StartPortForwardingSession --parameters '{\"portNumber\":[\"6443\"],\"localPortNumber\":[\"6443\"]}'"
+  description = "Keep this running in a second terminal: over SSH through the bastion, it forwards local port 6443, the address in the fetched kubeconfig, to the k3s API on the control plane."
+  value       = "${local.ssh_via_bastion} -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -N -L 6443:127.0.0.1:6443 ubuntu@${module.compute.control_plane_private_ip}"
 }
 
 output "app_urls" {

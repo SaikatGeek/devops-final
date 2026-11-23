@@ -1,6 +1,11 @@
 output "control_plane_instance_id" {
-  description = "Instance id of the k3s server (for SSM: aws ssm start-session --target <id>)."
+  description = "Instance id of the k3s server."
   value       = aws_instance.control_plane.id
+}
+
+output "bastion_public_ip" {
+  description = "Public IP of the bastion host; SSH to the nodes goes through it."
+  value       = aws_instance.bastion.public_ip
 }
 
 output "control_plane_private_ip" {

@@ -5,7 +5,7 @@
 # Once per account run terraform/bootstrap (the state bucket), then:
 #   terraform -chdir=terraform init -backend-config="bucket=<state_bucket>" -backend-config="region=<region>"
 #   TF_VAR_budget_alert_email=<your e-mail> TF_VAR_ssh_public_key="$(cat ~/.ssh/shoplite.pub)" \
-#     terraform -chdir=terraform apply
+#     TF_VAR_admin_cidr=<your public IP>/32 terraform -chdir=terraform apply
 #   terraform -chdir=terraform output -raw ansible_inventory > ansible/lab.ini
 # After grading: terraform -chdir=terraform destroy (cost guard).
 
@@ -33,13 +33,16 @@ module "network" {
   name   = "shoplite"
 }
 
-# Questions 4b and 4c: least-privilege security groups, SSM access, one control-plane
-# and two workers in the private subnets. The SSH key is for Ansible through SSM (4g).
+# Questions 4b and 4c: least-privilege security groups, one control-plane and two workers
+# in the private subnets, and admin access through a bastion host in a public subnet (the
+# lab's organization policy denies SSM). The SSH key is for Ansible through the bastion (4g).
 module "compute" {
   source             = "./modules/compute"
   name               = "shoplite"
   vpc_id             = module.network.vpc_id
   private_subnet_ids = module.network.private_subnet_ids
+  public_subnet_id   = module.network.public_subnet_ids[0]
+  admin_cidr         = var.admin_cidr
   ssh_public_key     = var.ssh_public_key
 }
 

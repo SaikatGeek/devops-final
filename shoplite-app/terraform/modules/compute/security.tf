@@ -1,8 +1,7 @@
 # Least-privilege security groups for the Kubernetes nodes (question 4b).
-# Nothing from the internet may connect, not even SSH: admin access goes through SSM
-# Session Manager, whose agent only makes outgoing connections. Between nodes only the
-# ports k3s and the monitoring need are open, and only for other nodes. The ALB's access
-# to the ingress ports is added by the alb module.
+# Nothing from the internet may connect to the nodes: SSH comes only from the bastion host
+# (bastion.tf). Between nodes only the ports k3s and the monitoring need are open, and only
+# for other nodes. The ALB's access to the ingress ports is added by the alb module.
 
 resource "aws_security_group" "nodes" {
   name        = "${var.name}-nodes"
@@ -38,7 +37,8 @@ resource "aws_vpc_security_group_egress_rule" "nodes_out" {
 }
 
 # The control plane additionally serves the Kubernetes API, to the nodes only. kubectl
-# from outside reaches it through an SSM port forward, so no rule is needed for that.
+# from outside reaches it through an SSH tunnel to the control plane itself (through the
+# bastion), so no rule is needed for that.
 resource "aws_security_group" "control_plane" {
   name        = "${var.name}-control-plane"
   description = "k3s server: the Kubernetes API, reachable only from the nodes"

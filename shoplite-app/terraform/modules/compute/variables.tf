@@ -18,8 +18,34 @@ variable "private_subnet_ids" {
   }
 }
 
+variable "public_subnet_id" {
+  description = "Public subnet for the bastion host, the only instance with a public IP."
+  type        = string
+}
+
+variable "admin_cidr" {
+  description = "The admin's (lab terminal's) public IP as a CIDR, e.g. 203.0.113.10/32: the only source that may reach the bastion's SSH port."
+  type        = string
+
+  validation {
+    condition     = can(cidrhost(var.admin_cidr, 0))
+    error_message = "admin_cidr must be a CIDR range, e.g. 203.0.113.10/32."
+  }
+
+  validation {
+    condition     = try(tonumber(split("/", var.admin_cidr)[1]) >= 24, false)
+    error_message = "admin_cidr must be one address or a small range (/24 or narrower), never the whole internet."
+  }
+}
+
+variable "bastion_instance_type" {
+  description = "EC2 type of the bastion host; it only relays SSH."
+  type        = string
+  default     = "t3.micro"
+}
+
 variable "ssh_public_key" {
-  description = "Public SSH key for the ubuntu user on every node; Ansible logs in with it through SSM (port 22 stays closed). Pass it as TF_VAR_ssh_public_key."
+  description = "Public SSH key for the ubuntu user on every node and on the bastion; Ansible logs in with it through the bastion. Pass it as TF_VAR_ssh_public_key."
   type        = string
 
   validation {

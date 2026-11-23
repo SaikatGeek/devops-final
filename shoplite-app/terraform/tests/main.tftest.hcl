@@ -41,6 +41,7 @@ mock_provider "aws" {
 variables {
   budget_alert_email = "alerts@example.com"
   ssh_public_key     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test"
+  admin_cidr         = "203.0.113.10/32"
 }
 
 run "network_module_gives_two_public_and_two_private_subnets" {
@@ -66,25 +67,25 @@ run "compute_module_puts_the_nodes_in_the_private_subnets" {
   }
 }
 
-run "ansible_inventory_reaches_every_node_through_ssm" {
+run "ansible_inventory_reaches_every_node_through_the_bastion" {
   command = apply
 
   assert {
     condition = alltrue([
-      strcontains(output.ansible_inventory, "[control_plane]\ncontrol-plane ansible_host=${module.compute.control_plane_instance_id}\n"),
-      strcontains(output.ansible_inventory, "[workers]\nworker-1 ansible_host=${module.compute.worker_instance_ids[0]}\nworker-2 ansible_host=${module.compute.worker_instance_ids[1]}\n"),
+      strcontains(output.ansible_inventory, "[control_plane]\ncontrol-plane ansible_host=${module.compute.control_plane_private_ip}\n"),
+      strcontains(output.ansible_inventory, "[workers]\nworker-1 ansible_host=${module.compute.worker_private_ips[0]}\nworker-2 ansible_host=${module.compute.worker_private_ips[1]}\n"),
       strcontains(output.ansible_inventory, "[k3s_cluster:children]\ncontrol_plane\nworkers\n"),
     ])
-    error_message = "The inventory must put the control plane and both workers, by instance id, into the groups site.yml uses."
+    error_message = "The inventory must put the control plane and both workers, by private IP, into the groups site.yml uses."
   }
 
   assert {
     condition = alltrue([
       strcontains(output.ansible_inventory, "ansible_user=ubuntu\n"),
       strcontains(output.ansible_inventory, "ansible_ssh_private_key_file=~/.ssh/shoplite\n"),
-      strcontains(output.ansible_inventory, "ProxyCommand=\"aws ssm start-session --region ap-southeast-1 --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p\""),
+      strcontains(output.ansible_inventory, "ansible_ssh_common_args=-o ProxyCommand=\"ssh -i ~/.ssh/shoplite -o StrictHostKeyChecking=accept-new -W %h:%p ubuntu@${output.bastion_public_ip}\""),
     ])
-    error_message = "Ansible must log in as ubuntu with the key, through an SSM session to the node's port 22."
+    error_message = "Ansible must log in as ubuntu with the key, through the bastion to the node's port 22."
   }
 }
 
@@ -93,12 +94,27 @@ run "kubectl_tunnel_forwards_the_api_port_of_the_control_plane" {
 
   assert {
     condition = alltrue([
-      strcontains(output.kubectl_tunnel, "--target ${module.compute.control_plane_instance_id} "),
-      strcontains(output.kubectl_tunnel, "--document-name AWS-StartPortForwardingSession"),
-      strcontains(output.kubectl_tunnel, "{\"portNumber\":[\"6443\"],\"localPortNumber\":[\"6443\"]}"),
+      startswith(output.kubectl_tunnel, "ssh -i ~/.ssh/shoplite "),
+      strcontains(output.kubectl_tunnel, "-o ProxyCommand=\"ssh -i ~/.ssh/shoplite -o StrictHostKeyChecking=accept-new -W %h:%p ubuntu@${output.bastion_public_ip}\""),
+      endswith(output.kubectl_tunnel, " -N -L 6443:127.0.0.1:6443 ubuntu@${module.compute.control_plane_private_ip}"),
     ])
-    error_message = "The tunnel must forward local port 6443 to port 6443 of the control plane."
+    error_message = "The tunnel must log in to the control plane through the bastion and forward local port 6443 to its API port."
   }
+
+  assert {
+    condition     = startswith(output.kubectl_tunnel, output.ssh_via_bastion)
+    error_message = "The tunnel and ssh_via_bastion must reach the nodes the same way."
+  }
+}
+
+run "rejects_an_admin_cidr_wider_than_24" {
+  command = plan
+
+  variables {
+    admin_cidr = "0.0.0.0/0"
+  }
+
+  expect_failures = [var.admin_cidr]
 }
 
 run "rejects_a_value_that_is_not_an_ssh_public_key" {
