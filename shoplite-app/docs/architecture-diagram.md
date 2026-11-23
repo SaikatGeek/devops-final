@@ -15,6 +15,7 @@ GitHub draws the blocks below as pictures. Each also exists as a PNG in this fol
 ```mermaid
 flowchart TB
     user(["User (browser)"])
+    admin(["Admin (lab terminal)"])
     ecr[("Amazon ECR<br/>3 image repositories")]
     s3[("S3 bucket<br/>Terraform state + lock")]
 
@@ -22,8 +23,9 @@ flowchart TB
         subgraph pub["Public subnets (AZ a, AZ b)"]
             alb["Application Load Balancer<br/>:80 prod, :8080 dev"]
             nat["NAT Gateway"]
+            bastion["Bastion host<br/>SSH from admin_cidr only"]
         end
-        subgraph priv["Private subnets (AZ a, AZ b): no public IP, admin access through SSM"]
+        subgraph priv["Private subnets (AZ a, AZ b): no public IP, SSH only from the bastion"]
             cp["EC2 control-plane<br/>k3s server"]
             subgraph workers["EC2 worker-1 and worker-2 (k3s agents)"]
                 traefik["Traefik ingress<br/>NodePort 30080 / 30081"]
@@ -41,6 +43,8 @@ flowchart TB
     end
 
     user -- "HTTP" --> alb
+    admin -- "SSH 22" --> bastion
+    bastion -. "Ansible, kubectl tunnel (SSH)" .-> cp
     alb --> traefik
     traefik -- "/" --> web
     traefik -- "/api" --> api
@@ -70,7 +74,8 @@ flowchart TB
 - Prod runs in the namespace `shoplite` (ALB port 80), dev in `shoplite-dev` (ALB port
   8080), both in the same cluster.
 - The three EC2 instances are in private subnets, without public IPs. Administrators reach
-  them through SSM Session Manager.
+  them over SSH through the bastion host, which admits only the admin's address (the lab
+  account denies SSM Session Manager).
 - From the internet only the ALB can be reached. The nodes accept the ingress NodePorts only
   from the ALB.
 - The nodes go out only through the NAT Gateway, for example to pull images from ECR.

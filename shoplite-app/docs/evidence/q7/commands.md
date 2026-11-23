@@ -37,6 +37,8 @@ In **shoplite-app** → Settings → Secrets and variables → Actions:
   in question 4.
 - **Every session**, because the lab machine and its key are new:
   - the variable `SSH_PUBLIC_KEY`, the line that `cat ~/.ssh/shoplite.pub` prints;
+  - the variable `ADMIN_CIDR`, the value of `echo $TF_VAR_admin_cidr` (the bastion's
+    allowed source, so the plan shows no change there);
   - the variable `AWS_PLAN_ROLE_ARN`, from:
 
     ```bash

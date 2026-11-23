@@ -7,12 +7,15 @@ listed at its end; the files go in this folder.
 > **Cost:** the NAT Gateway, the ALB and three EC2 instances are billed by the hour. Take the
 > evidence in the same session and run [After grading](#after-grading) before the lab ends.
 
-Roughly: tools 5 minutes, `terraform apply` 5–8 minutes, nodes online in SSM 2–3 minutes later,
+Roughly: tools 5 minutes, `terraform apply` 5–8 minutes, the bastion reachable a minute later,
 the first Ansible run 5–10 minutes.
 
 ## 0.1 Clone
 
+Both clones side by side in the home folder (question 5 reads `../shoplite-gitops`):
+
 ```bash
+cd ~
 git clone https://github.com/SaikatGeek/shoplite-app.git
 git clone https://github.com/SaikatGeek/shoplite-gitops.git   # next to it; question 5 needs it
 cd shoplite-app
@@ -20,9 +23,19 @@ cd shoplite-app
 
 ## 0.2 Tools
 
-Terraform 1.17.2, the AWS CLI v2 with the Session Manager plugin (Ansible's SSH and kubectl both
-go through SSM), kubectl 1.37.2 (the cluster's version) and the pinned Ansible. Downloads are
-checked against their published SHA-256 sums.
+Terraform 1.17.2, the AWS CLI v2 with the Session Manager plugin (for accounts that allow SSM;
+in the lab, Ansible's SSH and kubectl go through the bastion host), kubectl 1.37.2 (the
+cluster's version) and the pinned Ansible. Downloads are checked against their published
+SHA-256 sums.
+
+The lab terminal's user (`poridhian`) has password-less `sudo`; check it first, because a
+`sudo` that asks for a password would read the next pasted lines as the password:
+
+```bash
+sudo -n true && echo SUDO-OK
+```
+
+Then, from `shoplite-app`:
 
 ```bash
 sudo apt-get update
@@ -48,7 +61,9 @@ curl -fsSL --retry 5 --retry-all-errors -o ~/tools/kubectl https://dl.k8s.io/rel
 echo "$(curl -fsSL --retry 5 https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl.sha256)  $HOME/tools/kubectl" | sha256sum --check
 sudo install ~/tools/kubectl /usr/local/bin/
 
-# Ansible, the pinned versions, in its own virtualenv
+# Ansible, the pinned versions, in its own virtualenv. The lab terminal's LANG
+# (en_US.UTF-8) has no locale behind it, and Ansible refuses to start without one.
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
 python3 -m venv ~/ansible-venv
 ~/ansible-venv/bin/pip install --quiet -r ansible/requirements.txt
 ~/ansible-venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
@@ -63,21 +78,34 @@ ansible --version | head -n 1
 ansible-galaxy collection list 2>/dev/null | grep -E 'ansible.posix|community.general'
 ```
 
-A new terminal needs `export PATH="$HOME/ansible-venv/bin:$PATH"` again.
+The last six lines must print the versions; any error there stops here.
 
 ## 0.3 Settings and the SSH key
 
 The region is the lab's region; everything ShopLite creates goes there. The budget e-mail and
-the SSH key never go into Git, only into these variables.
+the SSH key never go into Git, only into these variables. `admin_cidr` is the lab terminal's
+public address: the only source the bastion host admits.
+
+Every new terminal loses its `export`s, so they live in `~/shoplite.env` (outside the clone,
+never in Git). Change the e-mail before pressing Enter:
 
 ```bash
 aws sts get-caller-identity
-export TF_VAR_region=ap-southeast-1          # the lab's region
-export AWS_REGION=$TF_VAR_region AWS_DEFAULT_REGION=$TF_VAR_region
-export TF_VAR_budget_alert_email=you@example.com
 test -f ~/.ssh/shoplite || ssh-keygen -t ed25519 -f ~/.ssh/shoplite -N ''
+cat > ~/shoplite.env <<'EOF'
+export PATH="$HOME/ansible-venv/bin:$PATH" LANG=C.UTF-8 LC_ALL=C.UTF-8
+export TF_VAR_region=ap-southeast-1 AWS_REGION=ap-southeast-1 AWS_DEFAULT_REGION=ap-southeast-1
+export TF_VAR_budget_alert_email=you@example.com
+export TF_VAR_admin_cidr="$(curl -s https://checkip.amazonaws.com)/32"
 export TF_VAR_ssh_public_key="$(cat ~/.ssh/shoplite.pub)"
+export KUBECONFIG="$HOME/shoplite-app/ansible/kubeconfig"
+EOF
+source ~/shoplite.env && cd ~/shoplite-app
+env | grep -o '^TF_VAR_[a-z_]*'
 ```
+
+The last command lists four `TF_VAR_` names. In every new terminal:
+`source ~/shoplite.env && cd ~/shoplite-app`.
 
 ## 0.4 What the lab allows
 
@@ -97,7 +125,9 @@ If `apply` stops with `AccessDenied` or an unavailable type, these are the fallb
 | `t3.large` | `worker_instance_type = "t3.medium"` in `module "compute"` of `terraform/main.tf` |
 | Budgets | keep the code, take a screenshot of the `AccessDenied` error |
 | NAT Gateway | a NAT instance (allowed by the question) |
-| IAM roles or instance profiles | a bastion host instead of SSM (allowed by the question) |
+| IAM roles or instance profiles | admin access needs none (it goes through the bastion host), but the nodes pull images from ECR with their role: tell the instructor |
+| SSM sessions (`ssmmessages` denied, as in the Poridhi lab: `TargetNotConnected`) | nothing to change: admin access goes through the bastion host (allowed by the question) |
+| `t3.micro` (the bastion) | `bastion_instance_type = "t3.medium"` in `module "compute"` of `terraform/main.tf` |
 | An IAM OIDC identity provider (for question 7) | tell the instructor: question 7's push to ECR needs it. To go on with question 4 meanwhile, comment out `module "github_oidc"` in `terraform/main.tf` and `output "ci_role_arn"` in `terraform/outputs.tf`, then apply again |
 | The account has GitHub's OIDC provider already (`EntityAlreadyExists`) | use it: `terraform -chdir=terraform import module.github_oidc.aws_iam_openid_connect_provider.github arn:aws:iam::<account>:oidc-provider/token.actions.githubusercontent.com`, then apply again. Before the final destroy, `terraform -chdir=terraform state rm module.github_oidc.aws_iam_openid_connect_provider.github`, so the provider stays |
 
@@ -115,60 +145,82 @@ BUCKET=$(terraform -chdir=terraform/bootstrap output -raw state_bucket)
 terraform -chdir=terraform init \
   -backend-config="bucket=$BUCKET" \
   -backend-config="region=$(terraform -chdir=terraform/bootstrap output -raw region)"
+```
+
+Paste the apply on its own: it stops at `Enter a value:`, and a pasted next line would become
+the answer. While it waits, it holds the state lock: take 4e's lock screenshot then (4e, step
+2, in a second terminal), and answer `yes` afterwards.
+
+```bash
 terraform -chdir=terraform apply
-terraform -chdir=terraform output
+```
+
+```bash
 VPC=$(terraform -chdir=terraform output -raw vpc_id)
 ```
 
 Screenshots: `01-bootstrap-apply.png` (the state bucket created), `02-terraform-apply.png`
-(`Apply complete!` and the outputs).
+(`Apply complete!` and the outputs; a second `terraform apply` prints `No changes` and the
+outputs again, if the first scrolled away).
 
 ## 2. Configure the nodes (4g)
 
-The inventory comes from Terraform: the nodes by instance id, and SSH through SSM. Instance ids
-change with every apply, so write it again after each one.
+The inventory comes from Terraform: the nodes by private IP, and SSH through the bastion host
+with the same key. Addresses change with every apply, so write it again after each one.
 
 ```bash
 terraform -chdir=terraform output -raw ansible_inventory > ansible/lab.ini
 cat ansible/lab.ini
 ```
 
-Wait until SSM reports all three nodes `Online` (2–3 minutes after the apply):
-
-```bash
-aws ssm describe-instance-information --filters Key=tag:project,Values=shoplite \
-  --query 'InstanceInformationList[].[InstanceId,PingStatus,PlatformName]' --output table
-```
-
-Run the playbook twice. The first run hardens the nodes (question 3's rules), installs the
-container runtime and k3s, joins the workers and fetches the kubeconfig. The second run must
-change nothing.
+The bastion accepts SSH about a minute after the apply; until then the ping fails with
+`Connection closed by UNKNOWN port 65535`, so try again. All three nodes must answer `pong`:
 
 ```bash
 cd ansible
 ansible -i lab.ini k3s_cluster -m ping
-ansible-playbook -i lab.ini site.yml
-ansible-playbook -i lab.ini site.yml
+```
+
+Run the playbook twice. The first run hardens the nodes (question 3's rules), installs the
+container runtime and k3s, joins the workers and fetches the kubeconfig. Its output is kept in
+`~/ansible-run1.log` for the screenshot. If a task fails with `503 Service Unavailable` from
+`*.ec2.archive.ubuntu.com` (Ubuntu's mirror was busy), run it again.
+
+```bash
+ANSIBLE_FORCE_COLOR=1 ansible-playbook -i lab.ini site.yml | tee ~/ansible-run1.log
+```
+
+Screenshot 15 needs two parts that are far apart in that output; this shows them together:
+
+```bash
+clear; grep -A4 'Show the container runtime' ~/ansible-run1.log; tail -n 6 ~/ansible-run1.log
+```
+
+The second run must change nothing:
+
+```bash
+clear; ANSIBLE_FORCE_COLOR=1 ansible-playbook -i lab.ini site.yml | tail -n 6
 cd ..
 ```
 
-Screenshots: `15-ansible-first-run.png` (the `PLAY RECAP` of the first run, and the
-`Show the container runtime and its version` lines with containerd's version),
-`16-ansible-second-run.png` (the `PLAY RECAP` of the second run: `changed=0` on every node).
+Screenshots: `15-ansible-first-run.png` (the `Show the container runtime and its version`
+lines with containerd's version, and the first run's `PLAY RECAP` with `failed=0`),
+`16-ansible-second-run.png` (the second run's `PLAY RECAP`: `changed=0` on every node).
 
-## 3. kubectl through SSM
+## 3. kubectl through the bastion
 
-The API has no public address. **Second terminal**, from `shoplite-app`, keep it running:
+The API has no public address. **Second terminal** (`source ~/shoplite.env && cd ~/shoplite-app`
+first), keep it running; it looks idle, which is right:
 
 ```bash
 eval "$(terraform -chdir=terraform output -raw kubectl_tunnel)"
 ```
 
-**First terminal**: the kubeconfig the playbook fetched points at `https://127.0.0.1:6443`, the
-local end of that tunnel.
+It logs in to the control plane through the bastion and forwards local port 6443 to the API.
+**First terminal**: the kubeconfig the playbook fetched (`KUBECONFIG`, from `~/shoplite.env`)
+points at `https://127.0.0.1:6443`, the local end of that tunnel.
 
 ```bash
-export KUBECONFIG=$PWD/ansible/kubeconfig
 kubectl get nodes -o wide
 ```
 
@@ -194,11 +246,11 @@ aws ec2 describe-nat-gateways --filter Name=vpc-id,Values=$VPC \
   --query 'NatGateways[].[NatGatewayId,State,SubnetId,NatGatewayAddresses[0].PublicIp]' --output table
 ```
 
-The nodes reach the internet only through the NAT Gateway: from a node (see 4c for the session),
-the address the internet sees is the NAT Gateway's public IP from the last command.
+The nodes reach the internet only through the NAT Gateway: the address the internet sees from a
+node is the NAT Gateway's public IP from the last command.
 
 ```bash
-curl -s https://checkip.amazonaws.com
+(cd ansible && ansible -i lab.ini control-plane -a 'curl -s https://checkip.amazonaws.com')
 ```
 
 Screenshots: `03-state-list.png`, `04-subnets-routes.png` (subnets and route tables),
@@ -206,9 +258,10 @@ Screenshots: `03-state-list.png`, `04-subnets-routes.png` (subnets and route tab
 
 ### 4b Security groups
 
-No rule lets anything in from the internet to the nodes, not even SSH; the cluster ports are
-open only between the nodes, the API port only on the control plane, and the ingress NodePorts
-only from the ALB. The VPC's default group is unused.
+No rule lets anything in from the internet to the nodes. SSH reaches the nodes only from the
+bastion's group, and the bastion only from `admin_cidr`; the cluster ports are open only
+between the nodes, the API port only on the control plane, and the ingress NodePorts only from
+the ALB. The VPC's default group is unused.
 
 ```bash
 aws ec2 describe-security-groups --filters Name=vpc-id,Values=$VPC \
@@ -221,16 +274,19 @@ aws ec2 describe-instances --filters Name=vpc-id,Values=$VPC Name=instance-state
 ```
 
 Screenshots: `06-security-groups.png` (the groups and their inbound rules: `0.0.0.0/0` appears
-only on `shoplite-alb`, ports 80 and 8080), `07-nodes-no-public-ip.png` (`PublicIpAddress` is
-`None` on every node).
+only on `shoplite-alb`, ports 80 and 8080; port 22 only from `admin_cidr` on `shoplite-bastion`
+and from the bastion's group on `shoplite-nodes`), `07-nodes-no-public-ip.png`
+(`PublicIpAddress` is `None` on every node; only `shoplite-bastion` has one).
 
-### 4c Kubernetes nodes and SSM
+### 4c Kubernetes nodes and admin access
 
 One control plane and two workers, in the private subnets (previous screenshot). Admin access is
-SSM Session Manager; there is no bastion and no open SSH port.
+SSH through the bastion host: the lab account denies SSM's session channel (see the README's
+deviations).
 
 ```bash
-aws ssm start-session --target "$(terraform -chdir=terraform output -raw control_plane_instance_id)"
+CP=$(awk -F= '/^control-plane /{print $2}' ansible/lab.ini)
+eval "$(terraform -chdir=terraform output -raw ssh_via_bastion) ubuntu@$CP"
 ```
 
 In the session:
@@ -241,7 +297,8 @@ sudo k3s kubectl get nodes
 exit
 ```
 
-Screenshot `08-ssm-session.png`: the session opening, the node's private address and the nodes.
+Screenshot `08-bastion-session.png`: the session through the bastion, the node's private address
+and the nodes.
 
 ### 4d Application Load Balancer
 
@@ -279,13 +336,15 @@ aws ecr describe-repositories --query 'repositories[].[repositoryName,repository
 aws s3 ls "s3://$BUCKET" --recursive
 ```
 
-State locking: S3 keeps a lock file beside the state while Terraform works.
+State locking: S3 keeps a lock file beside the state while Terraform works. It needs an apply
+with something to do, so it waits at `Enter a value:`; the first apply of section 1 is one.
 
-1. **First terminal:** `terraform -chdir=terraform apply` and leave it waiting at
-   `Enter a value:` (do not answer yet); it holds the lock while it waits.
-2. **Second terminal** (same folder; the `export` lines of 0.3 again):
+1. **First terminal:** `terraform -chdir=terraform apply`, left waiting at `Enter a value:`
+   (do not answer yet); it holds the lock while it waits.
+2. **Second terminal:**
 
    ```bash
+   source ~/shoplite.env && cd ~/shoplite-app
    BUCKET=$(terraform -chdir=terraform/bootstrap output -raw state_bucket)
    aws s3 ls "s3://$BUCKET/shoplite/"
    terraform -chdir=terraform plan
@@ -293,7 +352,8 @@ State locking: S3 keeps a lock file beside the state while Terraform works.
 
    The listing shows `terraform.tfstate.tflock`, and `plan` stops with `Error acquiring the
    state lock`.
-3. **First terminal:** answer `no`. The lock file is gone afterwards.
+3. **First terminal:** answer `yes` in section 1 (`no` in an apply that only shows the lock).
+   The lock file is gone afterwards.
 
 Screenshots: `11-ecr-repositories.png`, `12-state-in-s3.png` (`shoplite/terraform.tfstate` in
 the bucket), `13-state-lock.png` (the lock file and the `Error acquiring the state lock` message).
@@ -310,8 +370,15 @@ four in use.
 
 ### 4g Ansible
 
-Screenshots 15–17 from steps 2 and 3. Question 3's hardening on a node, in an SSM session to a
-worker (`aws ssm start-session --target <worker id from terraform output worker_instance_ids>`):
+Screenshots 15–17 from steps 2 and 3. Question 3's hardening on a node, in an SSH session to a
+worker through the bastion:
+
+```bash
+W1=$(awk -F= '/^worker-1 /{print $2}' ansible/lab.ini)
+eval "$(terraform -chdir=terraform output -raw ssh_via_bastion) ubuntu@$W1"
+```
+
+In the session:
 
 ```bash
 sudo sshd -T | grep -E '^(permitrootlogin|passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication) '
@@ -325,11 +392,13 @@ Screenshot `18-node-hardening.png`.
 
 ### Cost guard
 
-Every resource is tagged `project=shoplite`; the monthly budget alarms at USD 20.
+Every resource is tagged `project=shoplite`; the monthly budget alarms at USD 20. The lab
+account denies the tagging API (`tag:GetResources`), so the tagged resources come from EC2's
+own list:
 
 ```bash
-aws resourcegroupstaggingapi get-resources --tag-filters Key=project,Values=shoplite \
-  --query 'ResourceTagMappingList[].ResourceARN' --output text | tr '\t' '\n' | sort
+aws ec2 describe-tags --filters Name=key,Values=project Name=value,Values=shoplite \
+  --query 'Tags[].[ResourceType,ResourceId]' --output table
 aws budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" \
   --query 'Budgets[].[BudgetName,BudgetLimit.Amount,BudgetLimit.Unit,TimeUnit]' --output table
 ```
@@ -348,4 +417,20 @@ terraform -chdir=terraform/bootstrap destroy
 rm -f ansible/lab.ini ansible/kubeconfig
 ```
 
-Screenshot `21-destroy.png`: `Destroy complete!` of the main configuration.
+Screenshot `21-destroy.png`: `Destroy complete!` of the main configuration. Then set the
+GitHub variable `LAB_ACTIVE` to `false`.
+
+If the lab terminal is gone but the account still answers (its keys in the environment of any
+machine with Terraform), the main configuration destroys the same way after
+`terraform -chdir=terraform init -backend-config=...` and the 0.3 variables (any valid values
+do for a destroy). The bootstrap's state was local to the lost terminal, so import the bucket
+first; the apply only records `force_destroy` in the new state:
+
+```bash
+BUCKET=shoplite-tfstate-<account>-<region>
+terraform -chdir=terraform/bootstrap init
+terraform -chdir=terraform/bootstrap import aws_s3_bucket.state "$BUCKET"
+terraform -chdir=terraform/bootstrap import aws_s3_bucket_versioning.state "$BUCKET"
+terraform -chdir=terraform/bootstrap apply
+terraform -chdir=terraform/bootstrap destroy
+```

@@ -116,13 +116,14 @@ Everything is built from Git:
    - a VPC in two Availability Zones: two public and two private subnets, an Internet Gateway
      and one NAT Gateway;
    - three Ubuntu 24.04 nodes in the private subnets: one control plane and two workers.
-     Admins reach them through SSM; no port 22 is open;
+     Admins reach them over SSH through a bastion host in a public subnet: the nodes accept
+     SSH only from the bastion, and the bastion only from the admin's address;
    - the ALB: port 80 goes to prod, port 8080 to dev, both to Traefik's NodePorts;
    - the three ECR repositories, and the GitHub OIDC roles;
    - the USD 20 budget.
 
    The state is in S3, with a lock file. Every resource is tagged `project=shoplite`.
-2. **Ansible** ([ansible/](ansible)), over SSH through SSM:
+2. **Ansible** ([ansible/](ansible)), over SSH through the bastion:
    - question 3's hardening on every node;
    - the k3s server and agents;
    - the kubeconfig.
@@ -166,6 +167,7 @@ The workflows use these settings (Settings → Secrets and variables → Actions
 | `AWS_PLAN_ROLE_ARN` | variable | terraform-plan's read-only role: `terraform output ci_plan_role_arn` |
 | `AWS_REGION` | variable | optional, default `ap-southeast-1` |
 | `SSH_PUBLIC_KEY` | variable | the nodes' public key, for terraform-plan |
+| `ADMIN_CIDR` | variable | the lab terminal's public IP as `x.x.x.x/32` (the same as `TF_VAR_admin_cidr`), for terraform-plan |
 | `GITOPS_DEPLOY_KEY` | secret | a deploy key that can write to shoplite-gitops, for main and promote |
 | `BUDGET_ALERT_EMAIL` | secret | the budget's e-mail address, for terraform-plan |
 
@@ -176,7 +178,8 @@ The workflows use these settings (Settings → Secrets and variables → Actions
   `shoplite-db`), Grafana's admin password, Alertmanager's Slack webhook and ArgoCD's admin
   password. The chart only refers to them by name.
 - CI reaches AWS through OIDC, with no stored key.
-- Terraform takes the budget's e-mail and the nodes' SSH key from `TF_VAR_` variables.
+- Terraform takes the budget's e-mail, the nodes' SSH key and the admin's address from
+  `TF_VAR_` variables.
 
 ## Tests
 
@@ -240,7 +243,8 @@ Where the build differs from the question's words, or a choice needs a reason:
   - everything from the k3s pod and service networks;
   - routed traffic, for the NodePorts.
 
-  The security groups never open port 22: Ansible's SSH goes through SSM.
+  The security groups open port 22 on the nodes only to the bastion's group, and on the
+  bastion only to `admin_cidr`.
 - **ECR images are pulled through kubelet's credential provider**, with the node's IAM
   role. So there is no image pull secret to renew.
 - **Question 3's server has a small VPC of its own** (`terraform/q3-server`). Its security
@@ -266,10 +270,24 @@ Where the build differs from the question's words, or a choice needs a reason:
   - HighErrorRate and HighLatency are evaluated per environment and route.
   - NodeDiskFilling watches `/` for 5 minutes; the question gives no duration.
   - PodCrashLooping fires on the first restart.
-- **web's image pins `brotli-libs=1.2.1-r0`.**
-  - The base image `nginx-unprivileged:1.30.6-alpine` ships 1.2.0-r1, which has the CRITICAL
-    CVE-2026-111497, and the Trivy gate rejects it.
-  - Remove the pin once the base image is rebuilt.
+- **web's image patches its base image**, because the Trivy gate rejects CRITICAL findings
+  and no build of `nginx-unprivileged:1.30.6-alpine` has the fixes yet:
+  - `brotli-libs=1.2.1-r0` (1.2.0-r1 has CVE-2026-111497);
+  - nginx 1.30.7-r1 and the image's modules from nginx.org's own Alpine repository (1.30.6
+    has CVE-2026-113425, CVE-2026-121810, CVE-2026-123007 and CVE-2026-123633).
+
+  The tests run on the patched image too. Remove each line once the base image has its fix.
+- **Admin access is through a bastion host, not SSM.** The question prefers SSM, and the
+  nodes are set up for it (agent and role). But the lab account's organization policy denies
+  `ssmmessages` to the instances, so Session Manager answers `TargetNotConnected`. The
+  question's other option is used instead:
+  - a t3.micro in a public subnet, with no IAM role;
+  - SSH in only from `admin_cidr` (`TF_VAR_admin_cidr`, the lab terminal's address), and out
+    only to the nodes' port 22;
+  - Ansible and the kubectl tunnel (an SSH port forward to the control plane) go through it.
+- **The lab account denies some read-only APIs**, so the evidence uses others:
+  - `tag:GetResources`: the tagged resources come from `aws ec2 describe-tags`;
+  - CloudTrail's `LookupEvents`.
 - **Question 8's load test runs for up to an hour**, at 22 requests a second. The question's
   15 minutes at 20 or more fall inside one run, which also shows the healthy start and the
   recovery.

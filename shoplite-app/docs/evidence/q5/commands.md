@@ -108,6 +108,7 @@ password: the bootstrap (section 3) asks for it and stores it only in the cluste
    `../shoplite-gitops`):
 
    ```bash
+   cd ~
    git clone https://github.com/SaikatGeek/shoplite-app.git
    git clone https://github.com/SaikatGeek/shoplite-gitops.git
    cd shoplite-app
@@ -133,9 +134,11 @@ password: the bootstrap (section 3) asks for it and stores it only in the cluste
    terraform -chdir=terraform output -raw ci_role_arn; echo
    ```
 
-   A new terminal needs these again.
+   A new terminal needs these again (`KUBECONFIG` comes with `source ~/shoplite.env`).
 4. **shoplite-app** → Settings → Secrets and variables → Actions → Variables: set
-   `AWS_ROLE_ARN` to the role's ARN that was just printed, and `LAB_ACTIVE` to `true`.
+   `AWS_ROLE_ARN` to the role's ARN that was just printed, and `LAB_ACTIVE` to `true`. Set
+   question 7's per-session variables now too (`SSH_PUBLIC_KEY`, `ADMIN_CIDR`,
+   `AWS_PLAN_ROLE_ARN`; [`../q7/commands.md`](../q7/commands.md), section 0).
 
 ## 2. The images: the main pipeline
 
