@@ -1,6 +1,8 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-18, shoplite-app-এর README (`04b7063`); আগে Q8-এর lab-এর পদ্ধতি, RCA-র কাঠামো, আর architecture diagram `shoplite-app/docs`-এ (`a641940`)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-23, প্রথম AWS lab session: Q4 lab-এ পুরো চলেছে, bastion host (lab SSM বন্ধ রাখে), web-এর nginx 1.30.7, আর পরের lab-এর জন্য [NEXT-LAB.md](NEXT-LAB.md) ও [LAB-RUNBOOK.md](LAB-RUNBOOK.md) (section 7d)। Deadline: 17 Nov 2026।
+
+**পরের lab-এর আগে পড়ো: [NEXT-LAB.md](NEXT-LAB.md)** (কোথায় আছি, কী বদলায়, OIDC-র খোলা সমস্যা) আর **[LAB-RUNBOOK.md](LAB-RUNBOOK.md)** (copy-paste command আর screenshot)।
 
 প্রতিটা step শেষ হলে এই ফাইল আপডেট হবে। বিস্তারিত পরিকল্পনা [PLAN.md](PLAN.md)-তে, প্রশ্নপত্র [project.md](project.md)-তে।
 
@@ -17,7 +19,7 @@
 | Q1 | Application | 8 | ✅ ৯টা step-এর সবগুলো শেষ |
 | Q2 | Docker | 10 | ✅ চারটা অংশই শেষ; নতুন clone-এ `make up && make smoke` pass করেছে (WSL Ubuntu)। Lab-এর নতুন EC2-তে প্রমাণ (ভিডিও V1) বাকি |
 | Q3 | Linux server | 5 | 🟡 `linux/` ফাইল তৈরি, local Ubuntu 24.04 test server-এ চারটা কাজই রিহার্সাল করা; server বানানোর Terraform-ও তৈরি (4.6); lab-এর EC2-তে চালিয়ে screenshot নেওয়া বাকি |
-| Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8): Terraform, Ansible-এর hardening আর k3s cluster (local-এ ৩টা node-এ রিহার্সাল করা), lab-এর সংযোগ (SSM-এর ভেতর দিয়ে SSH, inventory, ECR), আর `docs/evidence/q4/commands.md`; বাকি শুধু lab-এ চালানো আর screenshot |
+| Q4 | Terraform, Ansible | 17 | 🟡 Code আর lab-এর পদ্ধতি সব শেষ (4.1–4.8); 23 Nov lab-এ পুরো চলেছে (section 7d): Terraform, bastion দিয়ে Ansible (lab SSM বন্ধ রাখে), তিন node `Ready`। ২১টার মধ্যে ১৮টা screenshot নেওয়া; বাকি 05 (node-এর `checkip` সহ আবার), 08, 10, 18 পরের session-এ |
 | Q5 | Kubernetes, Helm | 15 | 🟡 Code শেষ (5.1–5.3): chart-এ পাঁচটা workload, non-root, requests আর limits, Secret আর ConfigMap, PDB, HPA, Ingress, NetworkPolicy; Traefik ALB-র পেছনে (NodePort, `/ping`); local k3s-এ dev আর prod দুটোই চলে, order `COMPLETED`। 5.4-এ lab-এর পদ্ধতি (`docs/evidence/q5/commands.md`, repo ভাগ সহ)। বাকি শুধু lab-এ চালানো |
 | Q6 | Observability | 25 | 🟡 Code আর lab-এর পদ্ধতি শেষ (6.1–6.5): metrics (kube-prometheus-stack, ServiceMonitor, exemplar), Loki, Alloy (JSON parse), Tempo (OTLP), Grafana-য় log ↔ trace আর exemplar → trace, "ShopLite — Golden Signals" dashboard, ৫টা alert আর runbook, Alertmanager → Slack, k6-এর load test, `docs/evidence/q6/commands.md`; সব ArgoCD দিয়ে, local k3s-এ রিহার্সাল pass। বাকি শুধু lab-এ চালানো |
 | Q7 | CI/CD, GitOps | 10 | 🟡 Code আর lab-এর পদ্ধতি শেষ (7.1–7.8): shoplite-gitops (root app, dev auto-sync আর self-heal, prod manual), cluster-এর bootstrap আর ArgoCD, GitHub OIDC-এর দুই role (CI-র push, PR-এর read-only plan), main pipeline (lint, test, build, Trivy-র gate, ECR, gitops-এ tag), PR pipeline আর Terraform plan-এর comment, `promote`, `docs/evidence/q7/commands.md`; সব local-এ রিহার্সাল করা। দুই repo GitHub-এ ভাগ হয়েছে (17 Nov, `publish-repos.sh`)। বাকি lab-এ চালানো |
@@ -1145,6 +1147,26 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 - ✅ চারটা doc-এর ৩২টা relative link আর README-র `#tests` anchor মেলে; কোনো ফাইলে Claude বা Anthropic-এর নাম নেই।
 - WSL-এর check চলেনি: তখন Docker Desktop নতুন করে চালু হচ্ছিল (WSL বলেছিল `docker could not be found`)। চালু হওয়ার পরে Git Bash-এ চালানো হয়েছে।
 
+## 7d. প্রথম AWS lab session (23 Nov, PC-01)
+
+Poridhi-র lab-এ Q4 চালানো হয়েছে। পথে যা ভাঙল আর যেভাবে ঠিক হলো:
+
+- **SSM কাজ করে না।** Node গুলো `Online` দেখায়, কিন্তু Session Manager `TargetNotConnected`, Run Command `Pending`।
+  - IAM simulator (region সহ): `ssmmessages:CreateControlChannel` explicitDeny, lab-এর organization policy (SCP)।
+  - সমাধান: **bastion host** (`2083e81`, প্রশ্নে অনুমতি আছে: "bastion host or SSM, with SSM preferred")।
+    - `terraform/modules/compute/bastion.tf`: t3.micro, প্রথম public subnet-এ, public IP, node-এর key, IMDSv2, encrypted disk, IAM role নেই।
+    - Bastion-এ SSH শুধু `admin_cidr` থেকে (/24 বা তার চেয়ে ছোট), bastion থেকে শুধু node-এর 22-এ; node-এ SSH শুধু bastion-এর group থেকে। Node-এ SSM-এর role থেকে গেছে।
+    - Root: variable `admin_cidr`, output `bastion_public_ip` আর `ssh_via_bastion`; `ansible_inventory` (private IP, ProxyCommand `ssh -W`) আর `kubectl_tunnel` (control plane-এ SSH, local 6443 → তার 127.0.0.1:6443) bastion দিয়ে। `terraform-plan.yml` পড়ে `vars.ADMIN_CIDR`।
+    - Test: compute ১২টা, root ১১টা, pipeline-এর রিহার্সাল pass। Lab-এ: ping, playbook দুইবার (`changed=0`), kubectl তিন node `Ready`।
+- **Security group-এর description-এ apostrophe চলে না** (EC2 শুধু `a-zA-Z0-9. _-:/()#,@[]+=&;{}!$*` নেয়; mock ধরে না)। `f4cfc46`: ঠিক করা, আর module-এর সব description-এর জন্য test (apostrophe ফেরালে fail করে)।
+- **web-এর nginx 1.30.6-এ ৪টা নতুন CRITICAL CVE** (CVE-2026-113425, -121810, -123007, -123633), Trivy gate আটকাচ্ছিল। `65b0494`: নতুন `base` stage, nginx.org-এর Alpine repo থেকে nginx 1.30.7-r1 আর চারটা module একই version-এ (signing key image-এ আগেই আছে), brotli-র pin সহ। test আর runtime দুটোই `base`-এর ওপর। Web-এর check pass, uid 101, 78.6 MB, Trivy-তে CRITICAL নেই, pipeline-এর রিহার্সাল pass, GitHub-এর main-এও scan সবুজ।
+- **Lab-এর terminal:** user `poridhian` (password ছাড়া `sudo`); `en_US.UTF-8` locale নেই (Ansible-এর জন্য `LANG=C.UTF-8`); নতুন terminal-এ export হারায় (`~/shoplite.env`); Ubuntu-র mirror মাঝে মাঝে 503 (আবার চালানো)। সব Q4-এর পদ্ধতিতে বসানো।
+- **Lab-এর SCP আরও যা বন্ধ রাখে:** CloudTrail `LookupEvents`, `tag:GetResources` (19 এখন `ec2 describe-tags`), CloudShell। ECR চলে (region সহ simulate করলে allowed; lab user আসল token পায়)।
+- **OIDC fail করে (খোলা সমস্যা):** main-এর lint, test, build, scan সবুজ; "AWS credentials through OIDC" ১২ বার চেষ্টার পরে `Not authorized to perform sts:AssumeRoleWithWebIdentity`। Provider, trust (`aud`, `sub`) আর Action ঠিক আছে বলে যাচাই করা। CloudTrail বন্ধ, তাই কারণ দেখা যায়নি; সম্ভবত lab-এর policy। পরিকল্পনা [NEXT-LAB.md](NEXT-LAB.md)-র section ৫-এ।
+- **শেষে:** lab-এর ৫ ঘণ্টা শেষ হওয়ার পরে AWS console আরও ~১ ঘণ্টা খোলা ছিল। Lab-এর key দিয়ে PC-01 থেকে Docker-এ Q4-এর বাকি screenshot আর destroy (৬১টা resource; bootstrap-এর bucket import করে)। যাচাই: instance, VPC, ALB, EIP, NAT, ECR, role, OIDC provider, bucket সব ০। Key-এর ফাইল মোছা।
+- **Screenshot:** Q4-এর 01–07, 09, 11–17, 19–21 (`4c870d1`, `61257b6`, `cf65508`, `eb25f5b`), Q5-এর 01।
+- **Docs (এই commit):** Q4-এর পদ্ধতি (bastion, env ফাইল, locale, 503, screenshot-এর command, lock-এর প্রমাণ প্রথম apply-এর সময়, terminal হারালে destroy), README (bastion, `ADMIN_CIDR`, nginx, lab-এর বন্ধ API), Q5 আর Q7-এর variable, architecture diagram-এর লেখা (PNG আবার বানানো বাকি)।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |
@@ -1193,6 +1215,10 @@ Stack বসে lab-এ ArgoCD দিয়ে, namespace `monitoring`-এ (প�
 | `a641940` | 2026-11-17 | Q8 step 8.1: lab-এর পদ্ধতি (`docs/evidence/q8/commands.md`), RCA-র কাঠামো (`docs/RCA.md`), architecture diagram `docs/`-এ |
 | `04b7063` | 2026-11-18 | shoplite-app-এর README: চালানো, layout, AWS, setting, secret, test, প্রমাণের index, deviation log |
 | `3b0ccf7` | 2026-11-18 | Q3-এর server এখন shoplite-app clone করে (আগে devops-final); Q4-এর পুরনো "ভাগের আগে" নোট বাদ |
+| `65b0494` | 2026-11-23 | fix(web): nginx 1.30.7 nginx.org-এর repo থেকে (৪টা CRITICAL CVE) |
+| `2083e81` | 2026-11-23 | feat(terraform): bastion host, কারণ lab SSM বন্ধ রাখে; `admin_cidr`, `ADMIN_CIDR` |
+| `f4cfc46` | 2026-11-23 | fix(terraform): security group-এর description-এ apostrophe নেই, আর তার test |
+| `4c870d1`, `61257b6`, `cf65508`, `eb25f5b` | 2026-11-23 | প্রথম lab-এর screenshot (Q4-এর ১৮টা, Q5-এর ১টা) |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -1626,6 +1652,8 @@ bash ansible/tests/run.sh
 - **PC-01 থেকে GitHub-এর REST API rate limit (403) দেয়।** Public repo-র Actions page browser-এ পড়া যায়: run → job → ব্যর্থ ধাপের log।
 
 ## 13. পরের কাজ
+
+**23 Nov থেকে: [NEXT-LAB.md](NEXT-LAB.md)** (কোথায় আছি, প্রতি lab-এ কী বদলায়, OIDC-র পরিকল্পনা, বাকি কাজের তালিকা) আর **[LAB-RUNBOOK.md](LAB-RUNBOOK.md)** (পুরো session-এর copy-paste command, কেন, আর কোন screenshot কোথায়)। নিচের তালিকা 18 Nov-এর; GitHub-এর setting (১) হয়ে গেছে, Q4 একবার চলেছে (section 7d)।
 
 Q1–Q7-এর code শেষ; Q3–Q8-এর lab-এর পদ্ধতিও শেষ (section 4, 5, 6, 6b, 7, 7b)। এরপর:
 

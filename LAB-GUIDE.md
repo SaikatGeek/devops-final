@@ -1,5 +1,7 @@
 # Lab-এর গাইড: GitHub-এর setting আর lab session, বাসার PC থেকে
 
+> **২৩ নভেম্বরের পর থেকে:** lab-এর দিন সরাসরি **[LAB-RUNBOOK.md](LAB-RUNBOOK.md)** ধরে চলো। ওখানে copy-paste command আর screenshot-এর নাম আছে, প্রথম lab-এর শিক্ষাসহ। কোথায় আছি আর কী বাকি: **[NEXT-LAB.md](NEXT-LAB.md)**। এই ফাইলের section ২ (GitHub setting) হয়ে গেছে।
+
 এই ফাইলে আছে কাজের ক্রম আর checklist। প্রতিটা command-এর আসল উৎস English পদ্ধতিগুলো:
 
 - Q4: `shoplite-app/docs/evidence/q4/commands.md`
@@ -137,6 +139,7 @@ Lab terminal-এ, `shoplite-app` থেকে:
 terraform -chdir=terraform output -raw ci_role_arn; echo
 terraform -chdir=terraform output -raw ci_plan_role_arn; echo
 cat ~/.ssh/shoplite.pub
+echo $TF_VAR_admin_cidr
 ```
 
 https://github.com/SaikatGeek/shoplite-app/settings/variables/actions → **New repository variable**। আগে থেকে থাকলে তার পাশের ✏️ দিয়ে বদলাও।
@@ -146,6 +149,7 @@ https://github.com/SaikatGeek/shoplite-app/settings/variables/actions → **New 
 | `AWS_ROLE_ARN` | প্রথম লাইন |
 | `AWS_PLAN_ROLE_ARN` | দ্বিতীয় লাইন |
 | `SSH_PUBLIC_KEY` | তৃতীয় লাইন, পুরোটা |
+| `ADMIN_CIDR` | চতুর্থ লাইন (`x.x.x.x/32`) |
 | `LAB_ACTIVE` | `true` |
 
 এরপর Q5-এর পদ্ধতির section 2 থেকে চালাও: Actions → main → **Run workflow**।
