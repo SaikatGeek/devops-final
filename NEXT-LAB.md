@@ -1,6 +1,6 @@
 # পরের lab: কোথায় আছি, কী বদলাবে, কীভাবে এগোব
 
-শেষ আপডেট: ২৩ নভেম্বর ২০২৬, প্রথম AWS lab session-এর পরে।
+শেষ আপডেট: ২৩ নভেম্বর ২০২৬, প্রথম AWS lab session-এর পরে; OIDC-র কারণ আর fix একই দিনে (section ৫)।
 
 ## ০. বাসায় বা নতুন কোনো session-এ Claude-কে এটা পাঠাও
 
@@ -65,39 +65,25 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 - Code-এ কিছু বদলাতে হয় না।
 - Secret দুইটা (`GITOPS_DEPLOY_KEY`, `BUDGET_ALERT_EMAIL`) থেকে যায়।
 
-## ৫. সবচেয়ে বড় খোলা সমস্যা: GitHub → AWS (OIDC)
+## ৫. GitHub → AWS (OIDC): কারণ পাওয়া গেছে, ঠিক করা হয়েছে
 
-- কী হয়েছে: main workflow-এর lint, test, build আর Trivy scan pass করে। কিন্তু "AWS credentials through OIDC" ধাপে ১২ বার চেষ্টার পরেও `Not authorized to perform sts:AssumeRoleWithWebIdentity` আসে।
-- যা ঠিক আছে বলে যাচাই করা হয়েছে:
-  - OIDC provider (`sts.amazonaws.com`);
-  - role-এর trust (`repo:SaikatGeek/shoplite-app:ref:refs/heads/main`);
-  - Action `sts:AssumeRoleWithWebIdentity`।
-- সম্ভাব্য কারণ: lab-এর organization policy GitHub-এর OIDC আটকায়। CloudTrail বন্ধ, তাই প্রমাণ দেখা যায়নি।
-- প্রশ্নে OIDC চাওয়া আছে ("Push images to ECR using OpenID Connect"), আর grading-এ এর নম্বর আছে। তাই এটা নিজে নিজে বাদ দেওয়া যাবে না।
+- ২৩ নভেম্বরের lab-এ "AWS credentials through OIDC" ধাপে আসে `Not authorized to perform sts:AssumeRoleWithWebIdentity`।
+- **কারণ lab-এর policy না, আমাদের trust-এর `sub`।**
+  - GitHub ১৫ জুলাই ২০২৬-এর পরে বানানো repo-র token-এর `sub`-এ owner আর repo-র নম্বর দেয় ("immutable subject")।
+  - shoplite-app বানানো ১২ নভেম্বর। আসল `sub`: `repo:SaikatGeek@53232305/shoplite-app@1454879820:ref:refs/heads/main`।
+  - আমাদের trust চাইছিল `repo:SaikatGeek/shoplite-app:ref:refs/heads/main`।
+- **Fix (২৩ নভেম্বর, `e26efcc`, GitHub-এ):** `modules/github-oidc`-এ দুই ID, দুই role-এর `sub` নতুন format-এ, এখনো exact match। Test আর ৯টা mutation pass।
+- Repo কখনো মুছে আবার বানালে ID বদলায়: তখন `terraform/main.tf`-এর দুই ID বদলাতে হবে।
 
-**পরের session-এর পরিকল্পনা:**
-1. Q4 apply শেষ হলেই GitHub variable দিয়ে main-এর "Run workflow" চালাও (LAB-RUNBOOK, section ৬)।
-2. OIDC pass করলে: সমস্যা মিটে গেছে, স্বাভাবিকভাবে Q5-এ যাও।
-3. আবার fail করলে:
-   - error-এর screenshot রাখো (`docs/evidence/q7/` বা `q5/`);
-   - instructor-কে জানাও (নিচের বার্তা);
-   - Q5–Q8 আটকে না রেখে, instructor রাজি হলে, PC-01 থেকে image ECR-এ পাঠাও (LAB-RUNBOOK, section ১০)। README-র deviation-এ লিখতে হবে।
-   - এই বিকল্পটা এখনো তোমার সিদ্ধান্তের অপেক্ষায়। Claude-কে জিজ্ঞেস করো।
-
-Instructor-কে বার্তা (ইংরেজিতে, দরকার হলে বদলে নাও):
-
-```text
-In the Poridhi AWS lab, GitHub Actions cannot assume an IAM role through OIDC: the role's
-trust policy is correct (aud sts.amazonaws.com, sub repo:SaikatGeek/shoplite-app:ref:refs/heads/main),
-but sts:AssumeRoleWithWebIdentity is denied. The lab's service control policy also denies
-CloudTrail, so I cannot see the reason. Question 7 asks for OIDC. May I push the images with
-the lab user's keys instead, or can OIDC be allowed in my lab account?
-```
+**পরের session-এ:**
+1. Q4 apply-এর পরে GitHub variable দিয়ে main-এর "Run workflow" চালাও (LAB-RUNBOOK, section ৬)।
+2. OIDC সবুজ হলে: প্রমাণ হয়ে গেল, Q5-এ যাও।
+3. তবু লাল হলে: থামো, পুরো error Claude-কে দেখাও। তখন role-এর trust lab-এ দেখে নেওয়া হবে (`aws iam get-role --role-name shoplite-github-ci`)।
 
 ## ৬. বাকি কাজ, ক্রমে
 
 **Lab-এর আগে (Claude করবে, তোমার "হ্যাঁ" নিয়ে):**
-1. OIDC fail করলে কী বিকল্প নেব, সেটা ঠিক করা (উপরের section ৫)।
+1. ~~OIDC fail করলে কী বিকল্প নেব~~: দরকার নেই, কারণ পাওয়া গেছে আর ঠিক করা হয়েছে (উপরের section ৫)।
 2. Architecture diagram-এর PNG আবার বানানো (`shoplite-app/docs/architecture-diagram.png`; লেখায় bastion যোগ হয়েছে, ছবিতে এখনো SSM)।
 
 **তোমার প্রস্তুতি:**

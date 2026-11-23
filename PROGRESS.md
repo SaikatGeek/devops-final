@@ -1,6 +1,6 @@
 # ShopLite: কাজের অগ্রগতি (progress log)
 
-শেষ আপডেট: 2026-11-23, প্রথম AWS lab session: Q4 lab-এ পুরো চলেছে, bastion host (lab SSM বন্ধ রাখে), web-এর nginx 1.30.7, আর পরের lab-এর জন্য [NEXT-LAB.md](NEXT-LAB.md) ও [LAB-RUNBOOK.md](LAB-RUNBOOK.md) (section 7d)। Deadline: 17 Nov 2026।
+শেষ আপডেট: 2026-11-23, প্রথম AWS lab session: Q4 lab-এ পুরো চলেছে, bastion host (lab SSM বন্ধ রাখে), web-এর nginx 1.30.7, আর পরের lab-এর জন্য [NEXT-LAB.md](NEXT-LAB.md) ও [LAB-RUNBOOK.md](LAB-RUNBOOK.md) (section 7d)। পরে একই দিনে: OIDC-র fail-এর কারণ পাওয়া গেছে (GitHub-এর immutable subject) আর ঠিক করা হয়েছে। Deadline: 17 Nov 2026।
 
 **পরের lab-এর আগে পড়ো: [NEXT-LAB.md](NEXT-LAB.md)** (কোথায় আছি, কী বদলায়, OIDC-র খোলা সমস্যা) আর **[LAB-RUNBOOK.md](LAB-RUNBOOK.md)** (copy-paste command আর screenshot)।
 
@@ -1162,7 +1162,12 @@ Poridhi-র lab-এ Q4 চালানো হয়েছে। পথে যা
 - **web-এর nginx 1.30.6-এ ৪টা নতুন CRITICAL CVE** (CVE-2026-113425, -121810, -123007, -123633), Trivy gate আটকাচ্ছিল। `65b0494`: নতুন `base` stage, nginx.org-এর Alpine repo থেকে nginx 1.30.7-r1 আর চারটা module একই version-এ (signing key image-এ আগেই আছে), brotli-র pin সহ। test আর runtime দুটোই `base`-এর ওপর। Web-এর check pass, uid 101, 78.6 MB, Trivy-তে CRITICAL নেই, pipeline-এর রিহার্সাল pass, GitHub-এর main-এও scan সবুজ।
 - **Lab-এর terminal:** user `poridhian` (password ছাড়া `sudo`); `en_US.UTF-8` locale নেই (Ansible-এর জন্য `LANG=C.UTF-8`); নতুন terminal-এ export হারায় (`~/shoplite.env`); Ubuntu-র mirror মাঝে মাঝে 503 (আবার চালানো)। সব Q4-এর পদ্ধতিতে বসানো।
 - **Lab-এর SCP আরও যা বন্ধ রাখে:** CloudTrail `LookupEvents`, `tag:GetResources` (19 এখন `ec2 describe-tags`), CloudShell। ECR চলে (region সহ simulate করলে allowed; lab user আসল token পায়)।
-- **OIDC fail করে (খোলা সমস্যা):** main-এর lint, test, build, scan সবুজ; "AWS credentials through OIDC" ১২ বার চেষ্টার পরে `Not authorized to perform sts:AssumeRoleWithWebIdentity`। Provider, trust (`aud`, `sub`) আর Action ঠিক আছে বলে যাচাই করা। CloudTrail বন্ধ, তাই কারণ দেখা যায়নি; সম্ভবত lab-এর policy। পরিকল্পনা [NEXT-LAB.md](NEXT-LAB.md)-র section ৫-এ।
+- **OIDC fail করেছিল:** main-এর lint, test, build, scan সবুজ; "AWS credentials through OIDC" ১২ বার চেষ্টার পরে (configure-aws-credentials-এর নিজের retry) `Not authorized to perform sts:AssumeRoleWithWebIdentity`। তখন সন্দেহ ছিল lab-এর policy।
+  - **আসল কারণ (23 Nov, lab-এর পরে, বাসার PC):** GitHub-এর "immutable subject"। 15 জুলাই 2026-এর পরে বানানো repo-র token-এর `sub`-এ owner আর repo-র নম্বর থাকে। shoplite-app বানানো 12 Nov 2026-এ।
+  - GitHub-এর API (`gh api repos/SaikatGeek/shoplite-app/actions/oidc/customization/sub`) বলে `sub_claim_prefix` = `repo:SaikatGeek@53232305/shoplite-app@1454879820`। আমাদের trust চাইছিল `repo:SaikatGeek/shoplite-app:ref:refs/heads/main`, তাই মেলেনি।
+  - Fix (`e26efcc`): `modules/github-oidc`-এ নতুন input `github_owner_id`, `github_repository_id` (শুধু অঙ্ক, validation), দুই role-এর `sub` এখন `repo:SaikatGeek@53232305/shoplite-app@1454879820:ref:refs/heads/main` আর `...:pull_request`, এখনো exact match। Root `main.tf`-এ দুই ID।
+  - যাচাই: module-এর test ১৩টা pass (৩টা নতুন: owner ID-তে `*`, repo ID-তে `*`, ID-র জায়গায় নাম), root-এর ১১টা pass, `fmt`, `validate`; root-এর মান জোড়া দিয়ে বানানো prefix GitHub-এর `sub_claim_prefix`-এর সমান। Mutation ৯টা (পুরোনো `sub` দুই role-এ, ID উল্টো, repo ID-তে `*`, যেকোনো branch, PR role-এ main-এর `sub`, দুই validation বাদ, validation-এ `*`), প্রতিটা test fail করায়।
+  - আসল প্রমাণ পরের lab-এ main-এর run (OIDC ধাপ সবুজ)। [NEXT-LAB.md](NEXT-LAB.md)-র section ৫।
 - **শেষে:** lab-এর ৫ ঘণ্টা শেষ হওয়ার পরে AWS console আরও ~১ ঘণ্টা খোলা ছিল। Lab-এর key দিয়ে PC-01 থেকে Docker-এ Q4-এর বাকি screenshot আর destroy (৬১টা resource; bootstrap-এর bucket import করে)। যাচাই: instance, VPC, ALB, EIP, NAT, ECR, role, OIDC provider, bucket সব ০। Key-এর ফাইল মোছা।
 - **Screenshot:** Q4-এর 01–07, 09, 11–17, 19–21 (`4c870d1`, `61257b6`, `cf65508`, `eb25f5b`), Q5-এর 01।
 - **Docs (এই commit):** Q4-এর পদ্ধতি (bastion, env ফাইল, locale, 503, screenshot-এর command, lock-এর প্রমাণ প্রথম apply-এর সময়, terminal হারালে destroy), README (bastion, `ADMIN_CIDR`, nginx, lab-এর বন্ধ API), Q5 আর Q7-এর variable, architecture diagram-এর লেখা (PNG আবার বানানো বাকি)।
@@ -1219,6 +1224,7 @@ Poridhi-র lab-এ Q4 চালানো হয়েছে। পথে যা
 | `2083e81` | 2026-11-23 | feat(terraform): bastion host, কারণ lab SSM বন্ধ রাখে; `admin_cidr`, `ADMIN_CIDR` |
 | `f4cfc46` | 2026-11-23 | fix(terraform): security group-এর description-এ apostrophe নেই, আর তার test |
 | `4c870d1`, `61257b6`, `cf65508`, `eb25f5b` | 2026-11-23 | প্রথম lab-এর screenshot (Q4-এর ১৮টা, Q5-এর ১টা) |
+| `e26efcc` | 2026-11-23 | fix(terraform): OIDC-র trust-এ GitHub-এর immutable subject (owner আর repo-র ID), প্রথম lab-এর OIDC fail-এর কারণ |
 
 সব commit GitHub-এর `main`-এ push করা আছে।
 
@@ -1571,6 +1577,7 @@ bash ansible/tests/run.sh
 - **Peer-এর জন্য মানের তালিকা পদ্ধতির ভেতরেই** (8.1; PLAN-এর আলাদা `docs/chaos-menu.md`-এর বদলে, যাতে বাড়তি ফাইল না হয়)। প্রতিটা মান k6-এর load-এ নিজের alert বাজায়: `latencyMs: 1500` (`/products/{id}`-এর ৩০%, p95 প্রায় ২ s), `errorRate: 0.2` (৫%-এর ওপরে), `memoryLeak` (২৫৬Mi-তে কয়েক মিনিটে OOMKilled), `slowDb` (queue ১০ মিনিট ৫০-এর ওপরে)।
 - **RCA-র সংখ্যা cluster ভাঙার আগেই** (8.1)। destroy-এর পরে Prometheus-এর data থাকে না।
 - **RCA আগে commit, diff-এর সাথে মেলানো পরের commit-এ** (8.1)। Git-এর ইতিহাসই দেখায় RCA diff দেখার আগে লেখা।
+- **OIDC-র trust-এ GitHub-এর immutable subject, দুই ID pin করা** (23 Nov; user-এর "হ্যাঁ")। GitHub নতুন repo-র token-এ এই format-ই দেয়। `StringLike` আর `*` দিলে একই নামে নতুন বানানো repo-ও role পেত, তাই exact match। Repo-র setting বদলে পুরোনো format-এ ফেরা (REST API) বাছা হয়নি: GitHub-এর docs-এ সেটা স্পষ্ট নয়, আর এতে কম নিরাপদ format ফিরে আসে।
 
 ## 12. জানা বিষয়
 

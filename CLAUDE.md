@@ -80,11 +80,15 @@ Q8's procedure (step 8.1, `a641940`) was checked like this:
     - `kubectl_tunnel`: `ssh_via_bastion` plus `-o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -N -L 6443:127.0.0.1:6443 ubuntu@<control plane>`, so only port 22 is needed.
 - `terraform/modules/github-oidc` (Q7a, step 7.3), called from the root with the ECR module's ARNs:
   - IAM OIDC provider `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com`, no thumbprint (optional in provider 6.73; AWS checks GitHub's certificate itself).
-  - Role `shoplite-github-ci`, trust `StringEquals` on `aud` and on `sub` = `repo:SaikatGeek/shoplite-app:ref:refs/heads/main` (no wildcard, so no PR or other branch).
+  - Role `shoplite-github-ci`, trust `StringEquals` on `aud` and on `sub` = `repo:SaikatGeek@53232305/shoplite-app@1454879820:ref:refs/heads/main` (no wildcard, so no PR or other branch).
+  - That is GitHub's immutable subject. Repositories created after 15 July 2026 (shoplite-app: 12 Nov) carry the owner's and the repository's numeric IDs in `sub`. The old `repo:SaikatGeek/shoplite-app:...` form made the 23 Nov lab's run fail with `Not authorized to perform sts:AssumeRoleWithWebIdentity`; it was not the lab's policy.
+    - The module builds the subject from `github_repository` plus `github_owner_id` and `github_repository_id` (digits only, validated); the root sets them.
+    - Read the real prefix with `gh api repos/SaikatGeek/shoplite-app/actions/oidc/customization/sub --jq .sub_claim_prefix`.
+    - A recreated repository gets a new ID: update the root's IDs.
   - Inline policy `ecr-push`: `ecr:GetAuthorizationToken` on `*`, and the six push actions from AWS's docs (`BatchCheckLayerAvailability`, `BatchGetImage`, `CompleteLayerUpload`, `InitiateLayerUpload`, `PutImage`, `UploadLayerPart`) on the given repository ARNs only.
   - Inputs validated (`owner/name`; ECR repository ARNs without wildcards). Root output `ci_role_arn` (the workflows' `role-to-assume`).
   - Its tests were checked by mutation (eight deliberate mistakes, each fails a run); do the same for later IAM changes.
-  - The plan role (Q7b, step 7.7 `aa4083d`): `shoplite-github-plan`, trust `StringEquals` on `aud` and on `sub` = `repo:SaikatGeek/shoplite-app:pull_request`, with AWS's managed `ReadOnlyAccess` attached. Module output `plan_role_arn`, root output `ci_plan_role_arn` (the variable `AWS_PLAN_ROLE_ARN`). Six IAM mutations each fail the tests. Never give PRs the push role.
+  - The plan role (Q7b, step 7.7 `aa4083d`): `shoplite-github-plan`, trust `StringEquals` on `aud` and on `sub` = `repo:SaikatGeek@53232305/shoplite-app@1454879820:pull_request`, with AWS's managed `ReadOnlyAccess` attached. Module output `plan_role_arn`, root output `ci_plan_role_arn` (the variable `AWS_PLAN_ROLE_ARN`). Six IAM mutations each fail the tests. Never give PRs the push role.
 - Pull-request workflows (Q7b, step 7.7):
   - `pr.yml`: on `pull_request` to main, the four `scripts/ci.sh` stages (tag `pr-<number>`), `contents: read` only, no AWS and no secret, and concurrency per PR with cancel.
   - `terraform-plan.yml`: on `pull_request` to main with `paths: terraform/**`.
@@ -377,7 +381,7 @@ The page is at `http://127.0.0.1:<WEB_PORT>` (PC-01: http://127.0.0.1:8088); the
   - Ubuntu's EC2 mirror sometimes answers 503 during the playbook: run it again.
   - The organization's SCP denies `ssmmessages` (and so Session Manager and Run Command), CloudTrail `LookupEvents`, `tag:GetResources` and CloudShell. ECR works.
   - `iam simulate-principal-policy` shows false explicit denies for regional services unless given `--context-entries ContextKeyName=aws:RequestedRegion,ContextKeyValues=ap-southeast-1,ContextKeyType=string`.
-  - GitHub's OIDC role could not be assumed (`Not authorized to perform sts:AssumeRoleWithWebIdentity`) although the provider, trust and Action were checked; likely the lab's policy. Open: `NEXT-LAB.md` section ৫.
+  - GitHub's OIDC role could not be assumed on 23 Nov (`Not authorized to perform sts:AssumeRoleWithWebIdentity`). The cause was the trust's old `sub` form, not the lab: GitHub's immutable subject (see `modules/github-oidc` above). Fixed on 23 Nov; the next lab's main run confirms it (`NEXT-LAB.md` section ৫).
   - After the 5-hour terminal closes, the AWS console stays open about an hour, and the lab page shows an access key. The user writes it into `C:\Users\PC-01\aws-lab.env` themselves (Claude makes the skeleton and never reads it; `sed -i 's/\r$//'` for Docker). Docker's `--env-file` then runs `amazon/aws-cli` and `hashicorp/terraform:1.17.2` from PC-01. Delete the file afterwards.
   - The Claude app's `run_in_terminal` opens a new tab per command (no shared exports), PowerShell, no pipes or variables. Put a visible command there when the user needs a screenshot of it (the 23 Nov destroy).
 

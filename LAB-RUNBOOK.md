@@ -201,7 +201,7 @@ echo $TF_VAR_admin_cidr
 **৬.৩ Image বানাও:** https://github.com/SaikatGeek/shoplite-app/actions/workflows/main.yml → **Run workflow** → `main` → **Run workflow**।
 - ~৫ মিনিট লাগবে। এর মধ্যে section ৭-এর screenshot গুলো নাও।
 - **সবুজ হলে** OIDC কাজ করছে। Q5-এর `02-main-run.png` আর `03-ecr-images.png` নাও (Q5 procedure, section 2)।
-- **"AWS credentials through OIDC"-এ লাল হলে** থামো। Error-এর screenshot নাও, তারপর `NEXT-LAB.md`-এর section ৫ দেখো।
+- **"AWS credentials through OIDC"-এ লাল হলে** থামো। Error-এর screenshot নাও, পুরো error Claude-কে দেখাও (`NEXT-LAB.md`, section ৫)। ২৩ নভেম্বরের fix-এর পরে এটা হওয়ার কথা না।
 
 ## ৭. Q4-এর বাকি প্রমাণ (Terminal 1, `~/shoplite-app` থেকে)
 
@@ -344,7 +344,7 @@ terraform -chdir=terraform/bootstrap destroy
 
 ## ১০. শুধু দরকার হলে: OIDC ছাড়া image পাঠানো (তোমার আর instructor-এর সিদ্ধান্তের পরে)
 
-Main-এর OIDC lab-এ আটকে গেলে Q5–Q8 থামিয়ে না রাখার উপায় এটা। PC-01-এ Git Bash-এ চলবে, key-এর ফাইল লাগবে (section ৯-এর মতো)।
+২৩ নভেম্বরের OIDC-র fail-এর কারণ পাওয়া গেছে আর ঠিক করা হয়েছে (`NEXT-LAB.md`, section ৫), তাই এটা লাগার কথা না। Main-এর OIDC lab-এ তবু আটকে গেলে Q5–Q8 থামিয়ে না রাখার উপায় এটা। PC-01-এ Git Bash-এ চলবে, key-এর ফাইল লাগবে (section ৯-এর মতো)।
 1. Claude দিয়ে image বানিয়ে ECR-এ push করাও (`scripts/ci.sh build`, `docker push`)।
 2. shoplite-gitops-এর `envs/dev/values.yaml` GitHub-এর web editor-এ বদলাও:
    ```yaml
