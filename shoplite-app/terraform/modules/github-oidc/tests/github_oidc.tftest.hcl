@@ -16,8 +16,10 @@ mock_provider "aws" {
 }
 
 variables {
-  name              = "shoplite"
-  github_repository = "SaikatGeek/shoplite-app"
+  name                 = "shoplite"
+  github_repository    = "SaikatGeek/shoplite-app"
+  github_owner_id      = "53232305"
+  github_repository_id = "1454879820"
   ecr_repository_arns = [
     "arn:aws:ecr:ap-southeast-1:123456789012:repository/shoplite/catalog-api",
     "arn:aws:ecr:ap-southeast-1:123456789012:repository/shoplite/order-worker",
@@ -65,10 +67,10 @@ run "only_main_of_the_repository_can_take_the_role" {
     condition = jsondecode(aws_iam_role.ci.assume_role_policy).Statement[0].Condition == {
       StringEquals = {
         "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        "token.actions.githubusercontent.com:sub" = "repo:SaikatGeek/shoplite-app:ref:refs/heads/main"
+        "token.actions.githubusercontent.com:sub" = "repo:SaikatGeek@53232305/shoplite-app@1454879820:ref:refs/heads/main"
       }
     }
-    error_message = "The token must match exactly (no wildcard): audience sts.amazonaws.com, a run on main in SaikatGeek/shoplite-app."
+    error_message = "The token must match exactly (no wildcard): audience sts.amazonaws.com, a run on main in SaikatGeek/shoplite-app, named by its owner and repository IDs (GitHub's immutable subject)."
   }
 }
 
@@ -137,10 +139,10 @@ run "only_pull_requests_of_the_repository_can_take_the_plan_role" {
     condition = jsondecode(aws_iam_role.plan.assume_role_policy).Statement[0].Condition == {
       StringEquals = {
         "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        "token.actions.githubusercontent.com:sub" = "repo:SaikatGeek/shoplite-app:pull_request"
+        "token.actions.githubusercontent.com:sub" = "repo:SaikatGeek@53232305/shoplite-app@1454879820:pull_request"
       }
     }
-    error_message = "The plan role's token must match exactly (no wildcard): audience sts.amazonaws.com, a pull request of SaikatGeek/shoplite-app."
+    error_message = "The plan role's token must match exactly (no wildcard): audience sts.amazonaws.com, a pull request of SaikatGeek/shoplite-app, named by its owner and repository IDs."
   }
 }
 
@@ -218,4 +220,34 @@ run "rejects_an_empty_list_of_repositories" {
   }
 
   expect_failures = [var.ecr_repository_arns]
+}
+
+run "rejects_a_wildcard_owner_id" {
+  command = plan
+
+  variables {
+    github_owner_id = "*"
+  }
+
+  expect_failures = [var.github_owner_id]
+}
+
+run "rejects_a_wildcard_repository_id" {
+  command = plan
+
+  variables {
+    github_repository_id = "*"
+  }
+
+  expect_failures = [var.github_repository_id]
+}
+
+run "rejects_a_repository_name_instead_of_its_id" {
+  command = plan
+
+  variables {
+    github_repository_id = "shoplite-app"
+  }
+
+  expect_failures = [var.github_repository_id]
 }

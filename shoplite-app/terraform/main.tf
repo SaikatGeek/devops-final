@@ -67,10 +67,12 @@ module "ecr" {
 # in GitHub. Only workflow runs on shoplite-app's main branch can take the role, and it may
 # only push to the three repositories above.
 module "github_oidc" {
-  source              = "./modules/github-oidc"
-  name                = "shoplite"
-  github_repository   = "SaikatGeek/shoplite-app"
-  ecr_repository_arns = values(module.ecr.repository_arns)
+  source               = "./modules/github-oidc"
+  name                 = "shoplite"
+  github_repository    = "SaikatGeek/shoplite-app"
+  github_owner_id      = "53232305"   # gh api repos/SaikatGeek/shoplite-app --jq .owner.id
+  github_repository_id = "1454879820" # gh api repos/SaikatGeek/shoplite-app --jq .id
+  ecr_repository_arns  = values(module.ecr.repository_arns)
 }
 
 # Cost guard: an e-mail as soon as this month's actual cost passes USD 20.

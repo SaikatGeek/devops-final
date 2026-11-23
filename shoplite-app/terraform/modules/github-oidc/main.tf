@@ -7,6 +7,19 @@
 #   - the plan role (7b): runs for pull requests; it may only read, for terraform plan.
 # A pull request never gets the CI role.
 
+# How GitHub's tokens name the repository in their subject (sub). For repositories created
+# after 15 July 2026 (shoplite-app: 12 Nov 2026) GitHub uses the immutable form, with the
+# owner's and the repository's numeric IDs: repo:OWNER@OWNER-ID/REPO@REPO-ID. A deleted and
+# recreated repository of the same name gets a new ID, so it cannot take these roles. The
+# repository's own setting shows the prefix its tokens carry:
+#   gh api repos/<owner>/<name>/actions/oidc/customization/sub --jq .sub_claim_prefix
+# (The older form, repo:OWNER/REPO, never matches these tokens: the first lab run was refused.)
+locals {
+  owner           = split("/", var.github_repository)[0]
+  repository      = split("/", var.github_repository)[1]
+  subject_of_repo = "repo:${local.owner}@${var.github_owner_id}/${local.repository}@${var.github_repository_id}"
+}
+
 # AWS trusts tokens signed by GitHub Actions. AWS checks GitHub's certificate itself, so no
 # thumbprint is pinned here.
 resource "aws_iam_openid_connect_provider" "github" {
@@ -28,7 +41,7 @@ resource "aws_iam_role" "ci" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub" = "${local.subject_of_repo}:ref:refs/heads/main"
         }
       }
     }]
@@ -80,7 +93,7 @@ resource "aws_iam_role" "plan" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:pull_request"
+          "token.actions.githubusercontent.com:sub" = "${local.subject_of_repo}:pull_request"
         }
       }
     }]

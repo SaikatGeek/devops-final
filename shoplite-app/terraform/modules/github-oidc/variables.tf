@@ -13,6 +13,28 @@ variable "github_repository" {
   }
 }
 
+# GitHub's tokens name a repository by its numeric IDs too (the immutable subject; see main.tf).
+# Read them with: gh api repos/<owner>/<name> --jq '.owner.id, .id'
+variable "github_owner_id" {
+  description = "Numeric ID of the repository's owner (the API's owner.id), part of the tokens' subject."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_owner_id))
+    error_message = "github_owner_id must be the owner's numeric ID, e.g. 53232305 (digits only, no wildcard)."
+  }
+}
+
+variable "github_repository_id" {
+  description = "Numeric ID of the repository (the API's id), part of the tokens' subject."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_repository_id))
+    error_message = "github_repository_id must be the repository's numeric ID, e.g. 1454879820 (digits only, no wildcard)."
+  }
+}
+
 variable "ecr_repository_arns" {
   description = "ARNs of the ECR repositories the role may push to."
   type        = list(string)

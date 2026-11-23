@@ -119,7 +119,10 @@ Everything is built from Git:
      Admins reach them over SSH through a bastion host in a public subnet: the nodes accept
      SSH only from the bastion, and the bastion only from the admin's address;
    - the ALB: port 80 goes to prod, port 8080 to dev, both to Traefik's NodePorts;
-   - the three ECR repositories, and the GitHub OIDC roles;
+   - the three ECR repositories, and the GitHub OIDC roles. Only this repository's `main`
+     (the push) and its pull requests (the plan) can take them. GitHub's tokens name the
+     repository by its owner's and its own numeric IDs (the subject GitHub gives repositories
+     created after 15 July 2026), so `terraform/main.tf` pins both IDs;
    - the USD 20 budget.
 
    The state is in S3, with a lock file. Every resource is tagged `project=shoplite`.
