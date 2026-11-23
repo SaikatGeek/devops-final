@@ -80,15 +80,18 @@ Screenshots:
 ## 2. 7a: the Trivy gate stops a vulnerable image
 
 Make the scan meet a CRITICAL vulnerability. Web's base image ships brotli-libs with
-CVE-2026-111497, and web's Dockerfile installs the fixed version. A pull request without the
-fix runs the same `scripts/ci.sh scan` as main:
+CVE-2026-111497 and nginx 1.30.6 with four more, and web's Dockerfile installs the fixed
+versions in its `base` stage. A pull request without the fixes runs the same
+`scripts/ci.sh scan` as main:
 
-1. **shoplite-app** → `services/web/Dockerfile` → Edit. Delete the two lines under the
-   brotli comment (`USER 0` and `RUN apk add --no-cache brotli-libs=...`).
+1. **shoplite-app** → `services/web/Dockerfile` → Edit. In the `base` stage, delete the
+   block under the comment about the fixes: `USER 0`, the `RUN apk add ...` command (four
+   lines), and `USER 101`.
 2. Commit to a new branch `trivy-red` and create the pull request.
-3. The `pr` check fails at "Scan the images with Trivy": `CRITICAL vulnerabilities in: web`.
-   The scan lists CVE-2026-111497. In main the same stage runs before any push, so such an
-   image never reaches ECR.
+3. The `pr` check fails at "Scan the images with Trivy": `Total: 5 (CRITICAL: 5)`, then
+   `CRITICAL vulnerabilities in: web`. The scan lists CVE-2026-111497 (brotli-libs) and
+   CVE-2026-113425, -121810, -123007, -123633 (nginx). In main the same stage runs before any
+   push, so such an image never reaches ECR.
 4. Close the pull request without merging, and delete the branch.
 
 If the base image has been rebuilt with the fix by then, use an older base image instead:
