@@ -132,6 +132,23 @@ run "the_bastion_is_the_only_way_in" {
   }
 }
 
+run "descriptions_use_only_the_characters_aws_accepts" {
+  command = apply
+
+  # EC2 refuses other characters (an apostrophe stopped the first lab apply); the mock does not.
+  assert {
+    condition = alltrue([
+      for d in concat(
+        [aws_security_group.nodes.description, aws_security_group.control_plane.description, aws_security_group.bastion.description],
+        [for r in values(aws_vpc_security_group_ingress_rule.node_to_node) : r.description],
+        [aws_vpc_security_group_ingress_rule.api_from_nodes.description, aws_vpc_security_group_ingress_rule.ssh_from_admin.description, aws_vpc_security_group_ingress_rule.ssh_from_bastion.description],
+        [aws_vpc_security_group_egress_rule.nodes_out.description, aws_vpc_security_group_egress_rule.ssh_to_nodes.description],
+      ) : can(regex("^[a-zA-Z0-9. _:/()#,@+=&;{}!$*\\[\\]-]{1,255}$", d))
+    ])
+    error_message = "Security group and rule descriptions may use only a-z, A-Z, 0-9, spaces and ._-:/()#,@[]+=&;{}!$* (no apostrophe)."
+  }
+}
+
 run "rejects_an_admin_cidr_wider_than_24" {
   command = plan
 

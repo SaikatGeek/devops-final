@@ -10,7 +10,7 @@
 
 resource "aws_security_group" "bastion" {
   name        = "${var.name}-bastion"
-  description = "Bastion host: SSH from the admin's address only, and on to the nodes"
+  description = "Bastion host: SSH from the admin address only, and on to the nodes"
   vpc_id      = var.vpc_id
   tags        = { Name = "${var.name}-bastion" }
 }
@@ -21,7 +21,7 @@ resource "aws_vpc_security_group_ingress_rule" "ssh_from_admin" {
   ip_protocol       = "tcp"
   from_port         = 22
   to_port           = 22
-  description       = "SSH from the admin's address only"
+  description       = "SSH from the admin address only"
 }
 
 resource "aws_vpc_security_group_egress_rule" "ssh_to_nodes" {
