@@ -15,13 +15,14 @@
 - **Screenshot:** Win+Shift+S চাপো → জায়গা বাছো → notification-এ click → Save। নামের আগে `clear;` দেওয়া command গুলো screen পরিষ্কার করে শুধু দরকারি অংশ দেখায়, তখন ছবি তোলো।
   - রাখবে `...\devops-final\shoplite-app\docs\evidence\qN\` folder-এ (অফিসে `E:\devops-final`, বাসায় `E:\Personal\devops-final`)।
 - **Error এলে** থামো, পুরো error Claude-কে দেখাও। নিজে থেকে অন্য কিছু চালাবে না।
-- **Video:** V3 (Q6) আর V6 (Q8) ঘটনার সময়েই record করবে। V2, V4, V5 হবে Q8-এর পরে, শেষের একটা demo recording-এ (NEXT-LAB-এর section ৯)। V1 হবে Q3-এর session-এ।
+- **Video একটাই** (২৪ নভেম্বরের সিদ্ধান্ত): Q8-এর পরে, destroy-এর আগে, ১০ মিনিটের demo (NEXT-LAB-এর section ৯)। এর আগে কোনো recording না। Procedure-এ V1, V2, V3, V6 বা Q6-এর 17 দেখলে বাদ দাও।
+- **ক্রম:** setup → Q7 (09, 10, 06, 07) → Q8 → demo video → destroy (NEXT-LAB-এর section ৭)। Q8 শুরু lab শুরুর ২ ঘণ্টা ৪৫ মিনিটের মধ্যে।
 
 ## ১. Lab শুরুর আগে (GitHub, ২ মিনিট)
 
 - https://github.com/SaikatGeek/shoplite-app/settings/secrets/actions-এ `BUDGET_ALERT_EMAIL` আর `GITOPS_DEPLOY_KEY` আছে কি না দেখো।
 - Variables tab-এ `LAB_ACTIVE` এখনো `false` থাকবে।
-- Slack-এর webhook URL হাতে রাখো: https://api.slack.com/apps → ShopLite alerts → Incoming Webhooks।
+- Slack-এর webhook **নতুন বানাও** (আগের session-এরটা terminal আর chat-এ দেখা গিয়েছিল): https://api.slack.com/apps → ShopLite alerts → Incoming Webhooks → Add New Webhook (একই channel), পুরোনোটা Remove। নতুন URL কোথাও paste করবে না; শুধু bootstrap-এর prompt-এ দেবে।
 
 ## ২. Lab terminal: clone, tools, settings (~১০ মিনিট)
 
@@ -309,25 +310,25 @@ clear; for tg in shoplite-prod shoplite-dev; do aws elbv2 describe-target-health
 - **Q5-এর ১৯টা ছবি ২৪ নভেম্বর নেওয়া হয়ে গেছে।** পরের session-এ শুধু setup (Helm, `ALB`, main run, bootstrap, promote, prod sync), ছবি ছাড়া।
 - Prod-এর sync ArgoCD-র UI-তে হাতে করতে হয়: REFRESH → SYNC।
 - 📸 `q5/02`–`19`: `02-main-run`, `03-ecr-images`, `04-bootstrap`, `05-argocd-applications`, `06-promote-run`, `07-argocd-prod-synced`, `08-applications-synced`, `09-workloads`, `10-probes-pdb-hpa`, `11-postgres-seed`, `12-resources-non-root`, `13-secret-configmap`, `14-no-secret-in-git`, `15-networkpolicy`, `16-traefik`, `17-helm-chart`, `18-checkpoint-browser`, `19-checkpoint-database`।
-- 🎥 V2: section 6-এর checkpoint (browser থেকে order)। শুরুর আগে recording চালু করো।
-- এরপর Q4-এর `10-target-health.png` (section ৭-এর শেষ block)।
+- V2 লাগবে না: checkpoint-এর ছবি 18, 19 আছে।
+- Q4-এর `10-target-health.png`-ও আছে (২৪ নভেম্বর)।
 
-**Q6** (~৫০ মিনিট): https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q6/commands.md
-- Section 0 (k6) থেকে 8 পর্যন্ত, ক্রমে। ২৪ নভেম্বর 01–14 নেওয়া হয়েছে; বাকি 15, 16 (Slack-এর PodCrashLooping: আগে `kubectl -n shoplite-dev exec deploy/order-worker -- kill 1`), 17 আর V3।
+**Q6** (~৫ মিনিট): https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q6/commands.md
+- **পরের session-এ শুধু section 0 (k6 install)**, setup-এর শেষে: Q8 আর demo-তে k6 লাগে। ছবি সব আছে (01–16); section 8 (V3, 17) বাদ।
+- নিচের তালিকা আগের session-এর, রেফারেন্সের জন্য। ২৪ নভেম্বর 01–14 lab-এ, 15, 16 Slack থেকে।
 - Grafana-র password: `kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d; echo`।
 - Explore-এ query লেখো **Code** mode-এ (Builder না); table-এর জন্য Options → Type **Instant**।
-- 📸 `q6/01`–`17`: `01-monitoring-pods`, `02-datasources`, `03-targets-up`, `04-servicemonitors`, `05-six-metrics`, `06-dashboard-load`, `07-dashboard-configmap`, `08-log-to-trace`, `09-order-trace`, `10-trace-to-logs`, `11-exemplar`, `12-exemplar-trace`, `13-alert-rules`, `14-alert-labels`, `15-slack-alert`, `16-slack-resolved`, `17-dev-recovered`।
-- 🎥 V3: section 8 (alert থেকে কারণ খুঁজে পাওয়া, দুই মিনিটের মধ্যে)।
+- 📸 `q6/01`–`16` (সব আছে): `01-monitoring-pods`, `02-datasources`, `03-targets-up`, `04-servicemonitors`, `05-six-metrics`, `06-dashboard-load`, `07-dashboard-configmap`, `08-log-to-trace`, `09-order-trace`, `10-trace-to-logs`, `11-exemplar`, `12-exemplar-trace`, `13-alert-rules`, `14-alert-labels`, `15-slack-alert`, `16-slack-resolved`। `17-dev-recovered` বাদ।
 - Lab machine push করতে পারে না। shoplite-gitops-এ বদলানো GitHub-এর web editor-এ।
 
 **Q7** (~৩৫ মিনিট): https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q7/commands.md
 - Section 0 (variable, উপরে হয়ে গেছে) থেকে 6।
 - PR গুলো GitHub-এর web editor-এ খুলবে, **কখনো merge করবে না**।
-- ২৪ নভেম্বর নেওয়া: 01, 02, 08। Section 2 আর 3-এর প্রথম দুই PR খোলা আছে, lab লাগে না: [PR 1](https://github.com/SaikatGeek/shoplite-app/pull/1) লাল (`04`), [PR 2](https://github.com/SaikatGeek/shoplite-app/pull/2) সবুজ (`05`)। Lab-এ বাকি: 03, Terraform-এর PR (06, 07; `LAB_ACTIVE=true` থাকতে হবে), 09, 10, V5, V4 আর 11।
+- আছে: 01–05, 08 (03–05 GitHub থেকে; PR 1 আর 2 merge ছাড়া বন্ধ)।
+- **পরের session-এ, setup-এর পরে, Q8-এর আগে:** section 4-এর 09, 10 (ArgoCD-র Details → Sync Policy), তারপর section 3-এর ধাপ 2: Terraform-এর PR (06, 07; `LAB_ACTIVE=true` থাকতে হবে)। PR merge করবে না; ছবির পরে বন্ধ করে branch মুছবে।
+- Section 5 (self-heal) আর 6 (title) শেষের demo video-র ভেতরে, সাথে 11 (NEXT-LAB-এর section ৯)।
 - 📸 `q7/01`–`11`: `01-main-run`, `02-ecr-sha-tags`, `03-gitops-ci-commit`, `04-trivy-red`, `05-pr-checks`, `06-terraform-plan-comment`, `07-terraform-pr-checks`, `08-argocd-apps`, `09-dev-sync-policy`, `10-prod-sync-policy`, `11-new-title`।
-- 🎥 V5: self-heal (section 5)। 🎥 V4: title বদলানো (section 6)।
-  - Title-এর commit তোমার PC থেকে: `shoplite-app/services/web/public/index.html`-এর `<title>` বদলাও, commit করো, `git push`, তারপর `bash publish-repos.sh push`।
-  - এর জন্য OIDC কাজ করতে হবে (main-কে ECR-এ push করতে হয়)।
+- Title-এর commit তোমার PC থেকে: `shoplite-app/services/web/public/index.html`-এর `<title>` বদলাও, commit করো, `git push`, তারপর `bash publish-repos.sh push`। এর জন্য OIDC কাজ করতে হবে (main-কে ECR-এ push করতে হয়)।
 
 **Q8** (~৮০ মিনিট; অন্তত ১ ঘণ্টা ৪৫ মিনিট বাকি থাকতে হবে): https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q8/commands.md
 - Section 1 থেকে 8, ক্রমে। **Peer লাগবে না** (instructor নিজে করতে বলেছেন, ২৪ নভেম্বর)।
@@ -345,7 +346,10 @@ clear; for tg in shoplite-prod shoplite-dev; do aws elbv2 describe-target-health
 - Section 3 থেকে 7 পর্যন্ত shoplite-app-এ কোনো push বা workflow না।
 - Revert তোমার PC থেকে, script যে `~/q8-gitops` clone বানিয়েছে সেখান থেকে (section 6)।
 - Destroy-এর আগে section 8-এর সংখ্যা আর `cat ~/q8-timeline.txt` রেখে দেবে।
-- 📸 `q8/01`–`16` (procedure-এ প্রতিটার নাম; `02-fault-pushed` হলো তোমার PC-র terminal-এ script-এর output)। 🎥 V6।
+- 📸 `q8/01`–`16` (procedure-এ প্রতিটার নাম; `02-fault-pushed` হলো তোমার PC-র terminal-এ script-এর output)।
+- **Recording না:** procedure-এর section 3-এর ধাপ 2 ("Start the screen recording") আর section 7-এর recording বন্ধ করা বাদ দাও।
+
+**শেষের demo video** (~২০ মিনিট, Q8-এর পরে, destroy-এর আগে): NEXT-LAB-এর section ৯-এর ক্রমে। Recording চালু করে শুরু, `q7/11` সহ।
 
 ## ৯. শেষে: destroy (destroy শেষ করতে ১০ মিনিট লাগে, তাই এর আগেই শুরু করবে)
 

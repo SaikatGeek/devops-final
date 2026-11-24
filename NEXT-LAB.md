@@ -1,6 +1,6 @@
 # পরের lab: কোথায় আছি, কী বদলাবে, কীভাবে এগোব
 
-শেষ আপডেট: ২৪ নভেম্বর ২০২৬, PC-01: Q8 peer ছাড়া (chaos-pick.sh), আজকের lab-এর সময়সূচি, credential, video আর RCA-র গাইড (section ৭–১০)।
+শেষ আপডেট: ২৪ নভেম্বর ২০২৬ সন্ধ্যা, PC-01: video একটাই, শেষে ১০ মিনিটের demo; V1, V2, V3, V6 আর Q6-এর 17 বাদ; lab-এর নতুন ক্রম আর সময় (section ৬, ৭, ৯)। পরের lab বাসার PC থেকে।
 
 ## ০. বাসায় বা নতুন কোনো session-এ Claude-কে এটা পাঠাও
 
@@ -15,13 +15,13 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 
 | প্রশ্ন | Code | Lab-এ চালানো | Screenshot / video |
 |---|---|---|---|
-| Q1, Q2 | শেষ | Q2-এর checkpoint Q3-এর session-এ | V1 বাকি |
+| Q1, Q2 | শেষ | Q2-এর checkpoint Q3-এর session-এ | Q3-এর `00-make-up-smoke.png` বাকি (video না) |
 | Q3 | শেষ | বাকি (আলাদা ছোট session) | কোনোটা নেই |
 | Q4 | শেষ | দুইবার পুরো চলেছে | **২১টাই আছে** (21 নতুন session-এর) |
-| Q5 | শেষ | ২৪ নভেম্বর পুরো চলেছে | **১৯টাই আছে**; V2 record হয়েছে কি না নিশ্চিত না (না হলে আবার) |
-| Q6 | শেষ | ২৪ নভেম্বর চলেছে | ১৭টার ১৬টা (15, 16 Slack থেকে, ২৪ নভেম্বর PC-01-এ); বাকি 17, video V3 |
-| Q7 | শেষ | main আর promote চলেছে, OIDC সবুজ | ১১টার ৬টা (01–05, 08; 03–05 GitHub থেকে, ২৪ নভেম্বর PC-01-এ); বাকি 06, 07, 09, 10, 11, video V4, V5 |
-| Q8 | শেষ (peer ছাড়া চালানোর script সহ) | বাকি | নেই (মোট ১৬টা) |
+| Q5 | শেষ | ২৪ নভেম্বর পুরো চলেছে | **১৯টাই আছে** (checkpoint-এর 18, 19 সহ) |
+| Q6 | শেষ | ২৪ নভেম্বর চলেছে | **যা লাগবে সব আছে** (01–16; 15, 16 Slack থেকে); 17 আর V3 বাদ (section ৯) |
+| Q7 | শেষ | main আর promote চলেছে, OIDC সবুজ | ১১টার ৬টা (01–05, 08); বাকি 09, 10, 06, 07, আর 11 শেষের demo video-র সময় |
+| Q8 | শেষ (peer ছাড়া চালানোর script সহ) | বাকি | নেই (মোট ১৬টা); recording লাগবে না |
 
 - AWS-এ এখন কিছু নেই: ২৪ নভেম্বর destroy হয়েছে (৬১টা resource আর state bucket)।
 - GitHub: `LAB_ACTIVE` = `false`। Secret `GITOPS_DEPLOY_KEY` আর `BUDGET_ALERT_EMAIL` আছে।
@@ -78,28 +78,30 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 
 **তোমার প্রস্তুতি (lab-এর আগে):**
 1. ~~Q8-এর peer~~ লাগবে না: instructor নিজে করতে বলেছেন (২৪ নভেম্বর)। Fault চালু করবে `shoplite-app/scripts/chaos-pick.sh`, তোমার PC থেকে। ওটা random একটা বেছে push করে, কোনটা দেখায় না (LAB-RUNBOOK-এর Q8)।
-2. Slack webhook (দরকার হলে নতুন) হাতের কাছে রাখা।
-3. Screen recorder ঠিক রাখা: V3, V4, V5, V6 (আর V2, যদি ২৪ নভেম্বর record না হয়ে থাকে)।
+2. Slack webhook নতুন বানানো (আগের session-এরটা terminal আর chat-এ দেখা গিয়েছিল): https://api.slack.com/apps → ShopLite alerts → Incoming Webhooks → Add New Webhook, পুরোনোটা Remove। নতুন URL কোথাও paste না করে হাতের কাছে রাখা।
+3. Screen recorder: শুধু শেষের ১০ মিনিটের demo video-র জন্য (section ৯)। এর আগে কোনো recording না।
 4. ~~খোলা PR দুটোর ছবি~~ হয়ে গেছে (২৪ নভেম্বর): Q7 `03`, `04`, `05`, আর Q6 `15`, `16`।
 
-**পরের lab session (৫ ঘণ্টা), LAB-RUNBOOK ধরে, Q4 আর Q5-এর ছবি ছাড়া:**
-5. Setup (~১ ঘণ্টা): section ২–৬ (Q4), তারপর Q5-এর Helm, `ALB`, bootstrap, promote, prod sync। কোনো ছবি না।
-6. Q6 (~২০ মিনিট): video V3 আর 17।
-7. Q7 (~৪০ মিনিট): Terraform plan-এর PR (06, 07), ArgoCD-র 09, 10, self-heal V5, title V4 আর 11।
-8. Q8 (~৮০ মিনিট), peer ছাড়া, `chaos-pick.sh` দিয়ে। অন্তত ১ ঘণ্টা ৪৫ মিনিট বাকি থাকতে হবে।
-9. শেষে destroy, `LAB_ACTIVE=false`।
+**পরের lab session (৫ ঘণ্টা), LAB-RUNBOOK ধরে, section ৭-এর ক্রমে:**
+5. Setup (~১ ঘণ্টা ১৫ মিনিট), কোনো ছবি না: runbook ২–৬ (Q4), Q5-এর Helm, `ALB`, main run, bootstrap, promote, prod sync, আর Q6-এর section 0 (k6 install; Q8 আর demo-তে লাগে)।
+6. ~~Q6-এর V3 আর 17~~ বাদ (section ৯)।
+7. Q7 (~২০ মিনিট): ArgoCD-র 09, 10 (procedure section 4), তারপর Terraform plan-এর PR 06, 07 (section 3-এর ধাপ 2)। Q8-এর **আগেই**, কারণ Q8 চলার সময় shoplite-app-এ কোনো push বা workflow চলবে না।
+8. Q8 (~৯০ মিনিট), peer ছাড়া, `chaos-pick.sh` দিয়ে, recording ছাড়া। Lab শুরুর ২ ঘণ্টা ৪৫ মিনিটের মধ্যে শুরু করতে হবে।
+9. শেষের ১০ মিনিটের demo video (~২০ মিনিট, section ৯), সাথে `q7/11`।
+10. Destroy, `LAB_ACTIVE=false`।
 
 **আলাদা ছোট session:**
-10. Q3 (~৪০ মিনিট): `linux/evidence/commands.md`, video V1।
+11. Q3 (~৪০ মিনিট): `linux/evidence/commands.md`। Q2-এর checkpoint তার `00-make-up-smoke.png`-এ (video না)।
 
 **সব lab-এর পরে (Claude করবে):**
-11. Screenshot commit আর publish (`bash publish-repos.sh push`), খোলা PR বন্ধ।
-12. RCA লেখা, তারপর আলাদা commit-এ fault-এর commit-এর সাথে মিলিয়ে দেখা।
-13. Video V1–V6 কাটা (তুমি)।
-14. Architecture diagram-এর PNG আবার বানানো (bastion সহ; এখনো SSM দেখায়)।
-15. README-র evidence index আর deviation শেষবার মিলিয়ে দেখা।
+12. Screenshot commit আর publish (`bash publish-repos.sh push`)।
+13. RCA লেখা, তারপর আলাদা commit-এ fault-এর commit-এর সাথে মিলিয়ে দেখা।
+14. বাদ পড়া video আর ছবি procedure থেকে সরানো: Q5 (V2), Q6 section 8 (V3, 17), Q7 section 5–6 (V5, V4 এখন demo video-র ভেতরে), Q8 (V6); README-র evidence index; LAB-GUIDE।
+15. Demo video কাটা আর তোলা (তুমি; Drive বা unlisted YouTube, README-তে link)।
+16. ~~Architecture diagram-এর PNG~~ হয়ে গেছে (`3b10093`, bastion সহ)।
+17. README-র evidence index আর deviation শেষবার মিলিয়ে দেখা।
 
-## ৭. আজকের lab (২৪ নভেম্বর, ৩টার পরে): ক্রম আর সময়
+## ৭. পরের lab: ক্রম আর সময় (২৪ নভেম্বর সন্ধ্যায় ঠিক করা)
 
 সব command আছে `LAB-RUNBOOK.md`-এ, আর script গুলো `shoplite-app/scripts/`-এ। নতুন কিছু বানাতে হবে না: দুইবার চলেছে, পরীক্ষা করা।
 
@@ -108,16 +110,15 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 | ০:০০–০:১০ | Lab চালু, `aws sts get-caller-identity` (না চললে `aws configure`), clone, tools | Runbook ২ | না |
 | ০:১০–০:৪৫ | Terraform, Ansible, kubectl | Runbook ৩–৫ | না |
 | ০:৪৫–০:৫৫ | GitHub-এর ৫টা variable, main-এর "Run workflow" (~৫ মিনিট) | Runbook ৬ | না |
-| ০:৫৫–১:১৫ | Helm, bootstrap (Slack URL চাইবে), promote, prod sync | Q5 procedure ১–৪ | না |
-| ১:১৫–১:৪৫ | Q6: dev-এ fault, alert থেকে log থেকে trace | Q6 procedure ৮ | `q6/17`, 🎥 V3 |
-| ১:৪৫–২:১০ | Q7: Terraform plan-এর PR, ArgoCD-র sync policy | Q7 procedure ৩, ৪ | `q7/06`, `07`, `09`, `10` |
-| ২:১০–৩:৪০ | Q8: load, `chaos-pick.sh`, তদন্ত, revert, recovery, সংখ্যা | Q8 procedure ১–৮ | `q8/01`–`16`, 🎥 V6 |
-| ৩:৪০–৪:০০ | শেষের demo recording (section ৯) | — | 🎥 V2, V4, V5, `q7/11` |
-| ৪:০০–৪:১৫ | Destroy, `LAB_ACTIVE=false` | Runbook ৯ | `q4/21` লাগবে না (আছে) |
+| ০:৫৫–১:১৫ | Helm, bootstrap (Slack URL চাইবে), promote, prod sync, k6 install | Q5 procedure ১–৪, Q6 procedure ০ | না |
+| ১:১৫–১:৩৫ | Q7: ArgoCD-র sync policy, তারপর Terraform plan-এর PR | Q7 procedure ৪, ৩-এর ধাপ 2 | `q7/09`, `10`, `06`, `07` |
+| ১:৩৫–৩:০৫ | Q8: load, `chaos-pick.sh`, তদন্ত, revert, recovery, সংখ্যা | Q8 procedure ১–৮ | `q8/01`–`16` (recording না) |
+| ৩:০৫–৩:২৫ | শেষের ১০ মিনিটের demo video (section ৯) | Q7 procedure ৫, ৬ | 🎥 demo, `q7/11` |
+| ৩:২৫–৩:৪০ | Destroy, `LAB_ACTIVE=false` | Runbook ৯ | `q4/21` লাগবে না (আছে) |
 
-- মোট ~৪ ঘণ্টা ১৫ মিনিট, ৫ ঘণ্টার মধ্যে।
-- কোনো ধাপ আটকে গেলে Q8 আর demo recording-কে আগে রাখো। Q6-এর 17 আর Q7-এর 06/07 পরের session-এও নেওয়া যায়।
-- Q8 শুরুর সময় অন্তত ১ ঘণ্টা ৪৫ মিনিট বাকি থাকতে হবে।
+- মোট ~৩ ঘণ্টা ৪০ মিনিট, ৫ ঘণ্টার মধ্যে।
+- Q8 শুরু করতে হবে lab শুরুর **২ ঘণ্টা ৪৫ মিনিটের মধ্যে** (Q8 ~১.৫ ঘণ্টা, demo ~২০ মিনিট, destroy ~১৫ মিনিট)। Q7 ততক্ষণে শেষ না হলে 06/07 বাদ রেখে Q8 শুরু; ওগুলো পরের session-এ নেওয়া যায়।
+- আটকে গেলে অগ্রাধিকার: Q8 → demo video → Q7-এর 09/10 → 06/07।
 
 ## ৮. Credential আর setting: নতুন lab-এ কোথায় কী বদলাবে
 
@@ -134,28 +135,19 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 | ArgoCD আর Grafana-র password | cluster-এর ভেতরে | প্রতিবার নতুন। Bootstrap-এর শেষে যে দুই command দেখায়, সেগুলো দিয়ে পড়ো |
 | Code | — | কিছু না |
 
-## ৯. Video আর live demo-র পরিকল্পনা
+## ৯. Video: একটাই, শেষে ১০ মিনিটের demo
 
-প্রশ্নে video বাধ্যতামূলক না। চাওয়া আছে checkpoint-এর প্রমাণ, আর ১০ মিনিটের **live demo**। Demo-তে দেখাতে হবে:
+প্রশ্নে আলাদা video চাওয়া নেই: section 2.2 চায় checkpoint-এর screenshot, আর section 3 চায় ১০ মিনিটের **live demo**। তাই user-এর সিদ্ধান্তে (২৪ নভেম্বর) video একটাই: Q8-এর পরে, destroy-এর আগে, ~১০ মিনিট। এটাই live demo-র মহড়া আর backup। ক্রম, প্রশ্নের ৫টা জিনিস ধরে:
 
-1. নিজের diagram দিয়ে architecture (`shoplite-app/docs/architecture-diagram.png`);
-2. Git push থেকে browser পর্যন্ত একটা code change;
-3. Load চলা অবস্থায় Golden Signals dashboard;
-4. একটা order-এর পুরো trace, আর trace থেকে তার log;
-5. `kubectl edit`-এর পরে ArgoCD-র self-heal।
+1. নিজের diagram দিয়ে architecture (`shoplite-app/docs/architecture-diagram.png`, ১ মিনিট)।
+2. PC থেকে `<title>` বদলাও, commit করো, `bash publish-repos.sh push` (Q7 procedure section 6)। Actions-এ main চালু হলো দেখাও; ওটা ~৫ মিনিট চলবে, এর মধ্যে ৩–৫ দেখাও।
+3. k6 চালু রেখে Golden Signals dashboard (২ মিনিট)।
+4. Tempo-তে একটা order-এর পুরো trace, তারপর trace থেকে তার log (২ মিনিট)।
+5. Self-heal: dev-এর web-এ `kubectl edit` (replicas 2 → 5), ArgoCD ফিরিয়ে আনে (Q7 procedure section 5, ২ মিনিট)।
+6. Browser-এ `$ALB:8080` (dev) reload: নতুন title। সাথে `q7/11-new-title.png`।
 
-তাই video হবে মোট চারটা recording-এ:
-
-- **V3** (Q6) আর **V6** (Q8): ঘটনা যখন ঘটে তখনই, ওগুলো আবার ঘটানো কঠিন।
-- **শেষের demo recording** (Q8-এর পরে, destroy-এর আগে, ~১৫ মিনিট)। এটাই live demo-র মহড়া আর backup:
-  1. Diagram দেখিয়ে architecture বোঝাও (১ মিনিট)।
-  2. PC থেকে `<title>` বদলাও, commit করো, `bash publish-repos.sh push`। Actions-এ main চালু হলো দেখাও; ওটা ~৫ মিনিট চলবে, এর মধ্যে বাকিগুলো দেখাও।
-  3. k6 চালু রেখে Golden Signals dashboard (২ মিনিট)।
-  4. Tempo-তে একটা order-এর trace, তারপর trace থেকে log (২ মিনিট)।
-  5. Self-heal: dev-এ `kubectl edit` বা `scale`, তারপর ArgoCD ফিরিয়ে আনে (২ মিনিট)। এটাই V5।
-  6. Browser-এ ALB-এর URL-এ নতুন title। এটাই V4, সাথে `q7/11-new-title.png`।
-  7. Browser থেকে একটা order দাও, `COMPLETED` পর্যন্ত। এটাই Q5-এর checkpoint, V2।
-- **V1** (Q2-এর checkpoint): Q3-এর আলাদা session-এ।
+- **বাদ:** V1 (Q3-এর `00-make-up-smoke.png` আছে), V2 (Q5-এর 18, 19 আছে), V3 আর Q6-এর 17 (alert থেকে request-এর পথ Q8-এর ছবিতে আছে), V6 (Q8-এর প্রমাণ ১৬টা ছবি, timeline আর RCA)। V4 আর V5 এই video-র ভেতরে।
+- Procedure-এ (Q5, Q6, Q7, Q8) এখনো পুরোনো video-র কথা লেখা; lab-এ ওগুলো বাদ দাও। Lab-এর পরে Claude ঠিক করবে (section ৬-এর ১৪)।
 - Instructor-কে জিজ্ঞেস করো: live demo কি চালু lab-এ দেখাতে হবে, নাকি video চলবে? Lab চালু করতে ~১ ঘণ্টা লাগে।
 
 ## ১০. RCA (`shoplite-app/docs/RCA.md`): কী লিখতে হবে
