@@ -29,11 +29,7 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 - **খোলা PR (merge করবে না):**
   - [PR 1 `trivy-red`](https://github.com/SaikatGeek/shoplite-app/pull/1): লাল, `CRITICAL: 5` (brotli আর nginx-এর CVE)। Q7-এর `04`।
   - [PR 2 `pr-check`](https://github.com/SaikatGeek/shoplite-app/pull/2): সবুজ। Q7-এর `05`।
-  - দুটোর ছবি নেওয়া হয়ে গেছে (Q7 `04`, `05`)। এখন বন্ধ করে branch মোছা যায়।
-  - **কীভাবে (তুমি নিজে, GitHub-এ):** PR-এর page খোলো → একদম নিচে comment box-এর পাশে **Close pull request** → তারপর আসা **Delete branch**। দুটো PR-এই একই। সবুজ **Merge pull request** কখনো না।
-  - কেন merge না: PR 1 main থেকে CVE-র fix মুছে দেবে; PR 2 শুধু demo; আর GitHub-এ merge হলে `bash publish-repos.sh push` আটকে যাবে।
-  - বন্ধ করার পরে Claude যাচাই করবে: `git ls-remote https://github.com/SaikatGeek/shoplite-app.git` → `refs/heads/trivy-red` আর `refs/heads/pr-check` থাকবে না, `refs/heads/main` আমাদের শেষ publish-এই থাকবে।
-  - ২৪ নভেম্বর দুপুরে যাচাই: দুটোই খোলা, কোনোটাই merge হয়নি, main = `d95c25f`।
+  - দুটোর ছবি নেওয়া হয়ে গেছে (Q7 `04`, `05`)। ২৪ নভেম্বর দুটোই merge ছাড়া বন্ধ, branch মোছা (যাচাই: main `d95c25f`-এ, `trivy-red` আর `pr-check` নেই)।
 
 ## ২. ২৩–২৪ নভেম্বর code-এ যা বদলেছে (সব GitHub-এ)
 
