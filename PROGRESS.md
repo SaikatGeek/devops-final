@@ -1189,6 +1189,10 @@ Poridhi-র lab-এ Q4 চালানো হয়েছে। পথে যা
 - **Q8 হয়নি:** peer বা instructor ছিলেন না। প্রশ্ন বলে peer-কে এক ঘণ্টার write access দিতে হবে আর সে গোপনে flag চালু করবে; নিজে চালু করলে সেই শর্ত ভাঙে। পরের session-এ, সময় ঠিক করে।
 - **শেষে:** `LAB_ACTIVE=false`, `terraform destroy` (৬১টা), bootstrap destroy (২টা)।
 - Screenshot-এর commit `2078117` (Q4 আর Q5) আর এই commit (Q6, Q7, doc)।
+- **পরে, ২৪ নভেম্বর PC-01-এ (lab ছাড়া):**
+  - বাসার কাজ যাচাই: GitHub আর split মেলে (`3e68068`); Terraform test github-oidc ১৩, compute ১২, root ১১ pass; public repo-তে Slack URL, secret-এর মান বা Claude-এর নাম নেই।
+  - Slack থেকে Q6 `15` (FIRING) আর `16` (RESOLVED): dev-এর worker, ৩:৪৯ আর ৩:৫৯-এর বার্তা কেটে।
+  - GitHub থেকে Q7 `03` (`e6ed747 dev: images 6025631`, github-actions[bot]), `04` (PR 1-এর Trivy: `Total: 5 (CRITICAL: 5)` আর পাঁচটা CVE), `05` (PR 2 সবুজ)।
 
 ## 8. Commit-এর তালিকা
 

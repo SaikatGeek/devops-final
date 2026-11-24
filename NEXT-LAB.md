@@ -19,8 +19,8 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 | Q3 | শেষ | বাকি (আলাদা ছোট session) | কোনোটা নেই |
 | Q4 | শেষ | দুইবার পুরো চলেছে | **২১টাই আছে** (21 নতুন session-এর) |
 | Q5 | শেষ | ২৪ নভেম্বর পুরো চলেছে | **১৯টাই আছে**; V2 record হয়েছে কি না নিশ্চিত না (না হলে আবার) |
-| Q6 | শেষ | ২৪ নভেম্বর চলেছে | ১৭টার ১৪টা; বাকি 15, 16 (Slack), 17, video V3 |
-| Q7 | শেষ | main আর promote চলেছে, OIDC সবুজ | ১১টার ৩টা (01, 02, 08); PR 1 আর 2 খোলা আছে (04, 05-এর জন্য); বাকি 03, 06, 07, 09, 10, 11, video V4, V5 |
+| Q6 | শেষ | ২৪ নভেম্বর চলেছে | ১৭টার ১৬টা (15, 16 Slack থেকে, ২৪ নভেম্বর PC-01-এ); বাকি 17, video V3 |
+| Q7 | শেষ | main আর promote চলেছে, OIDC সবুজ | ১১টার ৬টা (01–05, 08; 03–05 GitHub থেকে, ২৪ নভেম্বর PC-01-এ); বাকি 06, 07, 09, 10, 11, video V4, V5 |
 | Q8 | শেষ | বাকি (peer বা instructor লাগবে) | নেই |
 
 - AWS-এ এখন কিছু নেই: ২৪ নভেম্বর destroy হয়েছে (৬১টা resource আর state bucket)।
@@ -29,7 +29,7 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 - **খোলা PR (merge করবে না):**
   - [PR 1 `trivy-red`](https://github.com/SaikatGeek/shoplite-app/pull/1): লাল, `CRITICAL: 5` (brotli আর nginx-এর CVE)। Q7-এর `04`।
   - [PR 2 `pr-check`](https://github.com/SaikatGeek/shoplite-app/pull/2): সবুজ। Q7-এর `05`।
-  - ছবি নেওয়ার পরে দুটো বন্ধ করে branch মুছতে হবে (Claude করবে)।
+  - দুটোর ছবি নেওয়া হয়ে গেছে (Q7 `04`, `05`)। এখন বন্ধ করে branch মোছা যায়।
 
 ## ২. ২৩–২৪ নভেম্বর code-এ যা বদলেছে (সব GitHub-এ)
 
@@ -80,12 +80,12 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 1. Q8-এর peer বা instructor-এর সাথে সময় ঠিক করা (lab শুরুর ~২ ঘণ্টা পরে তার ১৫ মিনিট)। Link: https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q8/commands.md#the-peers-part
 2. Slack webhook (দরকার হলে নতুন) হাতের কাছে রাখা।
 3. Screen recorder ঠিক রাখা: V3, V4, V5, V6 (আর V2, যদি ২৪ নভেম্বর record না হয়ে থাকে)।
-4. খোলা PR দুটোর ছবি (lab লাগে না): [PR 1](https://github.com/SaikatGeek/shoplite-app/pull/1) → Checks-এ লাল step আর CVE-র তালিকা = Q7 `04`; [PR 2](https://github.com/SaikatGeek/shoplite-app/pull/2) → সবুজ check = Q7 `05`।
+4. ~~খোলা PR দুটোর ছবি~~ হয়ে গেছে (২৪ নভেম্বর): Q7 `03`, `04`, `05`, আর Q6 `15`, `16`।
 
 **পরের lab session (৫ ঘণ্টা), LAB-RUNBOOK ধরে, Q4 আর Q5-এর ছবি ছাড়া:**
 5. Setup (~১ ঘণ্টা): section ২–৬ (Q4), তারপর Q5-এর Helm, `ALB`, bootstrap, promote, prod sync। কোনো ছবি না।
-6. Q6 (~৩০ মিনিট): PodCrashLooping-এর Slack (15, 16), video V3 আর 17।
-7. Q7 (~৪০ মিনিট): 03, Terraform plan-এর PR (06, 07), ArgoCD-র 09, 10, self-heal V5, title V4 আর 11।
+6. Q6 (~২০ মিনিট): video V3 আর 17।
+7. Q7 (~৪০ মিনিট): Terraform plan-এর PR (06, 07), ArgoCD-র 09, 10, self-heal V5, title V4 আর 11।
 8. Q8 (~৮০ মিনিট), peer বা instructor সহ। অন্তত ১ ঘণ্টা ৪৫ মিনিট বাকি থাকতে হবে।
 9. শেষে destroy, `LAB_ACTIVE=false`।
 
