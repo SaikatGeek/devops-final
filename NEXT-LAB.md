@@ -21,7 +21,7 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 | Q5 | শেষ | ২৪ নভেম্বর পুরো চলেছে | **১৯টাই আছে**; V2 record হয়েছে কি না নিশ্চিত না (না হলে আবার) |
 | Q6 | শেষ | ২৪ নভেম্বর চলেছে | ১৭টার ১৬টা (15, 16 Slack থেকে, ২৪ নভেম্বর PC-01-এ); বাকি 17, video V3 |
 | Q7 | শেষ | main আর promote চলেছে, OIDC সবুজ | ১১টার ৬টা (01–05, 08; 03–05 GitHub থেকে, ২৪ নভেম্বর PC-01-এ); বাকি 06, 07, 09, 10, 11, video V4, V5 |
-| Q8 | শেষ | বাকি (peer বা instructor লাগবে) | নেই |
+| Q8 | শেষ (peer ছাড়া চালানোর script সহ) | বাকি | নেই (মোট ১৬টা) |
 
 - AWS-এ এখন কিছু নেই: ২৪ নভেম্বর destroy হয়েছে (৬১টা resource আর state bucket)।
 - GitHub: `LAB_ACTIVE` = `false`। Secret `GITOPS_DEPLOY_KEY` আর `BUDGET_ALERT_EMAIL` আছে।
@@ -77,7 +77,7 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 ## ৬. বাকি কাজ, ক্রমে
 
 **তোমার প্রস্তুতি (lab-এর আগে):**
-1. Q8-এর peer বা instructor-এর সাথে সময় ঠিক করা (lab শুরুর ~২ ঘণ্টা পরে তার ১৫ মিনিট)। Link: https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q8/commands.md#the-peers-part
+1. ~~Q8-এর peer~~ লাগবে না: instructor নিজে করতে বলেছেন (২৪ নভেম্বর)। Fault চালু করবে `shoplite-app/scripts/chaos-pick.sh`, তোমার PC থেকে। ওটা random একটা বেছে push করে, কোনটা দেখায় না (LAB-RUNBOOK-এর Q8)।
 2. Slack webhook (দরকার হলে নতুন) হাতের কাছে রাখা।
 3. Screen recorder ঠিক রাখা: V3, V4, V5, V6 (আর V2, যদি ২৪ নভেম্বর record না হয়ে থাকে)।
 4. ~~খোলা PR দুটোর ছবি~~ হয়ে গেছে (২৪ নভেম্বর): Q7 `03`, `04`, `05`, আর Q6 `15`, `16`।
@@ -86,7 +86,7 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 5. Setup (~১ ঘণ্টা): section ২–৬ (Q4), তারপর Q5-এর Helm, `ALB`, bootstrap, promote, prod sync। কোনো ছবি না।
 6. Q6 (~২০ মিনিট): video V3 আর 17।
 7. Q7 (~৪০ মিনিট): Terraform plan-এর PR (06, 07), ArgoCD-র 09, 10, self-heal V5, title V4 আর 11।
-8. Q8 (~৮০ মিনিট), peer বা instructor সহ। অন্তত ১ ঘণ্টা ৪৫ মিনিট বাকি থাকতে হবে।
+8. Q8 (~৮০ মিনিট), peer ছাড়া, `chaos-pick.sh` দিয়ে। অন্তত ১ ঘণ্টা ৪৫ মিনিট বাকি থাকতে হবে।
 9. শেষে destroy, `LAB_ACTIVE=false`।
 
 **আলাদা ছোট session:**
@@ -94,7 +94,7 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 
 **সব lab-এর পরে (Claude করবে):**
 11. Screenshot commit আর publish (`bash publish-repos.sh push`), খোলা PR বন্ধ।
-12. RCA লেখা, তারপর আলাদা commit-এ peer-এর পরিবর্তনের সাথে মিলিয়ে দেখা।
+12. RCA লেখা, তারপর আলাদা commit-এ fault-এর commit-এর সাথে মিলিয়ে দেখা।
 13. Video V1–V6 কাটা (তুমি)।
 14. Architecture diagram-এর PNG আবার বানানো (bastion সহ; এখনো SSM দেখায়)।
 15. README-র evidence index আর deviation শেষবার মিলিয়ে দেখা।

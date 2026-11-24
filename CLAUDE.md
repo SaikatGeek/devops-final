@@ -434,15 +434,20 @@ Its kubectl block (section 4) ran on a small k3s with ArgoCD's Application CRD a
 
 **Q8 (PROGRESS section 7b):** 8.1 is done (`a641940`): the lab procedure `docs/evidence/q8/commands.md`, the RCA's frame `docs/RCA.md` (TODO placeholders), and the architecture diagram in `docs/`.
 - In the procedure, k6 runs continuously (`DURATION=60m`) from a healthy start to the recovery.
-- The peer's access is removed right after the peer's commit and prod's sync.
+- No peer (the instructor's instruction, 24 Nov; the question allows "a peer or the instructor"): `scripts/chaos-pick.sh` (PROGRESS section 7f), run on the user's PC in Git Bash, plays the peer.
+  - It turns one of the four faults on in shoplite-gitops `envs/prod/values.yaml`, at random, in one line, with GitHub's default message `Update values.yaml`, and pushes to main.
+  - It never prints which: only the short hash. It refuses unless all four are off.
+  - Its clone `~/q8-gitops` serves the revert too.
+  - `scripts/tests/pipeline.sh` checks it: 40 runs against bare copies, then the refusal, then a run after a revert. Two mutations, printing the fault and always picking the same one, each fail it.
+  - The procedure's 16 screenshots are numbered `01-baseline` … `16-timeline`, with `02-fault-pushed` new; the RCA template uses the same names.
 - The revert is pushed from the user's own PC: the lab machine cannot push.
-- The peer's four values sit in the procedure's last section (no separate chaos menu).
+- The four faults' values sit in the procedure's last section, "The four faults".
 - The RCA's numbers are taken before the destroy.
 - The RCA is committed before the diff is read; the comparison comes in a second commit.
 
 **Next** (since 23 Nov the up-to-date list is `NEXT-LAB.md` section ৬):
 1. Done 22–23 Nov: the GitHub settings (deploy key, both secrets, Slack webhook). Still to arrange: a peer for Q8.
-2. The first lab session (23 Nov) ran Q4 in full and took 18 of its 21 screenshots. The second (24 Nov, PROGRESS section 7e) confirmed OIDC, finished Q4's and Q5's evidence, took 14 of Q6's 17 and 3 of Q7's 11, and opened Q7's two evidence PRs (#1 `trivy-red` red, #2 `pr-check` green; never merged, close them after their screenshots). Both sessions ended with a destroy. The next session follows `NEXT-LAB.md` section ৬: setup without screenshots, then the rest of Q6 (Slack 15–16, 17, V3), Q7 (03, 06, 07, 09, 10, 11, V4, V5) and Q8 with a peer or the instructor (1 h 45 min left at its start). Q3 in a short session of its own. Re-render `docs/architecture-diagram.png` (the text has the bastion) after the labs. When guiding a lab step, give each command a short reason (the user's request, 24 Nov).
+2. The first lab session (23 Nov) ran Q4 in full and took 18 of its 21 screenshots. The second (24 Nov, PROGRESS section 7e) confirmed OIDC, finished Q4's and Q5's evidence, took 14 of Q6's 17 and 3 of Q7's 11, and opened Q7's two evidence PRs (#1 `trivy-red` red, #2 `pr-check` green; never merged, close them after their screenshots). Both sessions ended with a destroy. The next session follows `NEXT-LAB.md` section ৬: setup without screenshots, then the rest of Q6 (17, V3; Slack 15–16 were taken from Slack on 24 Nov), Q7 (06, 07, 09, 10, 11, V4, V5; 03–05 were taken from GitHub on 24 Nov) and Q8 without a peer, through `scripts/chaos-pick.sh` (1 h 45 min left at its start). Q3 in a short session of its own. Re-render `docs/architecture-diagram.png` (the text has the bastion) after the labs. When guiding a lab step, give each command a short reason (the user's request, 24 Nov).
 3. After the lab: fill `docs/RCA.md` from the timeline, the screenshots and section 8's numbers, then compare with the peer's commit, then publish.
 4. shoplite-app's `README.md` is done (`04b7063`, 18 Nov; PROGRESS section 7c).
    - It covers: running the stack, the API, the fault settings, the layout, AWS, the workflows' GitHub settings, secrets, tests, the evidence index, and 16 deviations.

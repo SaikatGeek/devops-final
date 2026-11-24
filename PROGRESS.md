@@ -1194,6 +1194,29 @@ Poridhi-র lab-এ Q4 চালানো হয়েছে। পথে যা
   - Slack থেকে Q6 `15` (FIRING) আর `16` (RESOLVED): dev-এর worker, ৩:৪৯ আর ৩:৫৯-এর বার্তা কেটে।
   - GitHub থেকে Q7 `03` (`e6ed747 dev: images 6025631`, github-actions[bot]), `04` (PR 1-এর Trivy: `Total: 5 (CRITICAL: 5)` আর পাঁচটা CVE), `05` (PR 2 সবুজ)।
 
+## 7f. Q8 peer ছাড়া (24 Nov, PC-01)
+
+Instructor বলেছেন Q8 নিজে করতে, অন্য কেউ ঢুকবে না। প্রশ্নেও আছে "a peer **or the instructor**"। নিজে flag বেছে চালু করলে উত্তর আগেই জানা থাকে, তখন "শুধু observability দিয়ে খোঁজা" সাজানো মনে হয়। তাই user-এর সিদ্ধান্তে ("যেটা best"), fault বেছে নেবে একটা script, চোখ বন্ধ রেখে:
+
+- **`shoplite-app/scripts/chaos-pick.sh`** (user-এর PC থেকে চলে, Git Bash-এ; ওই PC gitops-এ push করতে পারে):
+  - চারটা fault থেকে একটা random বেছে নেয় (`latencyMs: 1500`, `errorRate: 0.2`, `memoryLeak: true`, `slowDb: true`; আগে peer-এর জন্য যে মান রাখা ছিল);
+  - বাছাই করা fault `envs/prod/values.yaml`-এ এক লাইনে বসায়, GitHub-এর default message `Update values.yaml` দিয়ে commit করে, main-এ push করে;
+  - কোনটা বেছেছে কখনো print করে না, শুধু short hash দেখায়;
+  - চারটা বন্ধ না থাকলে কিছু না বদলে থামে।
+  - Clone থাকে `~/q8-gitops`-এ, revert-ও সেখান থেকে।
+- **Test**, `scripts/tests/pipeline.sh`-এর নতুন ধাপ:
+  - gitops-এর নকল repo-তে ৪০ বার চালানো হয়। প্রতিবার: একটা commit, এক লাইন, ঠিক একটা fault চালু, output-এ নাম নেই। চারটাই অন্তত একবার এসেছে।
+  - Fault চালু থাকা অবস্থায় চালালে থেমে যায়, কিছু commit করে না।
+  - Revert-এর পরে একই clone থেকে আবার চলে।
+  - Shellcheck পরিষ্কার। পুরো rehearsal pass।
+  - Mutation দিয়ে যাচাই: script নাম print করলে fail করে, সবসময় একই fault বাছলে fail করে।
+- **Q8-এর procedure:**
+  - শুরুর লেখা, section 2 ("who turns the fault on"), section 4 ("one fault on, blind"), section 6 (`~/q8-gitops` থেকে revert), section 9 বদলানো হয়েছে।
+  - শেষের "The peer's part"-এর জায়গায় এখন "The four faults"।
+  - Peer-এর দুটো screenshot (access দেওয়া আর সরানো) বাদ, নতুন `02-fault-pushed.png`। মোট ১৬টা, নতুন করে নম্বর দেওয়া (`01-baseline` … `16-timeline`), RCA-র খসড়াতেও।
+- **README:** deviation ("Question 8 runs without a peer"), layout-এ, test-এর table-এ আর প্রমাণের index-এ script।
+- LAB-RUNBOOK, NEXT-LAB আর LAB-GUIDE-এ peer-এর জায়গায় script; PC-01 আর বাসার PC-র path দেওয়া।
+
 ## 8. Commit-এর তালিকা
 
 | Commit | তারিখ | কী |

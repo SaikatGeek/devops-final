@@ -330,11 +330,22 @@ clear; for tg in shoplite-prod shoplite-dev; do aws elbv2 describe-target-health
   - এর জন্য OIDC কাজ করতে হবে (main-কে ECR-এ push করতে হয়)।
 
 **Q8** (~৮০ মিনিট; অন্তত ১ ঘণ্টা ৪৫ মিনিট বাকি থাকতে হবে): https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q8/commands.md
-- Section 1 থেকে 8, ক্রমে। Peer-এর অংশ: `#the-peers-part`।
+- Section 1 থেকে 8, ক্রমে। **Peer লাগবে না** (instructor নিজে করতে বলেছেন, ২৪ নভেম্বর)।
+- Fault চালু করবে তোমার PC থেকে, section 4-এ। Script random একটা বেছে push করে, কোনটা বেছেছে দেখায় না:
+  - অফিসে (PC-01), Git Bash-এ:
+    ```bash
+    cd ~ && bash /e/devops-final/shoplite-app/scripts/chaos-pick.sh
+    ```
+  - বাসায়, Git Bash-এ:
+    ```bash
+    cd ~ && bash /e/Personal/devops-final/shoplite-app/scripts/chaos-pick.sh
+    ```
+  - Output-এ শুধু commit-এর hash আসবে, সেটা `mark`-এ লেখো।
+  - RCA লেখা শেষ না হওয়া পর্যন্ত ওই commit খুলবে না: GitHub-এ না, `git show`-এ না, ArgoCD-র APP DIFF-এ না।
 - Section 3 থেকে 7 পর্যন্ত shoplite-app-এ কোনো push বা workflow না।
-- Revert তোমার PC থেকে (devops-final-এর বাইরে shoplite-gitops-এর clone-এ)।
+- Revert তোমার PC থেকে, script যে `~/q8-gitops` clone বানিয়েছে সেখান থেকে (section 6)।
 - Destroy-এর আগে section 8-এর সংখ্যা আর `cat ~/q8-timeline.txt` রেখে দেবে।
-- 📸 `q8/01`–`17` (procedure-এ প্রতিটার নাম)। 🎥 V6।
+- 📸 `q8/01`–`16` (procedure-এ প্রতিটার নাম; `02-fault-pushed` হলো তোমার PC-র terminal-এ script-এর output)। 🎥 V6।
 
 ## ৯. শেষে: destroy (destroy শেষ করতে ১০ মিনিট লাগে, তাই এর আগেই শুরু করবে)
 

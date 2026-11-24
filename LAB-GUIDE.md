@@ -98,11 +98,11 @@ https://github.com/SaikatGeek/shoplite-app/settings/secrets/actions-এ দু�
 
 Screenshot `01-github-settings.png` → `shoplite-app\docs\evidence\q5\`। তাতে থাকবে write access-সহ deploy key, আর secret-এর তালিকা।
 
-## ৩. Q8-এর peer (আগেই ঠিক করো)
+## ৩. Q8-এর peer: লাগবে না (২৪ নভেম্বর থেকে)
 
-- একজন, যার GitHub account আছে, আর session শুরুর প্রায় ৩ ঘণ্টা পরে ১৫ মিনিট সময় দিতে পারবে।
-- তার GitHub username জেনে রাখো।
-- তাকে আগেই এই link পাঠাও: https://github.com/SaikatGeek/shoplite-app/blob/main/docs/evidence/q8/commands.md#the-peers-part
+- Instructor নিজে করতে বলেছেন। Peer-এর কাজটা করবে `shoplite-app/scripts/chaos-pick.sh`, তোমার PC থেকে।
+- Script চারটা fault থেকে একটা random বেছে push করে, কোনটা বেছেছে দেখায় না।
+- কীভাবে চালাবে: LAB-RUNBOOK-এর Q8 অংশ, আর Q8 procedure-এর section 4।
 
 ## ৪. Lab session: ক্রম আর সময়
 
