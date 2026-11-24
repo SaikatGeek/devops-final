@@ -1,11 +1,11 @@
 # পরের lab: কোথায় আছি, কী বদলাবে, কীভাবে এগোব
 
-শেষ আপডেট: ২৪ নভেম্বর ২০২৬, দ্বিতীয় AWS lab session-এর পরে (OIDC কাজ করেছে; Q4, Q5 শেষ)।
+শেষ আপডেট: ২৪ নভেম্বর ২০২৬, PC-01: Q8 peer ছাড়া (chaos-pick.sh), আজকের lab-এর সময়সূচি, credential, video আর RCA-র গাইড (section ৭–১০)।
 
 ## ০. বাসায় বা নতুন কোনো session-এ Claude-কে এটা পাঠাও
 
 ```text
-CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আমি নতুন lab খুলব। NEXT-LAB.md-র section ৬ আর LAB-RUNBOOK.md ধরে আমাকে ধাপে ধাপে চালাও। প্রতিটা ধাপে ছোট করে "কেন" বলবে, এক ধাপ এক বার।
+CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আমি নতুন lab খুলব। NEXT-LAB.md-র section ৬–৯ আর LAB-RUNBOOK.md ধরে আমাকে ধাপে ধাপে চালাও। প্রতিটা ধাপে ছোট করে "কেন" বলবে, এক ধাপ এক বার।
 ```
 
 - PC বদলালে আগে `OFFICE-PC-GUIDE.md`-এর section ৯ (git pull ইত্যাদি)।
@@ -98,3 +98,81 @@ CLAUDE.md, PROGRESS.md, NEXT-LAB.md আর LAB-RUNBOOK.md পড়ো। আম
 13. Video V1–V6 কাটা (তুমি)।
 14. Architecture diagram-এর PNG আবার বানানো (bastion সহ; এখনো SSM দেখায়)।
 15. README-র evidence index আর deviation শেষবার মিলিয়ে দেখা।
+
+## ৭. আজকের lab (২৪ নভেম্বর, ৩টার পরে): ক্রম আর সময়
+
+সব command আছে `LAB-RUNBOOK.md`-এ, আর script গুলো `shoplite-app/scripts/`-এ। নতুন কিছু বানাতে হবে না: দুইবার চলেছে, পরীক্ষা করা।
+
+| সময় (শুরু থেকে) | কাজ | কোথায় | ছবি বা video |
+|---|---|---|---|
+| ০:০০–০:১০ | Lab চালু, `aws sts get-caller-identity` (না চললে `aws configure`), clone, tools | Runbook ২ | না |
+| ০:১০–০:৪৫ | Terraform, Ansible, kubectl | Runbook ৩–৫ | না |
+| ০:৪৫–০:৫৫ | GitHub-এর ৫টা variable, main-এর "Run workflow" (~৫ মিনিট) | Runbook ৬ | না |
+| ০:৫৫–১:১৫ | Helm, bootstrap (Slack URL চাইবে), promote, prod sync | Q5 procedure ১–৪ | না |
+| ১:১৫–১:৪৫ | Q6: dev-এ fault, alert থেকে log থেকে trace | Q6 procedure ৮ | `q6/17`, 🎥 V3 |
+| ১:৪৫–২:১০ | Q7: Terraform plan-এর PR, ArgoCD-র sync policy | Q7 procedure ৩, ৪ | `q7/06`, `07`, `09`, `10` |
+| ২:১০–৩:৪০ | Q8: load, `chaos-pick.sh`, তদন্ত, revert, recovery, সংখ্যা | Q8 procedure ১–৮ | `q8/01`–`16`, 🎥 V6 |
+| ৩:৪০–৪:০০ | শেষের demo recording (section ৯) | — | 🎥 V2, V4, V5, `q7/11` |
+| ৪:০০–৪:১৫ | Destroy, `LAB_ACTIVE=false` | Runbook ৯ | `q4/21` লাগবে না (আছে) |
+
+- মোট ~৪ ঘণ্টা ১৫ মিনিট, ৫ ঘণ্টার মধ্যে।
+- কোনো ধাপ আটকে গেলে Q8 আর demo recording-কে আগে রাখো। Q6-এর 17 আর Q7-এর 06/07 পরের session-এও নেওয়া যায়।
+- Q8 শুরুর সময় অন্তত ১ ঘণ্টা ৪৫ মিনিট বাকি থাকতে হবে।
+
+## ৮. Credential আর setting: নতুন lab-এ কোথায় কী বদলাবে
+
+| কী | কোথায় | কী করবে |
+|---|---|---|
+| AWS-এর key | Poridhi-র lab page | `aws sts get-caller-identity` না চললে `aws configure`-এ বসাও (region `ap-southeast-1`, output `json`)। কাউকে দেখাবে না, কোনো ফাইলে লিখবে না |
+| SSH key | lab terminal | Runbook ২.৪ নিজে বানায় (`~/.ssh/shoplite`) |
+| `~/shoplite.env` | lab terminal | Runbook ২.৪: email বসাও; IP (`admin_cidr`) নিজে বের করে |
+| `SSH_PUBLIC_KEY`, `ADMIN_CIDR` | GitHub variable | প্রতিবার নতুন মান (Runbook ৬) |
+| `AWS_ROLE_ARN`, `AWS_PLAN_ROLE_ARN` | GitHub variable | Account একই (`041793356414`) থাকলে একই মান; তবু Runbook ৬-এর output-এর সাথে মিলিয়ে নাও |
+| `LAB_ACTIVE` | GitHub variable | শুরুতে `true`, destroy-এর আগে `false` |
+| `GITOPS_DEPLOY_KEY`, `BUDGET_ALERT_EMAIL` | GitHub secret | কিছু না, থেকে যায় |
+| Slack webhook URL | Slack-এর app page | Bootstrap চাইলে prompt-এ দাও (`read -rsp`)। ২৪ নভেম্বরেরটা বেরিয়ে গিয়েছিল, তাই আগে নতুন বানাও |
+| ArgoCD আর Grafana-র password | cluster-এর ভেতরে | প্রতিবার নতুন। Bootstrap-এর শেষে যে দুই command দেখায়, সেগুলো দিয়ে পড়ো |
+| Code | — | কিছু না |
+
+## ৯. Video আর live demo-র পরিকল্পনা
+
+প্রশ্নে video বাধ্যতামূলক না। চাওয়া আছে checkpoint-এর প্রমাণ, আর ১০ মিনিটের **live demo**। Demo-তে দেখাতে হবে:
+
+1. নিজের diagram দিয়ে architecture (`shoplite-app/docs/architecture-diagram.png`);
+2. Git push থেকে browser পর্যন্ত একটা code change;
+3. Load চলা অবস্থায় Golden Signals dashboard;
+4. একটা order-এর পুরো trace, আর trace থেকে তার log;
+5. `kubectl edit`-এর পরে ArgoCD-র self-heal।
+
+তাই video হবে মোট চারটা recording-এ:
+
+- **V3** (Q6) আর **V6** (Q8): ঘটনা যখন ঘটে তখনই, ওগুলো আবার ঘটানো কঠিন।
+- **শেষের demo recording** (Q8-এর পরে, destroy-এর আগে, ~১৫ মিনিট)। এটাই live demo-র মহড়া আর backup:
+  1. Diagram দেখিয়ে architecture বোঝাও (১ মিনিট)।
+  2. PC থেকে `<title>` বদলাও, commit করো, `bash publish-repos.sh push`। Actions-এ main চালু হলো দেখাও; ওটা ~৫ মিনিট চলবে, এর মধ্যে বাকিগুলো দেখাও।
+  3. k6 চালু রেখে Golden Signals dashboard (২ মিনিট)।
+  4. Tempo-তে একটা order-এর trace, তারপর trace থেকে log (২ মিনিট)।
+  5. Self-heal: dev-এ `kubectl edit` বা `scale`, তারপর ArgoCD ফিরিয়ে আনে (২ মিনিট)। এটাই V5।
+  6. Browser-এ ALB-এর URL-এ নতুন title। এটাই V4, সাথে `q7/11-new-title.png`।
+  7. Browser থেকে একটা order দাও, `COMPLETED` পর্যন্ত। এটাই Q5-এর checkpoint, V2।
+- **V1** (Q2-এর checkpoint): Q3-এর আলাদা session-এ।
+- Instructor-কে জিজ্ঞেস করো: live demo কি চালু lab-এ দেখাতে হবে, নাকি video চলবে? Lab চালু করতে ~১ ঘণ্টা লাগে।
+
+## ১০. RCA (`shoplite-app/docs/RCA.md`): কী লিখতে হবে
+
+খসড়া তৈরি আছে; প্রতিটা `TODO` পূরণ করতে হবে। প্রশ্ন চায় ১–২ পৃষ্ঠা, আর নম্বর দেয় যুক্তি আর প্রমাণের মানের ওপর, কত দ্রুত পেয়েছ তার ওপর না।
+
+| অংশ | কী লিখবে | তথ্য কোথা থেকে |
+|---|---|---|
+| Summary | ২–৩ বাক্য: customer কী দেখেছে, কতক্ষণ, কারণ, কীভাবে ঠিক হলো | পুরো RCA শেষে লেখো |
+| Timeline | প্রতিটা ঘটনার সময় আর তার screenshot | `~/q8-timeline.txt` (`mark`-এর লাইন), Q8-এর ছবি |
+| Detection | প্রথম alert কোনটা, কখন; rule-এর expression, threshold আর `for`; কোন মান সীমা পার হলো; কেন দেরিতে এল | Slack-এর ছবি, `monitoring/alert-rules/shoplite-alerts.yaml` |
+| Investigation | dashboard → logs → trace: প্রতিটায় কী দেখলে, কী বাদ গেল | Q8-এর 06, 07, 08-এর ছবি |
+| Root cause | কোন component, কী আচরণ, কখন থেকে; সব লক্ষণ কেন এতে মেলে | তোমার তদন্ত (diff দেখার আগে) |
+| Recovery | revert-এর commit; detect, identify, recover-এর মিনিট | timeline |
+| Impact | কত 5xx, সবচেয়ে খারাপ p95, order, queue, restart | Q8 procedure section 8-এর query (`15-impact.png`) |
+| Preventive measure | একটা বাস্তব উপায়, আর সেটা কীভাবে এই ঘটনা থামাত বা ছোট করত | নিজের ভাবনা |
+| Check against the change | RCA commit করার **পরে**: fault-এর commit পড়ো, root cause মিলেছে কি না লেখো | দ্বিতীয় commit-এ |
+
+- ক্রম: আগে RCA লিখে commit করবে, তারপর diff পড়বে, তারপর শেষের অংশ আলাদা commit-এ। Commit-এর সময়ই প্রমাণ যে আগে লেখা হয়েছে।
+- Lab শেষ হলে Claude-কে timeline, ছবি আর section 8-এর সংখ্যা দিলে Claude খসড়া পূরণ করবে, তুমি মিলিয়ে দেখবে।

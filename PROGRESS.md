@@ -1216,6 +1216,12 @@ Instructor বলেছেন Q8 নিজে করতে, অন্য কে�
   - Peer-এর দুটো screenshot (access দেওয়া আর সরানো) বাদ, নতুন `02-fault-pushed.png`। মোট ১৬টা, নতুন করে নম্বর দেওয়া (`01-baseline` … `16-timeline`), RCA-র খসড়াতেও।
 - **README:** deviation ("Question 8 runs without a peer"), layout-এ, test-এর table-এ আর প্রমাণের index-এ script।
 - LAB-RUNBOOK, NEXT-LAB আর LAB-GUIDE-এ peer-এর জায়গায় script; PC-01 আর বাসার PC-র path দেওয়া।
+- **Architecture diagram-এর PNG** নতুন করে বানানো: `minlag/mermaid-cli:11.16.0`, ৩x, সাদা background, ২৩৫২×২৭৩৯। এখন Admin → SSH 22 → Bastion → control plane দেখায়, SSM আর নেই।
+- **NEXT-LAB-এর নতুন section ৭–১০:**
+  - আজকের lab-এর সময়সূচি (~৪ ঘণ্টা ১৫ মিনিট);
+  - নতুন lab-এ credential আর setting কোথায় বদলাবে;
+  - video আর ১০ মিনিটের live demo-র পরিকল্পনা: V3 আর V6 ঘটনার সময়, আর V2, V4, V5 শেষের একটা demo recording-এ, যা live demo-র মহড়াও;
+  - RCA-র প্রতিটা অংশে কী লিখবে আর তথ্য কোথা থেকে।
 
 ## 8. Commit-এর তালিকা
 

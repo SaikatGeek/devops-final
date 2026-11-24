@@ -15,7 +15,7 @@
 - **Screenshot:** Win+Shift+S চাপো → জায়গা বাছো → notification-এ click → Save। নামের আগে `clear;` দেওয়া command গুলো screen পরিষ্কার করে শুধু দরকারি অংশ দেখায়, তখন ছবি তোলো।
   - রাখবে `...\devops-final\shoplite-app\docs\evidence\qN\` folder-এ (অফিসে `E:\devops-final`, বাসায় `E:\Personal\devops-final`)।
 - **Error এলে** থামো, পুরো error Claude-কে দেখাও। নিজে থেকে অন্য কিছু চালাবে না।
-- **Video লাগবে:** Q5-এর checkpoint (V2), Q6 (V3), Q7 (V4, V5), Q8 (V6)। ওই ধাপের আগে recording চালু করবে।
+- **Video:** V3 (Q6) আর V6 (Q8) ঘটনার সময়েই record করবে। V2, V4, V5 হবে Q8-এর পরে, শেষের একটা demo recording-এ (NEXT-LAB-এর section ৯)। V1 হবে Q3-এর session-এ।
 
 ## ১. Lab শুরুর আগে (GitHub, ২ মিনিট)
 
