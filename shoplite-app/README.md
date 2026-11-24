@@ -101,7 +101,7 @@ helm/shoplite/             the Helm chart, values-dev.yaml, values-prod.yaml (Q5
 monitoring/                stack/ (chart values), dashboards/, alert-rules/, runbooks/ (Q6)
 .github/workflows/         main, pr, terraform-plan, promote (Q7)
 scripts/                   ci.sh (the pipelines' stages), update-gitops.sh, terraform-plan.sh,
-                           bootstrap-cluster.sh, loadtest.js (k6)
+                           bootstrap-cluster.sh, loadtest.js (k6), chaos-pick.sh (Q8)
 docs/                      architecture diagram, RCA, evidence/ (each question's lab procedure)
 ```
 
@@ -193,7 +193,7 @@ The workflows use these settings (Settings → Secrets and variables → Actions
 | `bash scripts/ci.sh lint`, `test`, `build <tag>`, `scan <tag>` | The pipelines' stages, as CI runs them | |
 | The Terraform tests (below) | Every module and configuration, with a mock AWS provider | a few minutes |
 | `bash ansible/tests/run.sh` | The playbook on three systemd containers: hardening, a k3s cluster, a second run with `changed=0` | 5–10 min |
-| `bash scripts/tests/pipeline.sh` | The workflows (actionlint, pinned actions, triggers), `update-gitops.sh`, promote, `ci.sh` | 1–2 min |
+| `bash scripts/tests/pipeline.sh` | The workflows (actionlint, pinned actions, triggers), `update-gitops.sh`, promote, `ci.sh`, `chaos-pick.sh` | 1–2 min |
 | `bash helm/tests/run.sh` | The chart on a local k3s: both environments, orders, NetworkPolicy, HPA, PDB | 10–20 min |
 | `bash scripts/tests/bootstrap-cluster.sh` | The GitOps bootstrap on a local k3s: ArgoCD, the monitoring stack, logs and traces, the dashboard, the alerts, self-heal | about 16 min |
 
@@ -222,7 +222,7 @@ done
 | Q5 Kubernetes | 15 | [helm/shoplite/](helm/shoplite); Traefik in shoplite-gitops | [docs/evidence/q5/commands.md](docs/evidence/q5/commands.md) |
 | Q6 Observability | 25 | [monitoring/](monitoring); the services' metrics, logs and traces | [docs/evidence/q6/commands.md](docs/evidence/q6/commands.md) |
 | Q7 CI/CD and GitOps | 10 | [.github/workflows/](.github/workflows), [scripts/ci.sh](scripts/ci.sh), [scripts/update-gitops.sh](scripts/update-gitops.sh), [terraform/modules/github-oidc/](terraform/modules/github-oidc), shoplite-gitops | [docs/evidence/q7/commands.md](docs/evidence/q7/commands.md) |
-| Q8 Chaos and RCA | 10 | The fault-injection settings (question 1.5) | [docs/evidence/q8/commands.md](docs/evidence/q8/commands.md), [docs/RCA.md](docs/RCA.md) |
+| Q8 Chaos and RCA | 10 | The fault-injection settings (question 1.5), [scripts/chaos-pick.sh](scripts/chaos-pick.sh) | [docs/evidence/q8/commands.md](docs/evidence/q8/commands.md), [docs/RCA.md](docs/RCA.md) |
 
 ## Deviations and choices
 
@@ -291,6 +291,13 @@ Where the build differs from the question's words, or a choice needs a reason:
 - **The lab account denies some read-only APIs**, so the evidence uses others:
   - `tag:GetResources`: the tagged resources come from `aws ec2 describe-tags`;
   - CloudTrail's `LookupEvents`.
+- **Question 8 runs without a peer**, at the instructor's request (24 Nov). The question lets
+  "a peer or the instructor" turn the fault on; [scripts/chaos-pick.sh](scripts/chaos-pick.sh)
+  plays that part:
+  - it turns one of the four faults on in prod, chosen at random, with GitHub's default
+    commit message;
+  - it never prints which, so the investigation stays blind;
+  - the RCA is committed before the change is read.
 - **Question 8's load test runs for up to an hour**, at 22 requests a second. The question's
   15 minutes at 20 or more fall inside one run, which also shows the healthy start and the
   recovery.

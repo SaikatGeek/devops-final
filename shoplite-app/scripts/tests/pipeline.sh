@@ -20,7 +20,11 @@
 #      is refused
 #   4. promote's own step: prod gets dev's image in one commit, its fault-injection flags
 #      kept; with no image in dev yet it stops and commits nothing
-#   5. the chart, with the values the workflows wrote (layered as the Applications layer
+#   5. scripts/chaos-pick.sh (question 8 without a peer), against copies of shoplite-gitops:
+#      40 runs each turn exactly one fault on in prod, in one line, with GitHub's default
+#      message, and never print which; all four faults turn up; with a fault on already it
+#      refuses; after a revert it runs again
+#   6. the chart, with the values the workflows wrote (layered as the Applications layer
 #      them), renders the ECR images with the new tag in dev and in prod
 # Needs Docker and internet (images, the actions' repositories on GitHub, Trivy's database). About two
 # minutes. Run it from shoplite-app/, with shoplite-gitops next to it (SHOPLITE_GITOPS_DIR
@@ -54,7 +58,7 @@ step "actionlint on the workflows (with shellcheck on their run steps), shellche
 docker run --rm -v "$HOST_DIR:/repo:ro" -w /repo "$ACTIONLINT_IMAGE" -no-color .github/workflows/*.yml ||
   fail "actionlint found problems"
 docker run --rm -v "$HOST_DIR:/repo:ro" -w /repo --entrypoint shellcheck "$ACTIONLINT_IMAGE" \
-  scripts/update-gitops.sh scripts/ci.sh scripts/terraform-plan.sh scripts/tests/pipeline.sh || fail "shellcheck found problems"
+  scripts/update-gitops.sh scripts/ci.sh scripts/terraform-plan.sh scripts/chaos-pick.sh scripts/tests/pipeline.sh || fail "shellcheck found problems"
 echo "ok    no findings"
 
 step "starting a stand-in for GitHub's runner (bash, git, yq)"
@@ -320,6 +324,59 @@ if out=$(cd /tmp/promote-2 && bash -e -c "$promote_step" 2>&1); then echo "promo
 grep -q '^::error::dev has no image yet' <<<"$out" || { echo "promote failed in another way: $out"; exit 1; }
 [ "$(git -C /tmp/origin-new.git rev-list --count main)" = 1 ] || { echo "promote committed with no image in dev"; exit 1; }
 echo "ok    promote with no image in dev yet: $out"
+EOF
+
+step "scripts/chaos-pick.sh (question 8 without a peer) against copies of shoplite-gitops"
+on_runner <<'EOF' || fail "scripts/chaos-pick.sh does not behave as expected"
+export GIT_AUTHOR_NAME=student GIT_AUTHOR_EMAIL=student@example.invalid \
+  GIT_COMMITTER_NAME=student GIT_COMMITTER_EMAIL=student@example.invalid
+pick=/app/scripts/chaos-pick.sh
+chaos() { git -C "$1" show main:envs/prod/values.yaml | yq -o=json -I=0 '.config.chaos'; }
+names_a_fault() { grep -qiE 'latency|error|memory|leak|slow|db' <<<"$1"; }
+
+# 1. Forty runs, each on a fresh copy: one commit with GitHub's default message, one line of
+#    prod's values, exactly one fault on, and an output that never names it. All four faults
+#    must turn up (the chance that one never does is about 4 in 100000).
+seen=""
+for i in $(seq 1 40); do
+  origin=/tmp/chaos-$i.git
+  git clone -q --bare /tmp/src "$origin"
+  out=$(cd /tmp && CHAOS_GITOPS_URL="$origin" bash "$pick" "/tmp/chaos-clone-$i" 2>&1) || { echo "run $i failed: $out"; exit 1; }
+  [ "$(git -C "$origin" rev-list --count main)" = 2 ] || { echo "run $i: expected one new commit"; exit 1; }
+  [ "$(git -C "$origin" log -1 --format='%an|%s' main)" = 'student|Update values.yaml' ] ||
+    { echo "run $i: unexpected commit: $(git -C "$origin" log -1 --format='%an|%s' main)"; exit 1; }
+  [ "$(git -C "$origin" diff --numstat main~1 main)" = "$(printf '1\t1\tenvs/prod/values.yaml')" ] ||
+    { echo "run $i: the commit changes more than one line of prod's values"; exit 1; }
+  case "$(chaos "$origin")" in
+    '{"latencyMs":1500,"errorRate":0,"memoryLeak":false,"slowDb":false}') seen="$seen latency" ;;
+    '{"latencyMs":0,"errorRate":0.2,"memoryLeak":false,"slowDb":false}') seen="$seen error" ;;
+    '{"latencyMs":0,"errorRate":0,"memoryLeak":true,"slowDb":false}') seen="$seen memory" ;;
+    '{"latencyMs":0,"errorRate":0,"memoryLeak":false,"slowDb":true}') seen="$seen slowdb" ;;
+    *) echo "run $i: not exactly one fault on: $(chaos "$origin")"; exit 1 ;;
+  esac
+  if names_a_fault "$out"; then echo "run $i: the output names the fault: $out"; exit 1; fi
+done
+for fault in latency error memory slowdb; do
+  grep -qw "$fault" <<<"$seen" || { echo "40 runs never chose $fault"; exit 1; }
+done
+echo "ok    40 runs: one fault on, one line, 'Update values.yaml', never named; all four were chosen"
+
+# 2. With a fault on already, it refuses, commits nothing, and names nothing.
+if out=$(cd /tmp && CHAOS_GITOPS_URL=/tmp/chaos-1.git bash "$pick" /tmp/chaos-clone-1 2>&1); then
+  echo "a second fault was turned on: $out"; exit 1
+fi
+grep -q 'not all off' <<<"$out" || { echo "refused for another reason: $out"; exit 1; }
+if names_a_fault "$out"; then echo "the refusal names the fault: $out"; exit 1; fi
+[ "$(git -C /tmp/chaos-1.git rev-list --count main)" = 2 ] || { echo "the refusal committed"; exit 1; }
+echo "ok    a fault on already: refused, nothing committed: $out"
+
+# 3. After section 6's revert (from the same clone), it runs again.
+git -C /tmp/chaos-clone-1 revert --no-edit HEAD >/dev/null && git -C /tmp/chaos-clone-1 push -q origin HEAD:main
+[ "$(chaos /tmp/chaos-1.git)" = '{"latencyMs":0,"errorRate":0,"memoryLeak":false,"slowDb":false}' ] ||
+  { echo "the revert did not turn the fault off"; exit 1; }
+out=$(cd /tmp && CHAOS_GITOPS_URL=/tmp/chaos-1.git bash "$pick" /tmp/chaos-clone-1 2>&1) || { echo "after the revert it refused: $out"; exit 1; }
+[ "$(git -C /tmp/chaos-1.git rev-list --count main)" = 4 ] || { echo "after the revert: expected one new commit"; exit 1; }
+echo "ok    after the revert, from the same clone: one new fault"
 EOF
 
 step "the chart, with the values the workflows wrote, renders the ECR images with the new tag"

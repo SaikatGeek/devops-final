@@ -1,8 +1,13 @@
 # Question 8: commands and evidence
 
-A peer turns one of question 1.5's fault-injection settings on in prod, through Git, with an
+One of question 1.5's fault-injection settings is turned on in prod, through Git, with an
 innocuous commit message. You find the fault with the observability tools alone, recover by
 reverting the commit, and then write the RCA ([`../../RCA.md`](../../RCA.md)).
+
+The question has "a peer or the instructor" turn the fault on. The instructor asked for the
+exercise to be run alone (24 Nov), so [`scripts/chaos-pick.sh`](../../../scripts/chaos-pick.sh)
+plays the peer: it turns one of the four faults on, chosen at random, and never shows which.
+The investigation starts as blind as with a peer.
 
 **The rules, from the start until the RCA is written:**
 
@@ -28,8 +33,9 @@ the end of each section.
 - this session has gone through question 5's procedure ([`../q5/commands.md`](../q5/commands.md))
   up to its section 4, and question 6's section 0 (k6). So prod is synced, the Slack alerts
   work, and `ALB` and `KUBECONFIG` are set in the terminal;
-- a peer with a GitHub account is free for about 15 minutes at an agreed time, and has the
-  link to [The peer's part](#the-peers-part);
+- your own PC can push to shoplite-gitops (Git Bash; Git asks you to sign in to GitHub the
+  first time) and has the shoplite-app repository, for `scripts/chaos-pick.sh` (section 4)
+  and the revert (section 6);
 - push nothing to shoplite-app and run no workflow until section 7 is done.
 
 Roughly 80 minutes in the lab. The RCA is written afterwards, from the evidence kept here.
@@ -46,21 +52,20 @@ mark "Q8 started"
 
 A new terminal needs the `mark()` line again; the file stays.
 
-## 2. 8.1 step 1: write access for the peer
+## 2. 8.1 step 1: who turns the fault on
 
-1. **shoplite-gitops** → Settings → Collaborators → Add people → the peer's GitHub user
-   name → Add. On a personal repository a collaborator can push. The peer accepts the
-   invitation ([The peer's part](#the-peers-part), step 1).
-2. When the peer is listed as a collaborator:
+The question's step 1 gives a peer write access to shoplite-gitops for an hour. Without a peer
+(see the top), nobody else gets access: `scripts/chaos-pick.sh` makes the peer's commit from
+your PC, which can push already. It:
 
-   ```bash
-   mark "peer has write access to shoplite-gitops"
-   ```
+- turns exactly one of the four settings in [The four faults](#the-four-faults) on, chosen at
+  random, in `envs/prod/values.yaml`;
+- commits it with GitHub's own default message, `Update values.yaml`, and pushes it to main;
+- prints only the commit's short hash, never the setting;
+- stops and changes nothing unless all four are off.
 
-The access ends in section 4, right after the peer's commit: well within the hour the
-question allows.
-
-Screenshot `01-peer-access.png`: the peer in the collaborator list.
+`scripts/tests/pipeline.sh` checks it against copies of shoplite-gitops: in 40 runs each turns
+exactly one fault on, in one line, and never names it, and all four turn up.
 
 ## 3. A healthy start, under load
 
@@ -92,16 +97,24 @@ Screenshot `01-peer-access.png`: the peer in the collaborator list.
    mark "baseline: healthy under load"
    ```
 
-Screenshot `02-baseline.png`: the whole dashboard (zoom the browser out so that every panel
+Screenshot `01-baseline.png`: the whole dashboard (zoom the browser out so that every panel
 fits).
 
-## 4. 8.1 step 2: the peer turns one fault on
+## 4. 8.1 step 2: one fault on, blind
 
-1. Tell the peer to go ([The peer's part](#the-peers-part), steps 2 to 5), and wait for
-   "done":
+1. On your PC, in Git Bash, from your home folder (it clones shoplite-gitops into
+   `q8-gitops`, which section 6 uses again):
 
    ```bash
-   mark "peer: done"
+   cd ~
+   bash <your shoplite-app folder>/scripts/chaos-pick.sh
+   ```
+
+   It prints `One fault is on in prod: commit <hash> is on shoplite-gitops main.` and
+   nothing about which. Do not open that commit. In the lab terminal:
+
+   ```bash
+   mark "one fault pushed to prod, blind: <the hash>"
    ```
 
 2. Sync prod without looking at the change. In ArgoCD (`$ALB/argocd/`): Applications →
@@ -109,20 +122,14 @@ fits).
    Wait for `Synced` and `Healthy`:
 
    ```bash
-   mark "prod synced: the peer's commit"
-   ```
-
-3. Remove the peer's access: **shoplite-gitops** → Settings → Collaborators → the peer →
-   Remove.
-
-   ```bash
-   mark "peer's access removed"
+   mark "prod synced: the fault's commit"
    ```
 
 Screenshots:
+- `02-fault-pushed.png`: your PC's terminal with the script's output: the hash, not the
+  change.
 - `03-prod-synced.png`: shoplite-prod `Synced` and `Healthy`. The summary shows the commit's
   message, not its change.
-- `04-peer-removed.png`: the collaborator list without the peer.
 
 ## 5. 8.1 steps 4 and 5: the investigation, in Grafana only
 
@@ -162,28 +169,28 @@ At each step, write down what you saw with `mark`, for example
    ```
 
 Screenshots (with the clock):
-- `05-first-alert.png`: the first alert in Slack.
-- `06-alert-rule.png`: the rule in Grafana, with its expression and state.
-- `07-dashboard-fault.png`: the dashboard with the fault and the Deploys mark.
-- `08-logs.png`: the log lines, one of them opened.
-- `09-trace.png`: the trace, with the span that holds the error or the time.
-- `10-root-cause.png`: the timeline up to the root cause.
+- `04-first-alert.png`: the first alert in Slack.
+- `05-alert-rule.png`: the rule in Grafana, with its expression and state.
+- `06-dashboard-fault.png`: the dashboard with the fault and the Deploys mark.
+- `07-logs.png`: the log lines, one of them opened.
+- `08-trace.png`: the trace, with the span that holds the error or the time.
+- `09-root-cause.png`: the timeline up to the root cause.
 
 ## 6. 8.1 step 6: recover through Git
 
 The revert is pushed from a computer that can push to shoplite-gitops: your own PC (Git asks
 you to sign in to GitHub the first time). The lab machine has no right to push.
 
-On your PC, in Git Bash:
+On your PC, in Git Bash, in the clone that section 4 made:
 
 ```bash
-git clone https://github.com/SaikatGeek/shoplite-gitops.git q8-gitops
-cd q8-gitops
+cd ~/q8-gitops
+git pull -q --ff-only
 git log -3 --format='%h  %an  %ad  %s' --date=iso -- envs/prod/values.yaml
 ```
 
-The newest line is the peer's commit: their name and the innocuous message. Revert it without
-opening it, and push:
+The newest line is the fault's commit: the hash section 4 printed, and the innocuous message.
+Revert it without opening it, and push:
 
 ```bash
 git revert --no-edit "$(git log -1 --format=%H -- envs/prod/values.yaml)"
@@ -191,7 +198,7 @@ git push origin HEAD:main
 git log -2 --format='%h  %an  %s'
 ```
 
-The newest commit is now `Revert "<the peer's message>"`, by you. Then, in the lab terminal:
+The newest commit is now `Revert "Update values.yaml"`, by you. Then, in the lab terminal:
 
 ```bash
 mark "revert pushed: <its short hash>"
@@ -205,8 +212,8 @@ mark "prod synced: the revert"
 ```
 
 Screenshots:
-- `11-revert.png`: the terminal with the revert pushed and the last two commits.
-- `12-prod-synced-revert.png`: shoplite-prod `Synced` and `Healthy` on the revert.
+- `10-revert.png`: the terminal with the revert pushed and the last two commits.
+- `11-prod-synced-revert.png`: shoplite-prod `Synced` and `Healthy` on the revert.
 
 ## 7. 8.2(c): the recovery on the dashboard
 
@@ -231,10 +238,10 @@ slowly: its falling line is the recovery.
    a second, over the question's 20.
 
 Screenshots:
-- `13-dashboard-recovered.png`: the whole incident on the dashboard (the last hour): the
+- `12-dashboard-recovered.png`: the whole incident on the dashboard (the last hour): the
   healthy start, the first mark, the fault, the second mark, the recovery.
-- `14-slack-resolved.png`: the RESOLVED message.
-- `15-k6-summary.png`: k6's summary.
+- `13-slack-resolved.png`: the RESOLVED message.
+- `14-k6-summary.png`: k6's summary.
 
 Video `V6-chaos-day.mp4`: sections 3 to 7.
 
@@ -294,17 +301,17 @@ cat ~/q8-timeline.txt
 ```
 
 Screenshots:
-- `16-impact.png`: the queries' results (several files if needed: `16a-...`, `16b-...`).
-- `17-timeline.png`: the whole timeline.
+- `15-impact.png`: the queries' results (several files if needed: `16a-...`, `16b-...`).
+- `16-timeline.png`: the whole timeline.
 
 ## 9. 8.2(b): the RCA, and only then the change
 
 1. Write [`docs/RCA.md`](../../RCA.md) from the timeline, the screenshots and the numbers,
    then commit it. Its commit time shows that it was written before the change was read.
-2. Now read the peer's commit, the one the revert names. On your PC:
+2. Now read the fault's commit, the one the revert names. On your PC:
 
    ```bash
-   cd q8-gitops
+   cd ~/q8-gitops
    git log -1 --grep='^Revert' --format='%s%n%b'
    git show <the hash after "This reverts commit">
    ```
@@ -317,25 +324,17 @@ Screenshots:
 End the session as question 5's procedure does: `LAB_ACTIVE=false`, then question 4's
 destroy.
 
-## The peer's part
+## The four faults
 
-For the peer. The student sends this link.
+What `scripts/chaos-pick.sh` chooses from, at random: one line under `config:` and `chaos:` in
+shoplite-gitops' `envs/prod/values.yaml`, set to one of question 1.5's settings.
 
-1. Accept the invitation to `SaikatGeek/shoplite-gitops`: from the e-mail, or at
-   https://github.com/SaikatGeek/shoplite-gitops/invitations.
-2. When the student says "go", open
-   https://github.com/SaikatGeek/shoplite-gitops/blob/main/envs/prod/values.yaml and click
-   Edit (the pencil).
-3. Under `config:` and `chaos:`, change exactly one line, to one of these:
+| Line | Turned on |
+|---|---|
+| `latencyMs: 0` | `latencyMs: 1500` |
+| `errorRate: 0` | `errorRate: 0.2` |
+| `memoryLeak: false` | `memoryLeak: true` |
+| `slowDb: false` | `slowDb: true` |
 
-   | Line | Change it to |
-   |---|---|
-   | `latencyMs: 0` | `latencyMs: 1500` |
-   | `errorRate: 0` | `errorRate: 0.2` |
-   | `memoryLeak: false` | `memoryLeak: true` |
-   | `slowDb: false` | `slowDb: true` |
-
-   Change nothing else: not the `image:` lines, not the indentation.
-4. Commit changes → **Commit directly to the `main` branch**, with a message that does not name
-   the setting. GitHub's own `Update values.yaml` is fine.
-5. Tell the student only "done". Do not say which one, until the student's RCA is written.
+Nothing else changes: not the `image:` lines, not the indentation. The commit message is
+GitHub's own default, `Update values.yaml`, which names no setting.

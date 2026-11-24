@@ -19,21 +19,21 @@ was fixed.
 
 ## Timeline
 
-From the timeline kept during the exercise (`~/q8-timeline.txt`, `17-timeline.png`).
+From the timeline kept during the exercise (`~/q8-timeline.txt`, `16-timeline.png`).
 
 | Time | Event | Evidence |
 |---|---|---|
-| TODO | Load test started: 22 requests a second; the dashboard healthy | `02-baseline.png` |
+| TODO | Load test started: 22 requests a second; the dashboard healthy | `01-baseline.png` |
 | TODO | A commit to prod's values was synced to prod in ArgoCD | `03-prod-synced.png` |
-| TODO | First symptom on the dashboard: TODO | `07-dashboard-fault.png` |
-| TODO | First alert: TODO (severity) | `05-first-alert.png` |
-| TODO | Logs: TODO | `08-logs.png` |
-| TODO | Trace: TODO | `09-trace.png` |
-| TODO | Root cause identified | `10-root-cause.png` |
-| TODO | Revert pushed: TODO commit | `11-revert.png` |
-| TODO | Revert synced to prod | `12-prod-synced-revert.png` |
-| TODO | Dashboard back to normal | `13-dashboard-recovered.png` |
-| TODO | Alert resolved in Slack | `14-slack-resolved.png` |
+| TODO | First symptom on the dashboard: TODO | `06-dashboard-fault.png` |
+| TODO | First alert: TODO (severity) | `04-first-alert.png` |
+| TODO | Logs: TODO | `07-logs.png` |
+| TODO | Trace: TODO | `08-trace.png` |
+| TODO | Root cause identified | `09-root-cause.png` |
+| TODO | Revert pushed: TODO commit | `10-revert.png` |
+| TODO | Revert synced to prod | `11-prod-synced-revert.png` |
+| TODO | Dashboard back to normal | `12-dashboard-recovered.png` |
+| TODO | Alert resolved in Slack | `13-slack-resolved.png` |
 
 ## Detection
 
@@ -74,7 +74,7 @@ No kubectl was used.
 
 ## Impact
 
-From the queries of the procedure's section 8 (`16-impact.png`), over the incident:
+From the queries of the procedure's section 8 (`15-impact.png`), over the incident:
 
 - failed requests (5xx), per route: TODO of TODO;
 - worst p95 latency, per route: TODO;
@@ -89,4 +89,5 @@ shorter.
 
 ## Check against the change (written after the RCA)
 
-TODO: the peer's commit (hash), what it changed, and whether it matches the root cause above.
+TODO: the fault's commit (hash; made by `scripts/chaos-pick.sh`, blind), what it changed, and
+whether it matches the root cause above.
